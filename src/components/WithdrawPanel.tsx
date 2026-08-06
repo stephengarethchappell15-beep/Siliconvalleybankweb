@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { User, Transaction } from '../types';
 import { api } from '../services/api';
-import { ArrowUpRight, Landmark, CreditCard, DollarSign, AlertCircle, CheckCircle2, ShieldCheck, HelpCircle } from 'lucide-react';
+import { ArrowUpRight, Landmark, CreditCard, DollarSign, AlertCircle, CheckCircle2, ShieldCheck, Key, X } from 'lucide-react';
 
 interface WithdrawPanelProps {
   user: User;
@@ -20,7 +20,10 @@ export const WithdrawPanel: React.FC<WithdrawPanelProps> = ({ user, onSuccess })
   const [error, setError] = useState<string | null>(null);
   const [successTxn, setSuccessTxn] = useState<Transaction | null>(null);
 
-  const handleWithdraw = async (e: React.FormEvent) => {
+  const [showVerificationModal, setShowVerificationModal] = useState(false);
+  const [verificationError, setVerificationError] = useState<string | null>(null);
+
+  const handleInitialFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setSuccessTxn(null);
@@ -28,10 +31,6 @@ export const WithdrawPanel: React.FC<WithdrawPanelProps> = ({ user, onSuccess })
     const numAmount = parseFloat(amount);
     if (!bankName || !routingNumber || !accountNumber || !accountHolderName) {
       setError('Please fill in all receiving bank account details.');
-      return;
-    }
-    if (user.role !== 'admin' && !fourDigitCode) {
-      setError('Invalid security code. Please enter your 4-digit transaction security code.');
       return;
     }
     if (isNaN(numAmount) || numAmount <= 0) {
@@ -42,6 +41,21 @@ export const WithdrawPanel: React.FC<WithdrawPanelProps> = ({ user, onSuccess })
       setError(`Insufficient funds. Your available balance is $${user.balance.toLocaleString('en-US', { minimumFractionDigits: 2 })}.`);
       return;
     }
+
+    setVerificationError(null);
+    setShowVerificationModal(true);
+  };
+
+  const executeWithdrawWithCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setVerificationError(null);
+
+    if (user.role !== 'admin' && !fourDigitCode) {
+      setVerificationError('Invalid security code. Please enter your 4-digit transaction security code.');
+      return;
+    }
+
+    const numAmount = parseFloat(amount);
 
     try {
       setLoading(true);
@@ -56,11 +70,13 @@ export const WithdrawPanel: React.FC<WithdrawPanelProps> = ({ user, onSuccess })
       });
       setSuccessTxn(res.transaction);
       onSuccess(res.updatedUser, res.transaction);
+      
+      setShowVerificationModal(false);
       setAmount('');
       setFourDigitCode('');
       setNote('');
     } catch (err: any) {
-      setError(err.message || 'Invalid security code');
+      setVerificationError(err.message || 'Invalid security code');
     } finally {
       setLoading(false);
     }
@@ -132,7 +148,7 @@ export const WithdrawPanel: React.FC<WithdrawPanelProps> = ({ user, onSuccess })
       )}
 
       {/* Form */}
-      <form onSubmit={handleWithdraw} className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-5">
+      <form onSubmit={handleInitialFormSubmit} className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-5">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-semibold text-slate-300 mb-2">
@@ -145,7 +161,7 @@ export const WithdrawPanel: React.FC<WithdrawPanelProps> = ({ user, onSuccess })
                 value={bankName}
                 onChange={(e) => setBankName(e.target.value)}
                 placeholder="e.g. Chase, Bank of America, Wells Fargo"
-                className="w-full bg-slate-950 border border-slate-800 focus:border-teal-500 focus:ring-1 focus:ring-teal-500 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white placeholder-slate-500 outline-none transition-colors"
+                className="w-full bg-slate-950 border border-slate-800 focus:border-teal-500 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white placeholder-slate-500 outline-none transition-colors"
                 required
               />
             </div>
@@ -160,7 +176,7 @@ export const WithdrawPanel: React.FC<WithdrawPanelProps> = ({ user, onSuccess })
               value={accountHolderName}
               onChange={(e) => setAccountHolderName(e.target.value)}
               placeholder="Full Legal Name"
-              className="w-full bg-slate-950 border border-slate-800 focus:border-teal-500 focus:ring-1 focus:ring-teal-500 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 outline-none transition-colors"
+              className="w-full bg-slate-950 border border-slate-800 focus:border-teal-500 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 outline-none transition-colors"
               required
             />
           </div>
@@ -177,7 +193,7 @@ export const WithdrawPanel: React.FC<WithdrawPanelProps> = ({ user, onSuccess })
               onChange={(e) => setRoutingNumber(e.target.value)}
               placeholder="e.g. 121000358"
               maxLength={12}
-              className="w-full bg-slate-950 border border-slate-800 focus:border-teal-500 focus:ring-1 focus:ring-teal-500 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 outline-none transition-colors font-mono"
+              className="w-full bg-slate-950 border border-slate-800 focus:border-teal-500 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 outline-none transition-colors font-mono"
               required
             />
           </div>
@@ -193,55 +209,8 @@ export const WithdrawPanel: React.FC<WithdrawPanelProps> = ({ user, onSuccess })
                 value={accountNumber}
                 onChange={(e) => setAccountNumber(e.target.value)}
                 placeholder="External Account #"
-                className="w-full bg-slate-950 border border-slate-800 focus:border-teal-500 focus:ring-1 focus:ring-teal-500 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white placeholder-slate-500 outline-none transition-colors font-mono"
+                className="w-full bg-slate-950 border border-slate-800 focus:border-teal-500 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white placeholder-slate-500 outline-none transition-colors font-mono"
                 required
-              />
-            </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-2">
-              Withdrawal Amount ($ USD) <span className="text-rose-400">*</span>
-            </label>
-            <div className="relative">
-              <DollarSign className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
-              <input
-                type="number"
-                step="0.01"
-                min="0.01"
-                max={user.balance}
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                placeholder="0.00"
-                className="w-full bg-slate-950 border border-slate-800 focus:border-teal-500 focus:ring-1 focus:ring-teal-500 rounded-xl pl-10 pr-16 py-2.5 text-sm text-white placeholder-slate-500 outline-none transition-colors font-mono"
-                required
-              />
-              <button
-                type="button"
-                onClick={() => setAmount(user.balance.toString())}
-                className="absolute right-2.5 top-2 text-[10px] uppercase font-bold text-teal-400 bg-teal-500/10 hover:bg-teal-500/20 border border-teal-500/20 px-2 py-1 rounded-lg transition-colors"
-              >
-                Max
-              </button>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-2">
-              4-Digit Transaction Security Code <span className="text-rose-400">*</span>
-            </label>
-            <div className="relative">
-              <ShieldCheck className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
-              <input
-                type="password"
-                maxLength={4}
-                value={fourDigitCode}
-                onChange={(e) => setFourDigitCode(e.target.value)}
-                placeholder="e.g. 8492"
-                className="w-full bg-slate-950 border border-slate-800 focus:border-teal-500 focus:ring-1 focus:ring-teal-500 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white placeholder-slate-500 outline-none transition-colors font-mono tracking-widest"
-                required={user.role !== 'admin'}
               />
             </div>
           </div>
@@ -249,37 +218,152 @@ export const WithdrawPanel: React.FC<WithdrawPanelProps> = ({ user, onSuccess })
 
         <div>
           <label className="block text-xs font-semibold text-slate-300 mb-2">
-            Withdrawal Purpose / Wire Instructions (Optional)
+            Withdrawal Amount ($ USD) <span className="text-rose-400">*</span>
+          </label>
+          <div className="relative">
+            <DollarSign className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
+            <input
+              type="number"
+              step="0.01"
+              min="0.01"
+              max={user.balance}
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              placeholder="0.00"
+              className="w-full bg-slate-950 border border-slate-800 focus:border-teal-500 rounded-xl pl-10 pr-16 py-2.5 text-sm text-white placeholder-slate-500 outline-none transition-colors font-mono"
+              required
+            />
+            <button
+              type="button"
+              onClick={() => setAmount(user.balance.toString())}
+              className="absolute right-2.5 top-2 text-[10px] uppercase font-bold text-teal-400 bg-teal-500/10 hover:bg-teal-500/20 border border-teal-500/20 px-2 py-1 rounded-lg transition-colors"
+            >
+              Max
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-slate-300 mb-2">
+            Memo / Reference (Optional)
           </label>
           <input
             type="text"
             value={note}
             onChange={(e) => setNote(e.target.value)}
-            placeholder="e.g. Escrow payout, Vendor payment"
-            className="w-full bg-slate-950 border border-slate-800 focus:border-teal-500 focus:ring-1 focus:ring-teal-500 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 outline-none transition-colors"
+            placeholder="e.g. Payroll disbursement"
+            className="w-full bg-slate-950 border border-slate-800 focus:border-teal-500 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 outline-none transition-colors"
           />
-        </div>
-
-        <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800/80 flex items-center gap-3 text-[11px] text-slate-400">
-          <ShieldCheck className="w-4 h-4 text-teal-400 shrink-0" />
-          <span>Wire requests are verified through ApexVault FedWire gateway with end-to-end security audit logs.</span>
         </div>
 
         <button
           type="submit"
-          disabled={loading || !bankName || !routingNumber || !accountNumber || !amount}
-          className="w-full bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-400 hover:to-emerald-400 text-slate-950 font-bold py-3 px-4 rounded-xl shadow-lg shadow-teal-500/20 flex items-center justify-center gap-2 transition-all text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          disabled={loading || !bankName || !accountNumber || !amount}
+          className="w-full bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold py-3.5 px-4 rounded-xl shadow-lg shadow-teal-500/20 flex items-center justify-center gap-2 transition-all text-sm disabled:opacity-50"
         >
           {loading ? (
             <div className="w-5 h-5 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
           ) : (
             <>
               <ArrowUpRight className="w-4 h-4" />
-              <span>Confirm & Process Wire Withdrawal</span>
+              <span>Submit Withdrawal Request</span>
             </>
           )}
         </button>
       </form>
+
+      {/* 4-Digit Security Code Verification Modal (Shown AFTER form submit) */}
+      {showVerificationModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-teal-500/40 rounded-3xl p-6 max-w-md w-full space-y-5 shadow-2xl relative animate-fadeIn">
+            <button
+              onClick={() => setShowVerificationModal(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-xl bg-slate-800"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="w-14 h-14 rounded-2xl bg-teal-500/10 border border-teal-500/30 flex items-center justify-center text-teal-400 mx-auto">
+              <Key className="w-7 h-7" />
+            </div>
+
+            <div className="text-center space-y-2">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-teal-400 bg-teal-500/10 border border-teal-500/20 px-2.5 py-1 rounded-full">
+                Security Verification Feature (Demo Environment)
+              </span>
+              <h3 className="text-xl font-bold text-white pt-1">Authorize Withdrawal</h3>
+              <p className="text-xs text-slate-300 leading-relaxed">
+                Please enter your <span className="text-teal-400 font-semibold font-mono">4-digit security code</span> to confirm and authorize this external bank withdrawal.
+              </p>
+            </div>
+
+            {/* Summary Box */}
+            <div className="p-3.5 bg-slate-950 rounded-2xl border border-slate-800 text-xs space-y-1.5 font-mono">
+              <div className="flex justify-between text-slate-400">
+                <span>Withdrawal Amount:</span>
+                <span className="text-teal-400 font-bold">${parseFloat(amount).toLocaleString('en-US', { minimumFractionDigits: 2 })} USD</span>
+              </div>
+              <div className="flex justify-between text-slate-400">
+                <span>Receiving Bank:</span>
+                <span className="text-white truncate max-w-[180px]">{bankName}</span>
+              </div>
+              <div className="flex justify-between text-slate-400">
+                <span>Account Number:</span>
+                <span className="text-slate-200">{accountNumber}</span>
+              </div>
+            </div>
+
+            {verificationError && (
+              <div className="p-3 bg-rose-950/80 border border-rose-500/30 rounded-xl text-rose-300 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                <span>{verificationError}</span>
+              </div>
+            )}
+
+            <form onSubmit={executeWithdrawWithCode} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-2">
+                  4-Digit Transaction Security Code <span className="text-rose-400">*</span>
+                </label>
+                <input
+                  type="password"
+                  maxLength={4}
+                  value={fourDigitCode}
+                  onChange={(e) => setFourDigitCode(e.target.value)}
+                  placeholder="Enter 4-digit security code"
+                  className="w-full bg-slate-950 border border-teal-500/50 focus:border-teal-400 rounded-xl px-4 py-3 text-center text-lg text-white font-mono tracking-widest outline-none transition-colors"
+                  autoFocus
+                  required
+                />
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowVerificationModal(false)}
+                  className="w-1/3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold py-3 rounded-xl text-xs transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading || !fourDigitCode.trim()}
+                  className="w-2/3 bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold py-3 rounded-xl text-xs shadow-lg shadow-teal-500/20 flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+                >
+                  {loading ? (
+                    <div className="w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      <ShieldCheck className="w-4 h-4" />
+                      <span>Confirm & Withdraw</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
