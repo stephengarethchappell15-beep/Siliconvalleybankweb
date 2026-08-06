@@ -113,6 +113,7 @@ export const BillPayPanel: React.FC<BillPayPanelProps> = ({ user, onRefreshUser 
       const res = await api.payBill({
         billerName: billerName.trim(),
         billerCategory,
+        accountNumber: user.accountNumber,
         amount: numAmt,
         fourDigitCode: fourDigitCode.trim(),
         reference: reference.trim() || undefined

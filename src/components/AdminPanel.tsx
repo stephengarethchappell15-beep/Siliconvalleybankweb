@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { User, Transaction, AuditLog, DepositPayload, CryptoActivationDeposit } from '../types';
+import { User, Transaction, AuditLog, DepositPayload, CryptoActivationDeposit, Tier3VerificationRequest } from '../types';
 import { api } from '../services/api';
 import { AdminDepositPanel } from './AdminDepositPanel';
 import { AdminAuditLogs } from './AdminAuditLogs';
 import { CustomerSupportPanel } from './CustomerSupportPanel';
-import { ShieldAlert, Users, Sparkles, FileText, Headphones, Search, UserCheck, Shield, DollarSign, ArrowUpRight, CheckCircle2, XCircle, Clock, Key, ArrowDownRight, Ban } from 'lucide-react';
+import { ShieldAlert, Users, Sparkles, FileText, Headphones, Search, UserCheck, Shield, DollarSign, ArrowUpRight, CheckCircle2, XCircle, Clock, Key, ArrowDownRight, Ban, ShieldCheck } from 'lucide-react';
 
 interface AdminPanelProps {
   adminUser: User;
@@ -12,11 +12,15 @@ interface AdminPanelProps {
 }
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSuccess }) => {
-  const [subTab, setSubTab] = useState<'users' | 'funding' | 'crypto' | 'withdraw' | 'audit' | 'support'>('users');
+  const [subTab, setSubTab] = useState<'users' | 'funding' | 'crypto' | 'withdraw' | 'audit' | 'support' | 'verifications'>('users');
   const [users, setUsers] = useState<User[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [selectedUserForDeposit, setSelectedUserForDeposit] = useState<User | null>(null);
+
+  // Tier 3 Verifications State
+  const [verifications, setVerifications] = useState<Tier3VerificationRequest[]>([]);
+  const [loadingVerifs, setLoadingVerifs] = useState(false);
 
   // Crypto Deposits State
   const [cryptoDeposits, setCryptoDeposits] = useState<CryptoActivationDeposit[]>([]);
@@ -91,6 +95,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
     }
   };
 
+  const fetchVerifications = async () => {
+    try {
+      setLoadingVerifs(true);
+      const res = await api.getVerifications();
+      setVerifications(res.verifications);
+    } catch (err: any) {
+      console.error(err);
+    } finally {
+      setLoadingVerifs(false);
+    }
+  };
+
   const fetchSysTxns = async () => {
     try {
       setLoadingTxns(true);
@@ -110,7 +126,34 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
   useEffect(() => {
     if (subTab === 'crypto') fetchCryptoDeposits();
     if (subTab === 'withdraw') fetchSysTxns();
+    if (subTab === 'verifications') fetchVerifications();
   }, [subTab]);
+
+  const handleApproveVerif = async (verifId: string) => {
+    const notes = prompt('Enter compliance approval notes (optional):');
+    if (notes === null) return;
+    try {
+      await api.approveVerification(verifId, notes);
+      alert('Tier 3 Identity Verification approved successfully!');
+      fetchVerifications();
+      fetchUsers(searchQuery);
+    } catch (err: any) {
+      alert(err.message || 'Approval failed');
+    }
+  };
+
+  const handleRejectVerif = async (verifId: string) => {
+    const notes = prompt('Enter rejection reason (optional):');
+    if (notes === null) return;
+    try {
+      await api.rejectVerification(verifId, notes);
+      alert('Tier 3 Identity Verification rejected.');
+      fetchVerifications();
+      fetchUsers(searchQuery);
+    } catch (err: any) {
+      alert(err.message || 'Rejection failed');
+    }
+  };
 
   const handleToggleRole = async (userId: string, currentRole: 'user' | 'admin') => {
     const nextRole = currentRole === 'admin' ? 'user' : 'admin';
@@ -279,6 +322,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
               <span>Crypto 4-Digit Approvals</span>
               {cryptoDeposits.filter(d => d.status === 'Pending').length > 0 && (
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              )}
+            </button>
+
+            <button
+              onClick={() => setSubTab('verifications')}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all relative ${
+                subTab === 'verifications' ? 'bg-amber-500 text-slate-950 shadow-md font-bold' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>Tier 3 Identity Reviews</span>
+              {verifications.filter(v => v.status === 'Pending').length > 0 && (
+                <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
               )}
             </button>
 
@@ -789,7 +845,117 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
         </div>
       )}
 
-      {/* Sub-Tab 5: Audit Logs */}
+      {/* Sub-Tab 5: Tier 3 Identity Verification Requests */}
+      {subTab === 'verifications' && (
+        <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-6">
+          <div className="border-b border-slate-800 pb-4 flex items-center justify-between">
+            <div>
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <ShieldCheck className="w-5 h-5 text-cyan-400" />
+                Tier 3 VIP Identity Verification Requests
+              </h3>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Review submitted identity verification documents and approve or reject client Tier 3 upgrades.
+              </p>
+            </div>
+            <button
+              onClick={fetchVerifications}
+              className="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs px-3 py-1.5 rounded-xl transition-colors border border-slate-700"
+            >
+              Refresh List
+            </button>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="border-b border-slate-800 text-slate-400 font-semibold uppercase tracking-wider">
+                  <th className="py-3 px-3">Date</th>
+                  <th className="py-3 px-3">Client</th>
+                  <th className="py-3 px-3">Account #</th>
+                  <th className="py-3 px-3">Document Type</th>
+                  <th className="py-3 px-3">Location</th>
+                  <th className="py-3 px-3">Status</th>
+                  <th className="py-3 px-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/60 text-slate-200">
+                {loadingVerifs ? (
+                  <tr>
+                    <td colSpan={7} className="text-center py-8 text-slate-500">Loading verification requests...</td>
+                  </tr>
+                ) : verifications.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="text-center py-8 text-slate-500">No Tier 3 verification requests submitted yet.</td>
+                  </tr>
+                ) : (
+                  verifications.map((v) => (
+                    <tr key={v.id} className="hover:bg-slate-950/50 transition-colors">
+                      <td className="py-3 px-3 text-slate-400">{new Date(v.createdAt).toLocaleDateString()}</td>
+                      <td className="py-3 px-3">
+                        <div className="font-bold text-white">{v.userName}</div>
+                        <div className="text-[11px] text-slate-400">{v.userEmail}</div>
+                      </td>
+                      <td className="py-3 px-3 font-mono text-emerald-400 font-semibold">{v.accountNumber}</td>
+                      <td className="py-3 px-3 font-semibold text-cyan-400">{v.documentType}</td>
+                      <td className="py-3 px-3 text-slate-300">{v.country}</td>
+                      <td className="py-3 px-3">
+                        {v.status === 'Pending' && (
+                          <span className="bg-amber-500/10 text-amber-400 border border-amber-500/30 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 w-fit">
+                            <Clock className="w-3 h-3" /> Pending Review
+                          </span>
+                        )}
+                        {v.status === 'Approved' && (
+                          <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 w-fit">
+                            <CheckCircle2 className="w-3 h-3" /> Approved Tier 3
+                          </span>
+                        )}
+                        {v.status === 'Rejected' && (
+                          <span className="bg-rose-500/10 text-rose-400 border border-rose-500/30 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 w-fit">
+                            <XCircle className="w-3 h-3" /> Rejected
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3 px-3 text-right space-x-2">
+                        {v.documentUrl && (
+                          <a
+                            href={v.documentUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-2.5 py-1 rounded-xl text-[11px] font-semibold transition-colors inline-flex items-center gap-1"
+                          >
+                            <FileText className="w-3 h-3 text-cyan-400" /> View Document
+                          </a>
+                        )}
+                        {v.status === 'Pending' ? (
+                          <>
+                            <button
+                              onClick={() => handleApproveVerif(v.id)}
+                              className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 px-3 py-1 rounded-xl text-[11px] font-bold transition-all inline-flex items-center gap-1 shadow-sm"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" /> Approve Tier 3
+                            </button>
+                            <button
+                              onClick={() => handleRejectVerif(v.id)}
+                              className="bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 px-3 py-1 rounded-xl text-[11px] font-semibold transition-colors inline-flex items-center gap-1"
+                            >
+                              <XCircle className="w-3.5 h-3.5" /> Reject
+                            </button>
+                          </>
+                        ) : (
+                          <span className="text-[11px] text-slate-500 italic">{v.adminNotes || v.status}</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Sub-Tab 6: Audit Logs */}
       {subTab === 'audit' && (
         <AdminAuditLogs adminUser={adminUser} />
       )}

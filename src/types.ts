@@ -66,6 +66,23 @@ export interface CryptoActivationDeposit {
   updatedAt: string;
 }
 
+export interface Tier3VerificationRequest {
+  id: string;
+  userId: string;
+  userEmail: string;
+  userName: string;
+  accountNumber: string;
+  address: string;
+  country: string;
+  documentType: 'Passport' | 'National ID Card' | "Driver's License" | 'Residence Permit';
+  documentUrl: string; // Base64 or image URL
+  status: 'Pending' | 'Approved' | 'Rejected';
+  adminNotes?: string;
+  decidedByAdminEmail?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
 export interface User {
   id: string;
   fullName: string;
@@ -74,8 +91,12 @@ export interface User {
   accountNumber: string;
   role: UserRole;
   balance: number;
+  ledgerBalance?: number;
   currency: string;
   address?: string;
+  country?: string;
+  verificationTier?: 'Tier 1' | 'Tier 2' | 'Tier 3' | 'Pending Tier 3' | 'Rejected';
+  status?: 'Active' | 'Blocked' | 'Suspended';
   twoFactorEnabled?: boolean;
   twoFactorSecret?: string;
   emailNotifications?: boolean;
@@ -90,8 +111,8 @@ export interface User {
   pendingCryptoDeposit?: CryptoActivationDeposit | null;
 }
 
-export type TransactionType = 'Deposit' | 'Withdrawal' | 'Transfer' | 'Credit' | 'Adjustment' | 'Bill Pay' | 'Virtual Card Charge';
-export type TransactionStatus = 'Completed' | 'Pending' | 'Cancelled' | 'Rejected';
+export type TransactionType = 'Deposit' | 'Withdrawal' | 'Transfer' | 'Credit' | 'Adjustment' | 'Bill Pay' | 'Virtual Card Charge' | 'Admin Debit' | 'Credit Deposit' | 'Refund' | 'Wire Transfer' | 'Wire Withdrawal';
+export type TransactionStatus = 'Completed' | 'Pending' | 'Cancelled' | 'Rejected' | 'Refunded';
 
 export interface Transaction {
   id: string;

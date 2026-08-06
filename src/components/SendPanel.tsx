@@ -111,8 +111,8 @@ export const SendPanel: React.FC<SendPanelProps> = ({ user, onSuccess }) => {
       setValidatingAccount(true);
       try {
         const res = await api.lookupAccount(val.trim());
-        if (res.found && res.fullName) {
-          setAccountHolderName(res.fullName);
+        if (res.found && res.found.fullName) {
+          setAccountHolderName(res.found.fullName);
           setIsValidated(true);
         }
       } catch (err) {

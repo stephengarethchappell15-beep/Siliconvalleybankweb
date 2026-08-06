@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { User } from '../types';
 import { api } from '../services/api';
+import { Tier3VerificationPanel } from './Tier3VerificationPanel';
 import { User as UserIcon, Mail, Phone, MapPin, CreditCard, Shield, Calendar, Save, CheckCircle2, AlertCircle } from 'lucide-react';
 
 interface ProfilePanelProps {
@@ -181,6 +182,9 @@ export const ProfilePanel: React.FC<ProfilePanelProps> = ({ user, onUpdateUser }
           )}
         </button>
       </form>
+
+      {/* Tier 3 Identity Verification Section */}
+      <Tier3VerificationPanel user={user} onUserUpdated={onUpdateUser} />
     </div>
   );
 };

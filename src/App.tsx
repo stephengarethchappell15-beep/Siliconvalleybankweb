@@ -55,18 +55,12 @@ export default function App() {
         const res = await api.getMe();
         setUser(res.user);
       } else {
-        // Auto-login default client account for instant demo experience
-        const res = await api.login({ email: 'alex.wright@svb.com', password: 'user123' });
-        setUser(res.user);
-      }
-    } catch (err) {
-      console.warn('Session init failed, attempting fallback login', err);
-      try {
-        const res = await api.login({ email: 'alex.wright@svb.com', password: 'user123' });
-        setUser(res.user);
-      } catch (e) {
         setUser(null);
       }
+    } catch (err) {
+      console.warn('Session restoration error:', err);
+      removeStoredToken();
+      setUser(null);
     } finally {
       setLoading(false);
     }
@@ -111,8 +105,8 @@ export default function App() {
     return () => clearInterval(interval);
   }, [user, activeTab]);
 
-  const handleLogout = () => {
-    removeStoredToken();
+  const handleLogout = async () => {
+    await api.logout();
     setUser(null);
     setActiveTab('home');
     setShowAuthModal(true);

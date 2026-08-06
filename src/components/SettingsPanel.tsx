@@ -55,7 +55,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ user, onUpdateUser
     setPrefMsg(null);
     try {
       setPrefLoading(true);
-      const res = await api.updateProfile({
+      const res = await api.updateSecuritySettings({
         twoFactorEnabled: twoFactor,
         emailNotifications: emailNotif,
         smsNotifications: smsNotif
