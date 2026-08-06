@@ -1,0 +1,128 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile document stored under users/{userId}",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "fullName": { "type": "string", "maxLength": 100 },
+        "email": { "type": "string", "format": "email", "maxLength": 120 },
+        "phone": { "type": "string", "maxLength": 30 },
+        "accountNumber": { "type": "string", "maxLength": 20 },
+        "role": { "type": "string", "enum": ["user", "admin"] },
+        "balance": { "type": "number" },
+        "currency": { "type": "string", "maxLength": 5 },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "fullName", "email", "accountNumber", "role", "balance", "createdAt"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Financial transactions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "userEmail": { "type": "string", "format": "email" },
+        "accountNumber": { "type": "string" },
+        "amount": { "type": "number" },
+        "currency": { "type": "string" },
+        "type": { "type": "string" },
+        "status": { "type": "string" },
+        "reference": { "type": "string" },
+        "description": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "amount", "type", "status", "reference", "createdAt"]
+    },
+    "SupportTicket": {
+      "title": "SupportTicket",
+      "description": "Customer support ticket",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "subject": { "type": "string", "maxLength": 200 },
+        "category": { "type": "string" },
+        "status": { "type": "string" },
+        "priority": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "subject", "category", "status", "priority", "createdAt"]
+    },
+    "UserNotification": {
+      "title": "UserNotification",
+      "description": "User notification",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "title": { "type": "string", "maxLength": 150 },
+        "message": { "type": "string", "maxLength": 1000 },
+        "amount": { "type": "number" },
+        "currency": { "type": "string" },
+        "reference": { "type": "string" },
+        "read": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "title", "message", "read", "createdAt"]
+    },
+    "VirtualCard": {
+      "title": "VirtualCard",
+      "description": "Virtual card for user",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "cardholderName": { "type": "string" },
+        "cardNumber": { "type": "string" },
+        "status": { "type": "string", "enum": ["Active", "Frozen"] },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "cardholderName", "cardNumber", "status", "createdAt"]
+    },
+    "BillPayment": {
+      "title": "BillPayment",
+      "description": "Bill payment entry",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "billerName": { "type": "string" },
+        "amount": { "type": "number" },
+        "status": { "type": "string" },
+        "paymentDate": { "type": "string" }
+      },
+      "required": ["id", "userId", "billerName", "amount", "status", "paymentDate"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "User",
+      "description": "User profile collection"
+    },
+    "transactions/{transactionId}": {
+      "schema": "Transaction",
+      "description": "System transactions collection"
+    },
+    "supportTickets/{ticketId}": {
+      "schema": "SupportTicket",
+      "description": "Support tickets collection"
+    },
+    "notifications/{notificationId}": {
+      "schema": "UserNotification",
+      "description": "User notifications collection"
+    },
+    "virtualCards/{cardId}": {
+      "schema": "VirtualCard",
+      "description": "Virtual cards collection"
+    },
+    "billPayments/{billId}": {
+      "schema": "BillPayment",
+      "description": "Bill payments collection"
+    }
+  }
+}

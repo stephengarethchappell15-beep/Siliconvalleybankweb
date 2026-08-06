@@ -1,0 +1,803 @@
+import React, { useState, useEffect } from 'react';
+import { User, Transaction, AuditLog, DepositPayload, CryptoActivationDeposit } from '../types';
+import { api } from '../services/api';
+import { AdminDepositPanel } from './AdminDepositPanel';
+import { AdminAuditLogs } from './AdminAuditLogs';
+import { CustomerSupportPanel } from './CustomerSupportPanel';
+import { ShieldAlert, Users, Sparkles, FileText, Headphones, Search, UserCheck, Shield, DollarSign, ArrowUpRight, CheckCircle2, XCircle, Clock, Key, ArrowDownRight, Ban } from 'lucide-react';
+
+interface AdminPanelProps {
+  adminUser: User;
+  onDepositSuccess: (updatedUser: User, transaction: Transaction) => void;
+}
+
+export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSuccess }) => {
+  const [subTab, setSubTab] = useState<'users' | 'funding' | 'crypto' | 'withdraw' | 'audit' | 'support'>('users');
+  const [users, setUsers] = useState<User[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [selectedUserForDeposit, setSelectedUserForDeposit] = useState<User | null>(null);
+
+  // Crypto Deposits State
+  const [cryptoDeposits, setCryptoDeposits] = useState<CryptoActivationDeposit[]>([]);
+  const [loadingCrypto, setLoadingCrypto] = useState(false);
+  const [btcAddress, setBtcAddress] = useState('bc1q9v8h9svb3x0k49z82lq09fw2zxl184p24a8svb');
+  const [usdtAddress, setUsdtAddress] = useState('TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t');
+  const [updatingWallets, setUpdatingWallets] = useState(false);
+  const [walletMsg, setWalletMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const fetchCryptoAddresses = async () => {
+    try {
+      const res = await api.getCryptoAddresses();
+      if (res.addresses) {
+        setBtcAddress(res.addresses.BTC);
+        setUsdtAddress(res.addresses.USDT);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  useEffect(() => {
+    fetchCryptoAddresses();
+  }, []);
+
+  const handleUpdateWallets = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setWalletMsg(null);
+    setUpdatingWallets(true);
+    try {
+      await api.updateCryptoAddresses({ BTC: btcAddress, USDT: usdtAddress });
+      setWalletMsg({ type: 'success', text: 'Crypto deposit wallet addresses updated successfully!' });
+    } catch (err: any) {
+      setWalletMsg({ type: 'error', text: err.message || 'Failed to update wallet addresses.' });
+    } finally {
+      setUpdatingWallets(false);
+    }
+  };
+
+  // Admin Withdraw Form State
+  const [withdrawTarget, setWithdrawTarget] = useState('');
+  const [withdrawAmount, setWithdrawAmount] = useState('');
+  const [withdrawNote, setWithdrawNote] = useState('');
+  const [withdrawLoading, setWithdrawLoading] = useState(false);
+  const [withdrawMsg, setWithdrawMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // All System Transactions for Admin Cancel
+  const [sysTxns, setSysTxns] = useState<Transaction[]>([]);
+  const [loadingTxns, setLoadingTxns] = useState(false);
+
+  const fetchUsers = async (query = '') => {
+    try {
+      setLoadingUsers(true);
+      const res = await api.searchUsers(query);
+      setUsers(res.users);
+    } catch (err: any) {
+      console.error(err);
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
+
+  const fetchCryptoDeposits = async () => {
+    try {
+      setLoadingCrypto(true);
+      const res = await api.getCryptoActivationDeposits();
+      setCryptoDeposits(res.deposits);
+    } catch (err: any) {
+      console.error(err);
+    } finally {
+      setLoadingCrypto(false);
+    }
+  };
+
+  const fetchSysTxns = async () => {
+    try {
+      setLoadingTxns(true);
+      const res = await api.getAllTransactions();
+      setSysTxns(res.transactions);
+    } catch (err: any) {
+      console.error(err);
+    } finally {
+      setLoadingTxns(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchUsers(searchQuery);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    if (subTab === 'crypto') fetchCryptoDeposits();
+    if (subTab === 'withdraw') fetchSysTxns();
+  }, [subTab]);
+
+  const handleToggleRole = async (userId: string, currentRole: 'user' | 'admin') => {
+    const nextRole = currentRole === 'admin' ? 'user' : 'admin';
+    if (!confirm(`Are you sure you want to change this user's role to ${nextRole.toUpperCase()}?`)) return;
+
+    try {
+      await api.toggleRole(userId, nextRole);
+      fetchUsers(searchQuery);
+    } catch (err: any) {
+      alert(err.message || 'Failed to update role');
+    }
+  };
+
+  const handleApproveCrypto = async (depId: string) => {
+    try {
+      const res = await api.approveCryptoActivationDeposit(depId);
+      alert(`Approved! 4-Digit Security Code [ ${res.code} ] has been issued to ${res.user.fullName}. $200 credited.`);
+      fetchCryptoDeposits();
+      fetchUsers(searchQuery);
+    } catch (err: any) {
+      alert(err.message || 'Approval failed');
+    }
+  };
+
+  const handleRejectCrypto = async (depId: string) => {
+    try {
+      await api.rejectCryptoActivationDeposit(depId);
+      alert('Deposit rejected. User will not receive 4-digit code.');
+      fetchCryptoDeposits();
+    } catch (err: any) {
+      alert(err.message || 'Rejection failed');
+    }
+  };
+
+  const handleExecuteAdminWithdraw = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setWithdrawMsg(null);
+    setWithdrawLoading(true);
+
+    try {
+      const res = await api.adminWithdraw({
+        bankName: 'Silicon Valley Bank Admin Direct',
+        routingNumber: '121000358',
+        accountNumber: withdrawTarget.trim(),
+        accountHolderName: 'Admin Withdrawal',
+        amount: Number(withdrawAmount),
+        note: withdrawNote.trim() || 'Admin initiated debit'
+      });
+      setWithdrawMsg({ type: 'success', text: `Successfully debited $${Number(withdrawAmount).toFixed(2)} from user ${res.updatedUser.fullName}.` });
+      setWithdrawAmount('');
+      setWithdrawNote('');
+      fetchUsers(searchQuery);
+    } catch (err: any) {
+      setWithdrawMsg({ type: 'error', text: err.message || 'Withdrawal failed.' });
+    } finally {
+      setWithdrawLoading(false);
+    }
+  };
+
+  const handleApproveTxn = async (txnId: string, defaultSenderName?: string) => {
+    const senderName = prompt("Enter Sender's Full Name (required before crediting recipient account):", defaultSenderName || "Federal Wire Transfer / SVB Treasury");
+    if (senderName === null) return; // user cancelled prompt
+    if (!senderName.trim()) {
+      alert("Sender's name is required before crediting funds.");
+      return;
+    }
+    try {
+      await api.approveTransaction(txnId, senderName.trim());
+      alert('Transaction approved successfully! Recipient account has been credited.');
+      fetchSysTxns();
+      fetchUsers(searchQuery);
+    } catch (err: any) {
+      alert(err.message || 'Approval failed.');
+    }
+  };
+
+  const handleCancelTxn = async (txnId: string) => {
+    if (!confirm('Are you sure you want to cancel this transfer/transaction? User funds will be adjusted.')) return;
+    try {
+      await api.adminCancelTransaction(txnId);
+      alert('Transaction cancelled successfully.');
+      fetchSysTxns();
+      fetchUsers(searchQuery);
+    } catch (err: any) {
+      alert(err.message || 'Cancellation failed.');
+    }
+  };
+
+  const handleRejectTxn = async (txnId: string) => {
+    const reason = prompt('Enter rejection reason (optional):');
+    if (reason === null) return; // user cancelled prompt
+    try {
+      await api.rejectTransaction(txnId, reason);
+      alert('Transaction rejected successfully. Funds returned to user balance.');
+      fetchSysTxns();
+      fetchUsers(searchQuery);
+    } catch (err: any) {
+      alert(err.message || 'Rejection failed.');
+    }
+  };
+
+  const handleRegenerateCode = async (userId: string, userName: string) => {
+    if (!confirm(`Regenerate a new 4-Digit Security Code for ${userName}?`)) return;
+    try {
+      const res = await api.regenerateFourDigitCode(userId);
+      alert(`New 4-Digit Code [ ${res.code} ] successfully generated for ${userName}.`);
+      fetchUsers(searchQuery);
+    } catch (err: any) {
+      alert(err.message || 'Regeneration failed.');
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Admin Top Banner */}
+      <div className="bg-slate-900 border border-amber-500/30 rounded-3xl p-6 shadow-xl relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-80 h-80 bg-amber-500/5 rounded-full blur-3xl pointer-events-none" />
+
+        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0 shadow-lg shadow-amber-500/10">
+              <ShieldAlert className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-xl font-bold text-white tracking-tight">System Admin Operation Portal</h2>
+                <span className="bg-amber-500/20 text-amber-300 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border border-amber-500/30">
+                  Restricted Access
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Logged in as <span className="text-slate-200 font-semibold">{adminUser.fullName}</span> ({adminUser.email})
+              </p>
+            </div>
+          </div>
+
+          {/* Admin Navigation Pills */}
+          <div className="flex flex-wrap items-center gap-1.5 bg-slate-950 p-1.5 rounded-2xl border border-slate-800">
+            <button
+              onClick={() => setSubTab('users')}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+                subTab === 'users' ? 'bg-amber-500 text-slate-950 shadow-md font-bold' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Users className="w-3.5 h-3.5" />
+              <span>User Directory</span>
+            </button>
+
+            <button
+              onClick={() => setSubTab('funding')}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+                subTab === 'funding' ? 'bg-amber-500 text-slate-950 shadow-md font-bold' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Admin Deposit</span>
+            </button>
+
+            <button
+              onClick={() => setSubTab('crypto')}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all relative ${
+                subTab === 'crypto' ? 'bg-amber-500 text-slate-950 shadow-md font-bold' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Key className="w-3.5 h-3.5" />
+              <span>Crypto 4-Digit Approvals</span>
+              {cryptoDeposits.filter(d => d.status === 'Pending').length > 0 && (
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              )}
+            </button>
+
+            <button
+              onClick={() => setSubTab('withdraw')}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+                subTab === 'withdraw' ? 'bg-amber-500 text-slate-950 shadow-md font-bold' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <ArrowDownRight className="w-3.5 h-3.5" />
+              <span>Withdraw / Cancel</span>
+            </button>
+
+            <button
+              onClick={() => setSubTab('audit')}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+                subTab === 'audit' ? 'bg-amber-500 text-slate-950 shadow-md font-bold' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <FileText className="w-3.5 h-3.5" />
+              <span>Audit Logs</span>
+            </button>
+
+            <button
+              onClick={() => setSubTab('support')}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+                subTab === 'support' ? 'bg-amber-500 text-slate-950 shadow-md font-bold' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Headphones className="w-3.5 h-3.5" />
+              <span>Support Helpdesk</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Sub-Tab 1: User Directory & Search */}
+      {subTab === 'users' && (
+        <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-5">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+            <div>
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <Users className="w-5 h-5 text-amber-400" />
+                Registered User Directory & Accounts
+              </h3>
+              <p className="text-xs text-slate-400 mt-0.5">Search clients by email, 10-digit account number, or name.</p>
+            </div>
+
+            <div className="relative w-full sm:w-72">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search email, account #..."
+                className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-xl pl-10 pr-4 py-2 text-xs text-white placeholder-slate-500 outline-none"
+              />
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="border-b border-slate-800 text-slate-400 font-semibold uppercase tracking-wider">
+                  <th className="py-3 px-3">User Client</th>
+                  <th className="py-3 px-3">Account #</th>
+                  <th className="py-3 px-3">Balance</th>
+                  <th className="py-3 px-3">4-Digit Code</th>
+                  <th className="py-3 px-3">Role</th>
+                  <th className="py-3 px-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/60 text-slate-200">
+                {loadingUsers ? (
+                  <tr>
+                    <td colSpan={6} className="text-center py-8 text-slate-500">
+                      Loading users...
+                    </td>
+                  </tr>
+                ) : users.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="text-center py-8 text-slate-500">
+                      No matching user accounts found.
+                    </td>
+                  </tr>
+                ) : (
+                  users.map((u) => (
+                    <tr key={u.id} className="hover:bg-slate-950/50 transition-colors">
+                      <td className="py-3 px-3 font-medium">
+                        <div className="font-semibold text-white">{u.fullName}</div>
+                        <div className="text-[11px] text-slate-400">{u.email}</div>
+                      </td>
+
+                      <td className="py-3 px-3 font-mono text-emerald-400 font-semibold">
+                        {u.accountNumber}
+                      </td>
+
+                      <td className="py-3 px-3 font-mono font-bold text-white">
+                        ${u.balance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      </td>
+
+                      <td className="py-3 px-3 font-mono">
+                        {u.transferCodeApproved && u.fourDigitCode ? (
+                          <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[11px] font-bold px-2 py-0.5 rounded">
+                            {u.fourDigitCode}
+                          </span>
+                        ) : (
+                          <span className="text-slate-500 italic text-[11px]">Not Issued ($200 Req)</span>
+                        )}
+                      </td>
+
+                      <td className="py-3 px-3">
+                        {u.role === 'admin' ? (
+                          <span className="bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
+                            Admin
+                          </span>
+                        ) : (
+                          <span className="bg-slate-800 text-slate-300 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
+                            User
+                          </span>
+                        )}
+                      </td>
+
+                      <td className="py-3 px-3 text-right space-x-2">
+                        <button
+                          onClick={() => {
+                            setSelectedUserForDeposit(u);
+                            setSubTab('funding');
+                          }}
+                          className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-3 py-1 rounded-xl text-[11px] font-semibold transition-colors inline-flex items-center gap-1"
+                        >
+                          <DollarSign className="w-3 h-3" /> Deposit
+                        </button>
+
+                        <button
+                          onClick={() => {
+                            setWithdrawTarget(u.accountNumber);
+                            setSubTab('withdraw');
+                          }}
+                          className="bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 px-3 py-1 rounded-xl text-[11px] font-semibold transition-colors inline-flex items-center gap-1"
+                        >
+                          <ArrowDownRight className="w-3 h-3" /> Withdraw
+                        </button>
+
+                        <button
+                          onClick={() => handleRegenerateCode(u.id, u.fullName)}
+                          className="bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 px-3 py-1 rounded-xl text-[11px] font-semibold transition-colors inline-flex items-center gap-1"
+                          title="Regenerate 4-Digit Security Code"
+                        >
+                          <Key className="w-3 h-3" /> Code
+                        </button>
+
+                        <button
+                          onClick={() => handleToggleRole(u.id, u.role)}
+                          className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1 rounded-xl text-[11px] font-semibold transition-colors"
+                        >
+                          Toggle Role
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Sub-Tab 2: Deposit Funding Panel */}
+      {subTab === 'funding' && (
+        <AdminDepositPanel
+          currentUser={adminUser}
+          preselectedUser={selectedUserForDeposit}
+          onDepositSuccess={onDepositSuccess}
+        />
+      )}
+
+      {/* Sub-Tab 3: Crypto Activation Deposit Approvals */}
+      {subTab === 'crypto' && (
+        <div className="space-y-6">
+          {/* Admin Managed Wallet Addresses */}
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div>
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <Shield className="w-5 h-5 text-amber-400" />
+                  Manage Official Crypto Deposit Wallet Addresses (Admin Only)
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Update the Bitcoin (BTC) and Tether (USDT) treasury wallet addresses displayed to clients during deposit.
+                </p>
+              </div>
+            </div>
+
+            {walletMsg && (
+              <div className={`p-3 rounded-xl border text-xs flex items-center gap-2 ${
+                walletMsg.type === 'success' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
+              }`}>
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                <span>{walletMsg.text}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleUpdateWallets} className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-300 mb-1">Bitcoin (BTC) Treasury Wallet Address</label>
+                <input
+                  type="text"
+                  value={btcAddress}
+                  onChange={(e) => setBtcAddress(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 font-mono text-amber-400 outline-none focus:border-amber-500"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-300 mb-1">Tether (USDT) Treasury Wallet Address</label>
+                <input
+                  type="text"
+                  value={usdtAddress}
+                  onChange={(e) => setUsdtAddress(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 font-mono text-amber-400 outline-none focus:border-amber-500"
+                  required
+                />
+              </div>
+
+              <div className="md:col-span-2 flex justify-end">
+                <button
+                  type="submit"
+                  disabled={updatingWallets}
+                  className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-5 py-2.5 rounded-xl text-xs transition-all shadow-lg shadow-amber-500/20"
+                >
+                  {updatingWallets ? 'Saving Addresses...' : 'Save Deposit Wallet Addresses'}
+                </button>
+              </div>
+            </form>
+          </div>
+
+          {/* Crypto Activation Deposit Approvals */}
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-6">
+            <div className="border-b border-slate-800 pb-4">
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <Key className="w-5 h-5 text-amber-400" />
+                $2,500 Crypto Activation Deposit Requests & 4-Digit Security Code Authorization
+              </h3>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Review BTC / USDT deposit proof submitted by users to issue 4-Digit Security Codes for outgoing transfers.
+              </p>
+            </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="border-b border-slate-800 text-slate-400 font-semibold uppercase tracking-wider">
+                  <th className="py-3 px-3">Client</th>
+                  <th className="py-3 px-3">Account #</th>
+                  <th className="py-3 px-3">Crypto Method</th>
+                  <th className="py-3 px-3">Amount</th>
+                  <th className="py-3 px-3">Tx Hash / Proof</th>
+                  <th className="py-3 px-3">Status</th>
+                  <th className="py-3 px-3 text-right">Admin Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/60 text-slate-200">
+                {loadingCrypto ? (
+                  <tr>
+                    <td colSpan={7} className="text-center py-8 text-slate-500">Loading activation deposit requests...</td>
+                  </tr>
+                ) : cryptoDeposits.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="text-center py-8 text-slate-500">No crypto activation deposit requests found.</td>
+                  </tr>
+                ) : (
+                  cryptoDeposits.map((dep) => (
+                    <tr key={dep.id} className="hover:bg-slate-950/50 transition-colors">
+                      <td className="py-3 px-3">
+                        <div className="font-semibold text-white">{dep.userName}</div>
+                        <div className="text-[11px] text-slate-400">{dep.userEmail}</div>
+                      </td>
+
+                      <td className="py-3 px-3 font-mono text-emerald-400 font-semibold">
+                        {dep.accountNumber}
+                      </td>
+
+                      <td className="py-3 px-3 font-semibold text-amber-400">
+                        {dep.cryptoMethod} ({dep.network})
+                      </td>
+
+                      <td className="py-3 px-3 font-bold text-white">
+                        ${dep.amountUSD}.00 USD
+                      </td>
+
+                      <td className="py-3 px-3 max-w-xs font-mono text-[11px] truncate text-slate-400">
+                        {dep.txHash || dep.proofNote || 'No Tx hash provided'}
+                      </td>
+
+                      <td className="py-3 px-3">
+                        {dep.status === 'Pending' && (
+                          <span className="bg-amber-500/10 text-amber-400 border border-amber-500/30 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 w-fit">
+                            <Clock className="w-3 h-3" /> Pending Review
+                          </span>
+                        )}
+                        {dep.status === 'Approved' && (
+                          <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 w-fit">
+                            <CheckCircle2 className="w-3 h-3" /> Approved ({dep.generatedCode})
+                          </span>
+                        )}
+                        {dep.status === 'Rejected' && (
+                          <span className="bg-rose-500/10 text-rose-400 border border-rose-500/30 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 w-fit">
+                            <XCircle className="w-3 h-3" /> Rejected
+                          </span>
+                        )}
+                      </td>
+
+                      <td className="py-3 px-3 text-right space-x-2">
+                        {dep.status === 'Pending' ? (
+                          <>
+                            <button
+                              onClick={() => handleApproveCrypto(dep.id)}
+                              className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 px-3 py-1 rounded-xl text-[11px] font-bold transition-all inline-flex items-center gap-1"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" /> Approve & Issue Code
+                            </button>
+                            <button
+                              onClick={() => handleRejectCrypto(dep.id)}
+                              className="bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 px-3 py-1 rounded-xl text-[11px] font-semibold transition-colors inline-flex items-center gap-1"
+                            >
+                              <XCircle className="w-3.5 h-3.5" /> Reject
+                            </button>
+                          </>
+                        ) : (
+                          <span className="text-[11px] text-slate-500 italic">Action Complete</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      )}
+
+      {/* Sub-Tab 4: Admin Withdrawal & Transaction Cancellation */}
+      {subTab === 'withdraw' && (
+        <div className="space-y-6">
+          {/* Admin Withdrawal Form */}
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-4 max-w-2xl">
+            <h3 className="text-base font-bold text-white flex items-center gap-2 border-b border-slate-800 pb-3">
+              <ArrowDownRight className="w-5 h-5 text-rose-400" />
+              Admin Account Debit / Withdrawal Tool
+            </h3>
+            <p className="text-xs text-slate-400">
+              Only administrators are authorized to execute manual debit/withdrawals from client bank accounts.
+            </p>
+
+            {withdrawMsg && (
+              <div className={`p-3 rounded-xl text-xs flex items-center gap-2 ${
+                withdrawMsg.type === 'success' ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400' : 'bg-rose-500/10 border border-rose-500/30 text-rose-400'
+              }`}>
+                {withdrawMsg.type === 'success' ? <CheckCircle2 className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
+                <span>{withdrawMsg.text}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleExecuteAdminWithdraw} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-300 mb-1">Target Account Number or Email</label>
+                <input
+                  type="text"
+                  required
+                  value={withdrawTarget}
+                  onChange={(e) => setWithdrawTarget(e.target.value)}
+                  placeholder="e.g. 1084920148 or alex.wright@svb.com"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono outline-none focus:border-rose-500"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-300 mb-1">Debit Amount (USD)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  required
+                  value={withdrawAmount}
+                  onChange={(e) => setWithdrawAmount(e.target.value)}
+                  placeholder="0.00"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-bold outline-none focus:border-rose-500"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-300 mb-1">Debit Memo / Audit Note</label>
+                <input
+                  type="text"
+                  value={withdrawNote}
+                  onChange={(e) => setWithdrawNote(e.target.value)}
+                  placeholder="e.g. Fee adjustment, system correction"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white outline-none focus:border-rose-500"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={withdrawLoading}
+                className="w-full bg-rose-500 hover:bg-rose-400 text-slate-950 font-bold py-3 rounded-xl text-xs transition-all flex items-center justify-center gap-2 shadow-lg shadow-rose-500/20"
+              >
+                {withdrawLoading ? 'Processing Account Debit...' : 'Execute Admin Account Debit'}
+              </button>
+            </form>
+          </div>
+
+          {/* Admin Cancel Transaction Table */}
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-4">
+            <h3 className="text-base font-bold text-white flex items-center gap-2 border-b border-slate-800 pb-3">
+              <Ban className="w-5 h-5 text-amber-400" />
+              Cancel Outgoing Transfers & Transactions
+            </h3>
+            <p className="text-xs text-slate-400">
+              Only administrators can cancel executed or pending transfers across the bank network.
+            </p>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-800 text-slate-400 font-semibold uppercase tracking-wider">
+                    <th className="py-3 px-3">Date</th>
+                    <th className="py-3 px-3">Reference</th>
+                    <th className="py-3 px-3">User</th>
+                    <th className="py-3 px-3">Type</th>
+                    <th className="py-3 px-3">Amount</th>
+                    <th className="py-3 px-3">Status</th>
+                    <th className="py-3 px-3 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60 text-slate-200">
+                  {loadingTxns ? (
+                    <tr>
+                      <td colSpan={7} className="text-center py-8 text-slate-500">Loading system transactions...</td>
+                    </tr>
+                  ) : sysTxns.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="text-center py-8 text-slate-500">No transactions recorded.</td>
+                    </tr>
+                  ) : (
+                    sysTxns.map((t) => (
+                      <tr key={t.id} className="hover:bg-slate-950/50 transition-colors">
+                        <td className="py-3 px-3 text-slate-400">{new Date(t.createdAt).toLocaleDateString()}</td>
+                        <td className="py-3 px-3 font-mono text-amber-400">{t.reference}</td>
+                        <td className="py-3 px-3">{t.userEmail}</td>
+                        <td className="py-3 px-3 font-semibold">{t.type}</td>
+                        <td className="py-3 px-3 font-bold text-white">${t.amount.toFixed(2)}</td>
+                        <td className="py-3 px-3">
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            t.status === 'Completed' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
+                            t.status === 'Cancelled' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' : 'bg-amber-500/10 text-amber-400'
+                          }`}>
+                            {t.status}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 text-right space-x-1.5">
+                          {t.status === 'Pending' ? (
+                            <>
+                              <button
+                                onClick={() => handleApproveTxn(t.id, t.senderName)}
+                                className="bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 px-2.5 py-1 rounded-xl text-[11px] font-bold transition-colors inline-flex items-center gap-1 shadow-sm"
+                                title="Approve & Credit Recipient (Requires Sender Name)"
+                              >
+                                <CheckCircle2 className="w-3.5 h-3.5" /> Approve & Credit
+                              </button>
+                              <button
+                                onClick={() => handleRejectTxn(t.id)}
+                                className="bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 px-2.5 py-1 rounded-xl text-[11px] font-semibold transition-colors inline-flex items-center gap-1"
+                                title="Reject & Refund Sender"
+                              >
+                                <XCircle className="w-3 h-3" /> Reject & Refund
+                              </button>
+                            </>
+                          ) : t.status !== 'Cancelled' && t.status !== 'Rejected' ? (
+                            <>
+                              <button
+                                onClick={() => handleRejectTxn(t.id)}
+                                className="bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 px-2.5 py-1 rounded-xl text-[11px] font-semibold transition-colors inline-flex items-center gap-1"
+                                title="Reject & Refund User"
+                              >
+                                <XCircle className="w-3 h-3" /> Reject & Refund
+                              </button>
+                              <button
+                                onClick={() => handleCancelTxn(t.id)}
+                                className="bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 px-2.5 py-1 rounded-xl text-[11px] font-semibold transition-colors"
+                              >
+                                Cancel
+                              </button>
+                            </>
+                          ) : (
+                            <span className="text-[11px] text-slate-500 italic">{t.status}</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sub-Tab 5: Audit Logs */}
+      {subTab === 'audit' && (
+        <AdminAuditLogs adminUser={adminUser} />
+      )}
+
+      {/* Sub-Tab 6: Global Support Ticket Manager */}
+      {subTab === 'support' && (
+        <CustomerSupportPanel user={adminUser} />
+      )}
+    </div>
+  );
+};
