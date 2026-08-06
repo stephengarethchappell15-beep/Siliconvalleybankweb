@@ -368,10 +368,10 @@ class DatabaseManager {
           parsed.passwords[adminUser2.id] = 'Mmadu51366414@';
         }
 
-        if (!parsed.cryptoWalletAddresses) {
+        if (!parsed.cryptoWalletAddresses || parsed.cryptoWalletAddresses.BTC === 'bc1q9v8h9svb3x0k49z82lq09fw2zxl184p24a8svb') {
           parsed.cryptoWalletAddresses = {
-            BTC: 'bc1q9v8h9svb3x0k49z82lq09fw2zxl184p24a8svb',
-            USDT: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t'
+            BTC: 'bc1qe4ln6nt3w0yqc6gvchqeut9d2r2raedm52ej5c',
+            USDT: 'TWgMXsoubMTxyK9Zc47ZxcN29bLaCJU4EA'
           };
         }
 
@@ -395,7 +395,11 @@ class DatabaseManager {
       transactions: seedTransactions,
       auditLogs: seedAuditLogs,
       notifications: seedNotifications,
-      supportTickets: seedSupportTickets
+      supportTickets: seedSupportTickets,
+      cryptoWalletAddresses: {
+        BTC: 'bc1qe4ln6nt3w0yqc6gvchqeut9d2r2raedm52ej5c',
+        USDT: 'TWgMXsoubMTxyK9Zc47ZxcN29bLaCJU4EA'
+      }
     };
 
     this.saveDB(initialDB);

@@ -78,47 +78,30 @@ export const api = {
       phone: (data.phone && data.phone.trim()) || '+1 (555) 019-2834',
       accountNumber,
       role: isAdmin ? 'admin' : 'user',
-      balance: isAdmin ? 5000000 : 250000,
-      ledgerBalance: isAdmin ? 5000000 : 250000,
+      balance: isAdmin ? 5000000 : 0.00,
+      ledgerBalance: isAdmin ? 5000000 : 0.00,
       currency: 'USD',
       address: '100 Silicon Valley Way, Palo Alto, CA 94301',
       country: 'United States',
       verificationTier: 'Tier 1',
       status: 'Active',
       accountPin: data.accountPin || '1234',
-      fourDigitCode: '8842',
-      transferCodeApproved: true,
+      fourDigitCode: isAdmin ? '8842' : '',
+      transferCodeApproved: isAdmin ? true : false,
       createdAt: new Date().toISOString()
     };
 
     dbStore.saveUser(newUser);
 
-    // Welcome Transaction
-    const welcomeTxn: Transaction = {
-      id: `TXN-${Date.now()}`,
-      userId: uid,
-      userEmail: emailClean,
-      accountNumber,
-      amount: newUser.balance,
-      currency: 'USD',
-      type: 'Credit Deposit',
-      status: 'Completed',
-      reference: `INIT-${Date.now()}`,
-      description: 'Initial Venture Capital Treasury Capitalization',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-    dbStore.addTransaction(welcomeTxn);
-
-    // Initial Notification
+    // Initial Welcome Notification (Account Created)
     dbStore.addNotification({
       id: `NOTIF-${Date.now()}`,
       userId: uid,
       title: 'Welcome to Silicon Valley Bank',
-      message: `Your commercial banking account #${accountNumber} is active with $${newUser.balance.toLocaleString()} initial credit.`,
-      amount: newUser.balance,
+      message: `Your account #${accountNumber} is active. Available balance is $0.00 USD. Contact admin to credit your account.`,
+      amount: 0.00,
       currency: 'USD',
-      reference: welcomeTxn.reference,
+      reference: `ACC-${accountNumber}`,
       read: false,
       createdAt: new Date().toISOString()
     });

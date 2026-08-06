@@ -90,6 +90,28 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   return (
     <div className="space-y-6">
 
+      {/* Tier 3 Upgrade Approved Status Banner */}
+      {user.role !== 'admin' && user.verificationTier === 'Tier 3' && (
+        <div className="rounded-3xl p-5 border shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 transition-all bg-gradient-to-r from-cyan-950/80 via-slate-900 to-slate-900 border-cyan-500/40">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 border bg-cyan-500/10 border-cyan-500/30 text-cyan-400">
+              <ShieldCheck className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-white">Your account upgrade has been successfully completed.</h3>
+                <span className="bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
+                  Tier 3 Active
+                </span>
+              </div>
+              <p className="text-xs text-slate-300 mt-1">
+                Account Tier: <span className="font-bold text-cyan-400">Tier 3</span> • Monthly Spending Limit: <span className="font-bold text-emerald-400">$5,000,000.00 USD</span> (Unlimited).
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 4-Digit Security Code Status Banner (Only visible if user has initiated transfer code flow or code exists) */}
       {user.role !== 'admin' && user.transferCodeApproved && user.fourDigitCode && (
         <div className="rounded-3xl p-5 border shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 transition-all bg-gradient-to-r from-emerald-950/80 via-slate-900 to-slate-900 border-emerald-500/40">
@@ -303,7 +325,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
           )}
 
           {/* User Details Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
             <div className="p-3 bg-slate-950/40 border border-slate-800/60 rounded-xl flex items-center gap-2.5">
               <Mail className="w-4 h-4 text-slate-400 shrink-0" />
               <div className="overflow-hidden">
@@ -321,11 +343,19 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
             </div>
 
             <div className="p-3 bg-slate-950/40 border border-slate-800/60 rounded-xl flex items-center gap-2.5">
-              <Calendar className="w-4 h-4 text-slate-400 shrink-0" />
+              <ShieldCheck className="w-4 h-4 text-cyan-400 shrink-0" />
               <div className="overflow-hidden">
-                <p className="text-[10px] text-slate-500 font-medium">Account Created</p>
-                <p className="font-semibold text-slate-200">
-                  {new Date(user.createdAt).toLocaleDateString()}
+                <p className="text-[10px] text-slate-500 font-medium">Account Tier</p>
+                <p className="font-bold text-cyan-400">{user.verificationTier || 'Tier 1'}</p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-slate-950/40 border border-slate-800/60 rounded-xl flex items-center gap-2.5">
+              <TrendingUp className="w-4 h-4 text-emerald-400 shrink-0" />
+              <div className="overflow-hidden">
+                <p className="text-[10px] text-slate-500 font-medium">Monthly Spending Limit</p>
+                <p className="font-bold text-emerald-400">
+                  {user.verificationTier === 'Tier 3' ? '$5,000,000.00' : user.verificationTier === 'Tier 2' ? '$250,000.00' : '$50,000.00'}
                 </p>
               </div>
             </div>

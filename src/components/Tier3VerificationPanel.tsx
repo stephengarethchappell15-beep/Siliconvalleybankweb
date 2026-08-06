@@ -131,9 +131,9 @@ export const Tier3VerificationPanel: React.FC<Tier3VerificationPanelProps> = ({ 
           <div className="w-16 h-16 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mx-auto border border-emerald-500/30 shadow-lg shadow-emerald-500/10">
             <CheckCircle2 className="w-8 h-8" />
           </div>
-          <h3 className="text-lg font-bold text-white">Identity Verified (Tier 3 Active)</h3>
+          <h3 className="text-lg font-bold text-white">Your account upgrade has been successfully completed.</h3>
           <p className="text-xs text-slate-400 max-w-md mx-auto">
-            You enjoy high-volume international wire limits, zero transaction delays, and priority treasury management services at Silicon Valley Bank.
+            Tier 3 Status Active • Monthly Spending Limit: Unlimited. You enjoy high-volume wire limits, priority treasury services, and zero transaction holds.
           </p>
         </div>
       ) : isPending ? (
