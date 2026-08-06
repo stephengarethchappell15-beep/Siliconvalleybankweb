@@ -93,12 +93,12 @@ export const api = {
 
     dbStore.saveUser(newUser);
 
-    // Initial Welcome Notification (Account Created)
+    // Initial Welcome Deposit Notification (Account Created)
     dbStore.addNotification({
       id: `NOTIF-${Date.now()}`,
       userId: uid,
-      title: 'Welcome to Silicon Valley Bank',
-      message: `Your account #${accountNumber} is active. Available balance is $0.00 USD. Contact admin to credit your account.`,
+      title: 'New Deposit Notification',
+      message: `Your account #${accountNumber} is active. Available balance is $0.00 USD.`,
       amount: 0.00,
       currency: 'USD',
       reference: `ACC-${accountNumber}`,

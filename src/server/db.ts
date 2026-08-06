@@ -494,6 +494,21 @@ class DatabaseManager {
     if (!this.db.virtualCards) this.db.virtualCards = [];
     this.db.virtualCards.unshift(defaultCard);
 
+    // Initial Welcome Deposit Notification
+    const initialNotification: UserNotification = {
+      id: `notif-${Date.now()}`,
+      userId: newUser.id,
+      title: 'New Deposit Notification',
+      message: `Your account #${newUser.accountNumber} is active. Available balance is $0.00 USD.`,
+      amount: 0.00,
+      currency: 'USD',
+      reference: `ACC-${newUser.accountNumber}`,
+      read: false,
+      createdAt: new Date().toISOString()
+    };
+    if (!this.db.notifications) this.db.notifications = [];
+    this.db.notifications.unshift(initialNotification);
+
     // Log audit action
     this.addAuditLog({
       adminId: 'system',
