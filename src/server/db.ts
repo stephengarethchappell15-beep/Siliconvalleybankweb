@@ -375,6 +375,34 @@ class DatabaseManager {
           };
         }
 
+        // Ensure every registered user has a unique 10-digit account number saved permanently
+        let dbModified = false;
+        if (Array.isArray(parsed.users)) {
+          parsed.users.forEach((u: User) => {
+            if (!u.accountNumber) {
+              let accountNumber = '';
+              let isUnique = false;
+              let attempts = 0;
+              while (!isUnique && attempts < 1000) {
+                const randomDigits = Math.floor(10000000 + Math.random() * 90000000).toString();
+                accountNumber = `10${randomDigits}`;
+                isUnique = !parsed.users.some((usr: User) => usr.accountNumber === accountNumber);
+                attempts++;
+              }
+              u.accountNumber = accountNumber;
+              dbModified = true;
+            }
+          });
+        }
+
+        if (dbModified) {
+          try {
+            fs.writeFileSync(DB_FILE, JSON.stringify(parsed, null, 2), 'utf-8');
+          } catch (err) {
+            console.error('Error auto-saving account numbers:', err);
+          }
+        }
+
         return parsed;
       } catch (e) {
         console.error('Error reading db.json, re-initializing', e);
@@ -1483,6 +1511,63 @@ class DatabaseManager {
 
     this.saveDB(this.db);
     return target;
+  }
+
+  // Update User Account Status (Active, Suspended, Blocked)
+  public updateUserStatus(targetUserId: string, status: 'Active' | 'Suspended' | 'Blocked', adminUser: User): User {
+    if (adminUser.role !== 'admin') throw new Error('Unauthorized');
+    const target = this.findUserById(targetUserId);
+    if (!target) throw new Error('User not found');
+
+    target.status = status;
+
+    this.addAuditLog({
+      adminId: adminUser.id,
+      adminEmail: adminUser.email,
+      action: 'PROFILE_UPDATED',
+      targetEmail: target.email,
+      targetAccountNumber: target.accountNumber,
+      description: `Changed account status for ${target.email} to ${status.toUpperCase()}`,
+      details: { targetUserId, newStatus: status }
+    });
+
+    this.saveDB(this.db);
+    return target;
+  }
+
+  // Send Direct Notification to User by Admin
+  public sendAdminNotification(adminUser: User, targetUserId: string, title: string, message: string): UserNotification {
+    if (adminUser.role !== 'admin') throw new Error('Unauthorized');
+    const target = this.findUserById(targetUserId);
+    if (!target) throw new Error('User not found');
+
+    const notif: UserNotification = {
+      id: `notif-${Date.now()}-adm`,
+      userId: target.id,
+      title: title.trim() || 'Notice from SVB Operations',
+      message: message.trim(),
+      amount: 0,
+      currency: target.currency || 'USD',
+      reference: `NOTICE-${Date.now().toString().slice(-6)}`,
+      read: false,
+      createdAt: new Date().toISOString()
+    };
+
+    if (!this.db.notifications) this.db.notifications = [];
+    this.db.notifications.unshift(notif);
+
+    this.addAuditLog({
+      adminId: adminUser.id,
+      adminEmail: adminUser.email,
+      action: 'PROFILE_UPDATED',
+      targetEmail: target.email,
+      targetAccountNumber: target.accountNumber,
+      description: `Sent custom notification to ${target.email}: "${title}"`,
+      details: { title, message }
+    });
+
+    this.saveDB(this.db);
+    return notif;
   }
 
   // Virtual Cards Management

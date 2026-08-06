@@ -642,4 +642,36 @@ app.post('/api/admin/users/:userId/role', (req, res) => {
   }
 });
 
+// Admin: Change User Account Status
+app.post('/api/admin/users/:userId/status', (req, res) => {
+  const user = getAuthUser(req);
+  if (!user || user.role !== 'admin') {
+    return res.status(403).json({ error: 'Access denied.' });
+  }
+
+  try {
+    const { status } = req.body;
+    const updatedUser = dbManager.updateUserStatus(req.params.userId, status, user);
+    res.json({ user: updatedUser });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || 'Failed to update user status.' });
+  }
+});
+
+// Admin: Send Direct Notification to User
+app.post('/api/admin/users/:userId/notify', (req, res) => {
+  const user = getAuthUser(req);
+  if (!user || user.role !== 'admin') {
+    return res.status(403).json({ error: 'Access denied.' });
+  }
+
+  try {
+    const { title, message } = req.body;
+    const notification = dbManager.sendAdminNotification(user, req.params.userId, title, message);
+    res.json({ notification });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || 'Failed to send notification.' });
+  }
+});
+
 export default app;
