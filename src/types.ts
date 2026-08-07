@@ -96,6 +96,7 @@ export interface User {
   address?: string;
   country?: string;
   verificationTier?: 'Tier 1' | 'Tier 2' | 'Tier 3' | 'Pending Tier 3' | 'Rejected';
+  profilePicture?: string;
   status?: 'Active' | 'Blocked' | 'Suspended';
   twoFactorEnabled?: boolean;
   twoFactorSecret?: string;

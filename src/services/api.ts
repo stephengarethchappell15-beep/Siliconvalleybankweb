@@ -157,15 +157,26 @@ export const api = {
     return { user };
   },
 
-  async updateProfile(data: { fullName?: string; phone?: string; address?: string; twoFactorEnabled?: boolean }): Promise<{ user: User }> {
+  async updateProfile(data: { fullName?: string; phone?: string; address?: string; twoFactorEnabled?: boolean; profilePicture?: string }): Promise<{ user: User }> {
+    const backendRes = await requestApi<{ user: User }>('/user/profile', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+
+    if (backendRes && backendRes.user) {
+      dbStore.saveUser(backendRes.user);
+      return { user: backendRes.user };
+    }
+
     const current = dbStore.getCurrentUser();
     if (!current) throw new Error('Not authenticated');
 
     const updated = dbStore.saveUser({
       ...current,
-      ...(data.fullName ? { fullName: data.fullName } : {}),
-      ...(data.phone ? { phone: data.phone } : {}),
-      ...(data.address ? { address: data.address } : {}),
+      ...(data.fullName !== undefined ? { fullName: data.fullName } : {}),
+      ...(data.phone !== undefined ? { phone: data.phone } : {}),
+      ...(data.address !== undefined ? { address: data.address } : {}),
+      ...(data.profilePicture !== undefined ? { profilePicture: data.profilePicture } : {}),
       ...(data.twoFactorEnabled !== undefined ? { twoFactorEnabled: data.twoFactorEnabled } : {})
     });
 

@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { User } from '../types';
 import { api } from '../services/api';
 import { Tier3VerificationPanel } from './Tier3VerificationPanel';
-import { User as UserIcon, Mail, Phone, MapPin, CreditCard, Shield, Calendar, Save, CheckCircle2, AlertCircle } from 'lucide-react';
+import { User as UserIcon, Mail, Phone, MapPin, CreditCard, Calendar, Save, CheckCircle2, AlertCircle, Camera, Upload, Trash2, Image } from 'lucide-react';
 
 interface ProfilePanelProps {
   user: User;
@@ -13,8 +13,51 @@ export const ProfilePanel: React.FC<ProfilePanelProps> = ({ user, onUpdateUser }
   const [fullName, setFullName] = useState(user.fullName);
   const [phone, setPhone] = useState(user.phone || '');
   const [address, setAddress] = useState(user.address || '');
+  const [profilePicture, setProfilePicture] = useState<string>(user.profilePicture || '');
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      setMsg({ type: 'error', text: 'Image file size should be less than 5MB.' });
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (reader.result) {
+        const base64 = reader.result.toString();
+        setProfilePicture(base64);
+        setMsg({ type: 'success', text: 'Profile picture selected. Click "Save Profile Changes" below to apply.' });
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemovePicture = async () => {
+    setProfilePicture('');
+    setMsg(null);
+    try {
+      setLoading(true);
+      const res = await api.updateProfile({
+        fullName: fullName.trim(),
+        phone: phone.trim(),
+        address: address.trim(),
+        profilePicture: ''
+      });
+      onUpdateUser(res.user);
+      setMsg({ type: 'success', text: 'Profile picture removed successfully.' });
+    } catch (err: any) {
+      setMsg({ type: 'error', text: err.message || 'Failed to remove profile picture.' });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,10 +68,11 @@ export const ProfilePanel: React.FC<ProfilePanelProps> = ({ user, onUpdateUser }
       const res = await api.updateProfile({
         fullName: fullName.trim(),
         phone: phone.trim(),
-        address: address.trim()
+        address: address.trim(),
+        profilePicture
       });
       onUpdateUser(res.user);
-      setMsg({ type: 'success', text: 'Profile information updated successfully.' });
+      setMsg({ type: 'success', text: 'Profile information and picture updated successfully.' });
     } catch (err: any) {
       setMsg({ type: 'error', text: err.message || 'Failed to update profile.' });
     } finally {
@@ -40,14 +84,41 @@ export const ProfilePanel: React.FC<ProfilePanelProps> = ({ user, onUpdateUser }
     <div className="max-w-2xl mx-auto space-y-6">
       {/* Profile Header */}
       <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl relative overflow-hidden">
-        <div className="flex flex-col sm:flex-row items-center gap-5">
-          <div className="w-20 h-20 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-400 p-0.5 shadow-xl shadow-emerald-500/10 shrink-0">
-            <div className="w-full h-full bg-slate-950 rounded-[14px] flex items-center justify-center text-3xl font-extrabold text-emerald-400">
-              {user.fullName.charAt(0)}
+        <div className="flex flex-col sm:flex-row items-center gap-6">
+          {/* Avatar Container with Upload Overlay */}
+          <div className="relative group shrink-0">
+            <div className="w-24 h-24 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-400 p-0.5 shadow-xl shadow-emerald-500/10 overflow-hidden relative">
+              {profilePicture ? (
+                <img
+                  src={profilePicture}
+                  alt={user.fullName}
+                  className="w-full h-full object-cover rounded-[14px]"
+                />
+              ) : (
+                <div className="w-full h-full bg-slate-950 rounded-[14px] flex items-center justify-center text-3xl font-extrabold text-emerald-400">
+                  {user.fullName.charAt(0)}
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="absolute inset-0 bg-slate-950/70 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center text-white text-[11px] font-bold transition-opacity rounded-[14px] gap-1 cursor-pointer"
+                title="Click to upload profile photo"
+              >
+                <Camera className="w-5 h-5 text-emerald-400" />
+                <span>Upload</span>
+              </button>
             </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleImageChange}
+              className="hidden"
+            />
           </div>
 
-          <div className="text-center sm:text-left space-y-1">
+          <div className="text-center sm:text-left space-y-2 flex-1">
             <div className="flex items-center justify-center sm:justify-start gap-2">
               <h2 className="text-2xl font-bold text-white tracking-tight">{user.fullName}</h2>
               {user.role === 'admin' ? (
@@ -68,6 +139,29 @@ export const ProfilePanel: React.FC<ProfilePanelProps> = ({ user, onUpdateUser }
             <p className="text-xs text-slate-500 flex items-center justify-center sm:justify-start gap-1">
               <Calendar className="w-3.5 h-3.5" /> Member since {new Date(user.createdAt).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
             </p>
+
+            {/* Quick Picture Control Buttons */}
+            <div className="pt-2 flex items-center justify-center sm:justify-start gap-2">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-xl border border-slate-700 flex items-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <Upload className="w-3.5 h-3.5 text-emerald-400" />
+                <span>{profilePicture ? 'Change Photo' : 'Upload Photo'}</span>
+              </button>
+
+              {profilePicture && (
+                <button
+                  type="button"
+                  onClick={handleRemovePicture}
+                  className="px-3 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-semibold rounded-xl border border-rose-500/20 flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Remove</span>
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>

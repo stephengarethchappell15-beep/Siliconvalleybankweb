@@ -220,8 +220,12 @@ export const Navbar: React.FC<NavbarProps> = ({
                   onClick={() => setShowSwitchMenu(!showSwitchMenu)}
                   className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 transition-all text-left"
                 >
-                  <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white font-bold text-xs shadow-sm">
-                    {user.fullName.charAt(0)}
+                  <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white font-bold text-xs shadow-sm overflow-hidden shrink-0">
+                    {user.profilePicture ? (
+                      <img src={user.profilePicture} alt={user.fullName} className="w-full h-full object-cover" />
+                    ) : (
+                      user.fullName.charAt(0)
+                    )}
                   </div>
                   <div className="hidden sm:block text-xs">
                     <p className="font-semibold text-slate-100 leading-tight">{user.fullName}</p>

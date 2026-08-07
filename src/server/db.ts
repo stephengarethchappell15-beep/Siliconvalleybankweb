@@ -588,6 +588,7 @@ class DatabaseManager {
     if (updates.fullName) user.fullName = updates.fullName.trim();
     if (updates.phone) user.phone = updates.phone.trim();
     if (updates.address !== undefined) user.address = updates.address.trim();
+    if (updates.profilePicture !== undefined) user.profilePicture = updates.profilePicture;
     if (updates.twoFactorEnabled !== undefined) user.twoFactorEnabled = updates.twoFactorEnabled;
     if (updates.emailNotifications !== undefined) user.emailNotifications = updates.emailNotifications;
     if (updates.smsNotifications !== undefined) user.smsNotifications = updates.smsNotifications;
