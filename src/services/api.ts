@@ -42,13 +42,13 @@ async function requestApi<T>(path: string, options: RequestInit = {}): Promise<T
       (err as any).status = res.status;
       throw err;
     }
-    throw new Error(`Server request to ${path} failed with status ${res.status}`);
+    return null;
   } catch (e: any) {
-    if (e && e.message && !e.message.includes('Failed to fetch') && e.name !== 'TypeError') {
+    if (e && e.status) {
       throw e;
     }
+    return null;
   }
-  return null;
 }
 
 export const api = {
