@@ -118,11 +118,21 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ transaction, onClose
         </div>
 
         {/* Printable Receipt Slip Body */}
-        <div id="printable-receipt-container" className="p-6 sm:p-8 bg-slate-950 text-slate-100 space-y-6">
+        <div id="printable-receipt-container" className="p-6 sm:p-8 bg-slate-950 text-slate-100 space-y-6 relative overflow-hidden">
           
+          {/* Subtle Bank Watermark Overlay Pattern */}
+          <div className="absolute inset-0 opacity-[0.03] pointer-events-none grid grid-cols-3 gap-8 p-6 select-none no-print">
+            {[...Array(12)].map((_, i) => (
+              <div key={i} className="flex flex-col items-center justify-center transform -rotate-12">
+                <Building2 className="w-16 h-16 text-emerald-400" />
+                <span className="font-extrabold text-[10px] tracking-widest text-emerald-400">SVB BANK</span>
+              </div>
+            ))}
+          </div>
+
           {/* Header Branding */}
-          <div className="text-center pb-6 border-b border-slate-800 space-y-2">
-            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-teal-500/10 border border-emerald-500/30 text-emerald-400 mb-1">
+          <div className="text-center pb-6 border-b border-slate-800 space-y-2 relative z-10">
+            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-teal-500/10 border border-emerald-500/30 text-emerald-400 mb-1 shadow-md shadow-emerald-500/10">
               <Building2 className="w-7 h-7" />
             </div>
             <h2 className="font-extrabold text-white text-2xl tracking-tight print-dark-text">Silicon Valley Bank</h2>
@@ -137,7 +147,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ transaction, onClose
           </div>
 
           {/* Amount & Status Card */}
-          <div className="bg-slate-900 border border-emerald-500/30 rounded-2xl p-6 text-center shadow-inner space-y-2 print-border">
+          <div className="bg-slate-900 border border-emerald-500/30 rounded-2xl p-6 text-center shadow-inner space-y-2 relative z-10 print-border">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">
               {isDeposit ? 'CREDIT TRANSACTION AMOUNT' : 'TOTAL SETTLEMENT AMOUNT'}
             </span>
@@ -150,44 +160,62 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ transaction, onClose
           </div>
 
           {/* Transaction Metadata Grid */}
-          <div className="space-y-3 text-xs divide-y divide-slate-800/80">
+          <div className="space-y-3 text-xs divide-y divide-slate-800/80 relative z-10">
             
-            {/* Reference Number */}
+            {/* Transaction ID */}
             <div className="pt-2 flex justify-between items-center">
-              <span className="text-slate-400 font-medium">Transaction Reference:</span>
+              <span className="text-slate-400 font-medium">Transaction ID:</span>
+              <span className="font-mono font-bold text-slate-200 print-dark-text">{transaction.id}</span>
+            </div>
+
+            {/* Reference Number */}
+            <div className="pt-3 flex justify-between items-center">
+              <span className="text-slate-400 font-medium">Reference Number:</span>
               <span className="font-mono font-bold text-emerald-400 text-sm">{transaction.reference}</span>
             </div>
 
-            {/* Date & Time */}
+            {/* Date */}
             <div className="pt-3 flex justify-between items-center">
-              <span className="text-slate-400 font-medium">Date & Time:</span>
-              <span className="font-semibold text-slate-200 print-dark-text">{new Date(transaction.createdAt).toLocaleString()}</span>
+              <span className="text-slate-400 font-medium">Date:</span>
+              <span className="font-semibold text-slate-200 print-dark-text">{new Date(transaction.createdAt).toLocaleDateString(undefined, { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}</span>
             </div>
 
-            {/* Transfer Type */}
+            {/* Time */}
+            <div className="pt-3 flex justify-between items-center">
+              <span className="text-slate-400 font-medium">Time:</span>
+              <span className="font-semibold text-slate-200 print-dark-text">{new Date(transaction.createdAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
+            </div>
+
+            {/* Status */}
+            <div className="pt-3 flex justify-between items-center">
+              <span className="text-slate-400 font-medium">Status:</span>
+              <span className="font-bold text-white uppercase print-dark-text">{transaction.status}</span>
+            </div>
+
+            {/* Sender */}
+            <div className="pt-3 flex justify-between items-center">
+              <span className="text-slate-400 font-medium">Sender:</span>
+              <span className="font-bold text-slate-200 print-dark-text">{transaction.senderName || transaction.createdByAdminEmail || 'Silicon Valley Bank Account Holder'}</span>
+            </div>
+
+            {/* Receiver / Recipient */}
+            <div className="pt-3 flex justify-between items-center">
+              <span className="text-slate-400 font-medium">Receiver:</span>
+              <span className="font-bold text-emerald-400 print-dark-text">{transaction.recipientName || transaction.userEmail}</span>
+            </div>
+
+            {/* Account Number */}
+            <div className="pt-3 flex justify-between items-center">
+              <span className="text-slate-400 font-medium">Account Number:</span>
+              <span className="font-mono font-bold text-slate-200 print-dark-text">{transaction.accountNumber || transaction.senderAccountNumber || transaction.recipientAccountNumber || 'SVB-1084920148'}</span>
+            </div>
+
+            {/* Transfer Classification */}
             <div className="pt-3 flex justify-between items-center">
               <span className="text-slate-400 font-medium">Transfer Classification:</span>
               <span className="font-bold text-white px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-[11px] print-dark-text">
                 {transferTypeDisplay} Wire Transfer
               </span>
-            </div>
-
-            {/* Sender Name */}
-            <div className="pt-3 flex justify-between items-center">
-              <span className="text-slate-400 font-medium">Sender Name:</span>
-              <span className="font-bold text-slate-200 print-dark-text">{transaction.senderName || 'Silicon Valley Bank Client'}</span>
-            </div>
-
-            {/* Sender Account */}
-            <div className="pt-3 flex justify-between items-center">
-              <span className="text-slate-400 font-medium">Sender Account Number:</span>
-              <span className="font-mono font-bold text-slate-300 print-dark-text">#{transaction.senderAccountNumber || transaction.accountNumber}</span>
-            </div>
-
-            {/* Recipient Name */}
-            <div className="pt-3 flex justify-between items-center">
-              <span className="text-slate-400 font-medium">Recipient Name:</span>
-              <span className="font-bold text-emerald-400 print-dark-text">{transaction.recipientName || transaction.userEmail}</span>
             </div>
 
             {/* Destination Bank */}
@@ -204,7 +232,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ transaction, onClose
               </div>
             )}
 
-            {/* Recipient Account Number */}
+            {/* Recipient Account Number / IBAN */}
             {transaction.recipientAccountNumber && (
               <div className="pt-3 flex justify-between items-center">
                 <span className="text-slate-400 font-medium">Recipient Account / IBAN:</span>

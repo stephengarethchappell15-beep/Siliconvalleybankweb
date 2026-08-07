@@ -38,6 +38,10 @@ export const VirtualCardsPanel: React.FC<VirtualCardsPanelProps> = ({ user, onRe
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
+  // 30-Second Card Issuance Processing Animation State
+  const [show30sProcessingModal, setShow30sProcessingModal] = useState(false);
+  const [countdownSeconds, setCountdownSeconds] = useState(30);
+
   const loadCards = async () => {
     try {
       setLoading(true);
@@ -54,6 +58,20 @@ export const VirtualCardsPanel: React.FC<VirtualCardsPanelProps> = ({ user, onRe
     loadCards();
   }, []);
 
+  // 30-Second Countdown Timer Effect for Virtual Card Generation
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (show30sProcessingModal && countdownSeconds > 0) {
+      timer = setInterval(() => {
+        setCountdownSeconds(prev => prev - 1);
+      }, 1000);
+    } else if (show30sProcessingModal && countdownSeconds === 0) {
+      // Automatically finalize card creation after 30-second delay
+      finalizeCardIssuance();
+    }
+    return () => clearInterval(timer);
+  }, [show30sProcessingModal, countdownSeconds]);
+
   const handleToggleCardStatus = async (cardId: string) => {
     try {
       await api.toggleVirtualCard(cardId);
@@ -63,24 +81,31 @@ export const VirtualCardsPanel: React.FC<VirtualCardsPanelProps> = ({ user, onRe
     }
   };
 
-  const handleIssueCard = async (e: React.FormEvent) => {
+  const handleStartCardIssuance = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setSuccessMsg('');
-    setIssuing(true);
+    setShowIssueModal(false);
+    setCountdownSeconds(30);
+    setShow30sProcessingModal(true);
+  };
 
+  const finalizeCardIssuance = async () => {
+    setIssuing(true);
     try {
       const res = await api.createVirtualCard({
         cardType,
         category,
         spendingLimit: Number(spendingLimit)
       });
-      setSuccessMsg(`Virtual card issued successfully for ${category}!`);
-      setShowIssueModal(false);
+      setSuccessMsg(`Virtual Card issued successfully with gold metallic tier!`);
+      setShow30sProcessingModal(false);
       loadCards();
       onRefreshUser();
     } catch (err: any) {
       setError(err.message || 'Failed to issue virtual card.');
+      setShow30sProcessingModal(false);
+      setShowIssueModal(true);
     } finally {
       setIssuing(false);
     }
@@ -191,32 +216,30 @@ export const VirtualCardsPanel: React.FC<VirtualCardsPanelProps> = ({ user, onRe
                     </button>
                   </div>
 
-                  {/* Card Visual Container - Premium Metallic Physical Card Design */}
+                  {/* Card Visual Container - Premium Metallic Gold Physical & Virtual Card Design */}
                   <div className={`aspect-[1.586/1] w-full rounded-2xl p-5 relative overflow-hidden flex flex-col justify-between shadow-2xl transition-all duration-300 transform hover:scale-[1.02] ${
                     card.status === 'Frozen'
-                      ? 'bg-gradient-to-tr from-slate-900 via-slate-800 to-slate-950 border border-slate-700/50 opacity-80'
-                      : card.cardType.includes('Mastercard')
-                      ? 'bg-gradient-to-tr from-slate-950 via-zinc-900 to-amber-950 border border-amber-500/30'
-                      : 'bg-gradient-to-tr from-slate-950 via-slate-900 to-blue-950 border border-cyan-500/30'
+                      ? 'bg-gradient-to-tr from-slate-900 via-slate-800 to-slate-950 border border-slate-700/50 opacity-80 text-white'
+                      : 'bg-gradient-to-tr from-amber-600 via-yellow-400 to-amber-500 border border-yellow-200/80 text-slate-950'
                   }`}>
-                    {/* Metallic Light Sheen Beam & Geometric Pattern Watermark */}
-                    <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-white/10 via-transparent to-transparent pointer-events-none" />
-                    <div className="absolute -right-12 -bottom-12 w-48 h-48 bg-cyan-500/10 rounded-full blur-2xl pointer-events-none" />
-                    <div className="absolute top-0 right-0 w-full h-full bg-[linear-gradient(135deg,rgba(255,255,255,0.05)_0%,rgba(255,255,255,0)_50%)] pointer-events-none" />
+                    {/* Metallic Gold Light Sheen Beam & Texture Overlay */}
+                    <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-white/30 via-transparent to-transparent pointer-events-none" />
+                    <div className="absolute -right-12 -bottom-12 w-48 h-48 bg-yellow-200/20 rounded-full blur-2xl pointer-events-none" />
+                    <div className="absolute top-0 right-0 w-full h-full bg-[linear-gradient(135deg,rgba(255,255,255,0.15)_0%,rgba(255,255,255,0)_60%)] pointer-events-none" />
 
                     {/* Card Header: SVB Branding & Card Type */}
                     <div className="flex items-start justify-between relative z-10">
                       <div>
                         <div className="flex items-center gap-1.5">
-                          <div className="w-6 h-6 rounded-md bg-gradient-to-br from-cyan-400 to-blue-600 flex items-center justify-center font-extrabold text-[10px] text-slate-950 shadow-sm">
+                          <div className="w-6 h-6 rounded-md bg-slate-950 text-amber-400 flex items-center justify-center font-extrabold text-[10px] shadow-sm">
                             SVB
                           </div>
-                          <span className="text-[11px] font-black uppercase tracking-widest text-white drop-shadow-sm">
+                          <span className={`text-[11px] font-black uppercase tracking-widest ${card.status === 'Frozen' ? 'text-white' : 'text-slate-950'} drop-shadow-sm`}>
                             Silicon Valley Bank
                           </span>
                         </div>
-                        <span className="text-[9px] font-semibold text-cyan-300/80 tracking-wider uppercase block mt-0.5">
-                          {card.cardType}
+                        <span className={`text-[9px] font-semibold tracking-wider uppercase block mt-0.5 ${card.status === 'Frozen' ? 'text-slate-400' : 'text-slate-800'}`}>
+                          {card.cardType} • Gold Tier
                         </span>
                       </div>
 
@@ -226,7 +249,7 @@ export const VirtualCardsPanel: React.FC<VirtualCardsPanelProps> = ({ user, onRe
                             <Lock className="w-3 h-3" /> Frozen
                           </span>
                         ) : (
-                          <Shield className="w-4 h-4 text-cyan-400 drop-shadow-md" />
+                          <Shield className="w-4 h-4 text-slate-900 drop-shadow-md" />
                         )}
                       </div>
                     </div>
@@ -234,15 +257,15 @@ export const VirtualCardsPanel: React.FC<VirtualCardsPanelProps> = ({ user, onRe
                     {/* Middle Section: Golden EMV Chip & Contactless Icon */}
                     <div className="flex items-center gap-3 relative z-10 my-1">
                       {/* 3D Golden EMV Chip */}
-                      <div className="w-10 h-7 rounded-md bg-gradient-to-tr from-amber-300 via-yellow-400 to-amber-500 border border-amber-200/80 shadow-md relative overflow-hidden flex items-center justify-center shrink-0">
+                      <div className="w-10 h-7 rounded-md bg-gradient-to-tr from-yellow-100 via-amber-300 to-yellow-500 border border-yellow-100 shadow-md relative overflow-hidden flex items-center justify-center shrink-0">
                         {/* Chip Circuit Lines */}
-                        <div className="absolute inset-0 border-t border-b border-amber-700/40 my-auto h-2.5" />
-                        <div className="absolute inset-0 border-l border-r border-amber-700/40 mx-auto w-4" />
-                        <div className="w-2.5 h-2 bg-amber-600/30 rounded-sm border border-amber-700/50" />
+                        <div className="absolute inset-0 border-t border-b border-amber-800/40 my-auto h-2.5" />
+                        <div className="absolute inset-0 border-l border-r border-amber-800/40 mx-auto w-4" />
+                        <div className="w-2.5 h-2 bg-amber-700/30 rounded-sm border border-amber-800/50" />
                       </div>
 
                       {/* Contactless Wave Icon */}
-                      <svg className="w-5 h-5 text-slate-300/80" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <svg className={`w-5 h-5 ${card.status === 'Frozen' ? 'text-slate-300' : 'text-slate-900'}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                         <path d="M8.5 14.5A4 4 0 0 1 8.5 9.5" strokeLinecap="round" />
                         <path d="M12 17a8 8 0 0 0 0-10" strokeLinecap="round" />
                         <path d="M15.5 19.5a12 12 0 0 0 0-15" strokeLinecap="round" />
@@ -252,16 +275,16 @@ export const VirtualCardsPanel: React.FC<VirtualCardsPanelProps> = ({ user, onRe
                     {/* Card Number Display */}
                     <div className="relative z-10">
                       <div className="flex items-center justify-between">
-                        <span className="font-mono font-bold text-white text-base sm:text-lg tracking-[0.18em] drop-shadow-md">
+                        <span className={`font-mono font-black text-base sm:text-lg tracking-[0.18em] ${card.status === 'Frozen' ? 'text-white' : 'text-slate-950'} drop-shadow-sm`}>
                           {maskedNumber}
                         </span>
                         {isRevealed && (
                           <button
                             onClick={() => handleCopy(card.cardNumber.replace(/\s+/g, ''), `num-${card.id}`)}
-                            className="text-slate-400 hover:text-cyan-400 p-1 transition-colors"
+                            className="text-slate-800 hover:text-slate-950 p-1 transition-colors"
                             title="Copy Card Number"
                           >
-                            {copiedField === `num-${card.id}` ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                            {copiedField === `num-${card.id}` ? <Check className="w-4 h-4 text-emerald-700" /> : <Copy className="w-4 h-4" />}
                           </button>
                         )}
                       </div>
@@ -270,19 +293,19 @@ export const VirtualCardsPanel: React.FC<VirtualCardsPanelProps> = ({ user, onRe
                     {/* Card Footer: Name, Expiry, CVV & Network Logo */}
                     <div className="flex items-end justify-between relative z-10 pt-1">
                       <div className="space-y-0.5">
-                        <div className="flex items-center gap-4 text-[9px] font-mono text-slate-300">
+                        <div className={`flex items-center gap-4 text-[9px] font-mono ${card.status === 'Frozen' ? 'text-slate-300' : 'text-slate-800'}`}>
                           <div>
-                            <span className="text-[8px] text-slate-400 block tracking-wider uppercase">Valid Thru</span>
-                            <span className="font-bold text-white">{card.expiryMonth}/{card.expiryYear}</span>
+                            <span className="text-[8px] opacity-75 block tracking-wider uppercase font-semibold">Valid Thru</span>
+                            <span className="font-bold">{card.expiryMonth}/{card.expiryYear}</span>
                           </div>
                           <div>
-                            <span className="text-[8px] text-slate-400 block tracking-wider uppercase">CVV</span>
-                            <span className="font-bold text-white">{isRevealed ? card.cvv : '•••'}</span>
+                            <span className="text-[8px] opacity-75 block tracking-wider uppercase font-semibold">CVV</span>
+                            <span className="font-bold">{isRevealed ? card.cvv : '•••'}</span>
                           </div>
                         </div>
                         <div>
-                          <span className="text-[8px] text-slate-400 block tracking-wider uppercase">Cardholder Name</span>
-                          <span className="font-mono font-bold text-slate-100 uppercase text-xs tracking-wider block truncate max-w-[180px]">
+                          <span className={`text-[8px] opacity-75 block tracking-wider uppercase font-semibold ${card.status === 'Frozen' ? 'text-slate-400' : 'text-slate-800'}`}>Cardholder Name</span>
+                          <span className={`font-mono font-extrabold uppercase text-xs tracking-wider block truncate max-w-[180px] ${card.status === 'Frozen' ? 'text-white' : 'text-slate-950'}`}>
                             {card.cardholderName}
                           </span>
                         </div>
@@ -291,17 +314,12 @@ export const VirtualCardsPanel: React.FC<VirtualCardsPanelProps> = ({ user, onRe
                       {/* Payment Network Brand Badge */}
                       {card.cardType.includes('Mastercard') ? (
                         <div className="flex items-center -space-x-2">
-                          <div className="w-6 h-6 rounded-full bg-rose-500/90 shadow-md" />
-                          <div className="w-6 h-6 rounded-full bg-amber-400/90 shadow-md" />
+                          <div className="w-6 h-6 rounded-full bg-rose-600 shadow-md" />
+                          <div className="w-6 h-6 rounded-full bg-amber-500 shadow-md" />
                         </div>
                       ) : (
-                        <div className="text-right">
-                          <span className="text-lg font-black italic tracking-tighter text-white drop-shadow-md">
-                            VISA
-                          </span>
-                          <span className="text-[8px] font-bold text-cyan-400 block tracking-widest uppercase -mt-1">
-                            CORPORATE
-                          </span>
+                        <div className="font-mono font-black italic text-slate-950 text-base sm:text-lg tracking-tighter">
+                          VISA
                         </div>
                       )}
                     </div>
@@ -379,7 +397,7 @@ export const VirtualCardsPanel: React.FC<VirtualCardsPanelProps> = ({ user, onRe
               </div>
             )}
 
-            <form onSubmit={handleIssueCard} className="space-y-4 text-xs">
+            <form onSubmit={handleStartCardIssuance} className="space-y-4 text-xs">
               <div>
                 <label className="block text-slate-300 font-semibold mb-1">Card Network / Type</label>
                 <select
@@ -387,9 +405,9 @@ export const VirtualCardsPanel: React.FC<VirtualCardsPanelProps> = ({ user, onRe
                   onChange={e => setCardType(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-medium focus:border-cyan-500 focus:outline-none"
                 >
-                  <option value="Visa Corporate">Visa Corporate Platinum</option>
-                  <option value="Mastercard Executive">Mastercard Business Executive</option>
-                  <option value="Visa Purchasing">Visa Purchasing & Procurement</option>
+                  <option value="Visa Corporate">Visa Corporate Platinum (Gold Metallic)</option>
+                  <option value="Mastercard Executive">Mastercard Business Executive (Gold Metallic)</option>
+                  <option value="Visa Purchasing">Visa Purchasing & Procurement (Gold Metallic)</option>
                 </select>
               </div>
 
@@ -434,12 +452,83 @@ export const VirtualCardsPanel: React.FC<VirtualCardsPanelProps> = ({ user, onRe
                 <button
                   type="submit"
                   disabled={issuing}
-                  className="px-6 py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-extrabold rounded-xl shadow-lg shadow-cyan-500/20 disabled:opacity-50"
+                  className="px-6 py-2 bg-yellow-500 hover:bg-yellow-400 text-slate-950 font-extrabold rounded-xl shadow-lg shadow-yellow-500/20 disabled:opacity-50"
                 >
-                  {issuing ? 'Issuing Card...' : 'Confirm & Issue Card'}
+                  Confirm & Issue Card
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* 30-Second Security Card Issuance Processing Screen */}
+      {show30sProcessingModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-yellow-500/30 rounded-3xl max-w-md w-full p-8 text-center space-y-6 shadow-2xl relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-48 h-48 bg-yellow-500/10 rounded-full blur-3xl pointer-events-none" />
+
+            {/* Top Bank Badge */}
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 text-xs font-bold uppercase tracking-wider">
+              <Shield className="w-3.5 h-3.5" />
+              <span>SVB Gold Metallic Card Protocol</span>
+            </div>
+
+            {/* Countdown Animated Ring */}
+            <div className="relative w-32 h-32 mx-auto flex items-center justify-center">
+              {/* Outer Pulsing Ring */}
+              <div className="absolute inset-0 rounded-full border-4 border-yellow-500/20 animate-ping" />
+              {/* Animated Spinner SVG */}
+              <svg className="w-full h-full transform -rotate-90">
+                <circle
+                  cx="64"
+                  cy="64"
+                  r="56"
+                  stroke="currentColor"
+                  strokeWidth="8"
+                  className="text-slate-800"
+                  fill="transparent"
+                />
+                <circle
+                  cx="64"
+                  cy="64"
+                  r="56"
+                  stroke="currentColor"
+                  strokeWidth="8"
+                  className="text-yellow-400 transition-all duration-1000 ease-linear"
+                  fill="transparent"
+                  strokeDasharray={351.85}
+                  strokeDashoffset={351.85 * (1 - countdownSeconds / 30)}
+                  strokeLinecap="round"
+                />
+              </svg>
+              <div className="absolute flex flex-col items-center">
+                <span className="text-3xl font-black font-mono text-white tracking-tight">
+                  {countdownSeconds}s
+                </span>
+                <span className="text-[10px] text-yellow-400 font-bold uppercase tracking-widest">
+                  Processing
+                </span>
+              </div>
+            </div>
+
+            {/* Dynamic Status Progress Message */}
+            <div className="space-y-2">
+              <h3 className="text-base font-bold text-white">Generating Gold Metallic Bank Card</h3>
+              <p className="text-xs text-slate-300 font-mono bg-slate-950 p-3 rounded-xl border border-slate-800 animate-pulse">
+                {countdownSeconds > 22
+                  ? "Step 1/4: Establishing 256-bit secure gateway with Silicon Valley Bank Card Vault..."
+                  : countdownSeconds > 14
+                  ? "Step 2/4: Allocating 16-Digit PAN & EMV Chip encryption keys with Visa/Mastercard network..."
+                  : countdownSeconds > 6
+                  ? "Step 3/4: Setting up $5,000 corporate credit limit & automated ledger verification..."
+                  : "Step 4/4: Finalizing gold metallic physical & virtual card issuance..."}
+              </p>
+            </div>
+
+            <p className="text-[11px] text-slate-400">
+              Please do not close this window while your card security credentials are being generated.
+            </p>
           </div>
         </div>
       )}
