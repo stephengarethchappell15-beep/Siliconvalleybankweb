@@ -73,6 +73,25 @@ const DEFAULT_USERS: User[] = [
     fourDigitCode: '1234',
     transferCodeApproved: true,
     createdAt: new Date('2024-03-01').toISOString()
+  },
+  {
+    id: 'usr-dominic-global',
+    fullName: 'Dominic Global',
+    email: 'dominicglobalenergysolution@gmail.com',
+    phone: '09064718123',
+    accountNumber: '102576690868',
+    role: 'user',
+    balance: 0.00,
+    ledgerBalance: 0.00,
+    currency: 'USD',
+    address: 'Global Energy Solution HQ',
+    country: 'United States',
+    verificationTier: 'Tier 1',
+    status: 'Active',
+    accountPin: '1234',
+    fourDigitCode: '8842',
+    transferCodeApproved: true,
+    createdAt: new Date('2024-03-01').toISOString()
   }
 ];
 

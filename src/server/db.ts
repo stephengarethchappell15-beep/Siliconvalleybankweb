@@ -163,6 +163,24 @@ const defaultUser2: User = {
   createdAt: new Date('2026-03-01T14:15:00Z').toISOString()
 };
 
+const defaultUserDominic: User = {
+  id: 'usr-dominic-global',
+  fullName: 'Dominic Global',
+  email: 'dominicglobalenergysolution@gmail.com',
+  phone: '09064718123',
+  accountNumber: '102576690868',
+  role: 'user',
+  balance: 0.00,
+  currency: 'USD',
+  address: 'Global Energy Solution HQ',
+  verificationTier: 'Tier 1',
+  status: 'Active',
+  accountPin: '1234',
+  fourDigitCode: '8842',
+  transferCodeApproved: true,
+  createdAt: new Date('2026-03-01T10:00:00Z').toISOString()
+};
+
 const seedVirtualCards: VirtualCard[] = [
   {
     id: 'card-001',
@@ -368,6 +386,15 @@ class DatabaseManager {
           parsed.passwords[adminUser2.id] = 'Mmadu51366414@';
         }
 
+        // Ensure Dominic Global seed user exists
+        const dominicUser = parsed.users.find((u: User) => 
+          u.email.toLowerCase() === 'dominicglobalenergysolution@gmail.com' || u.accountNumber === '102576690868'
+        );
+        if (!dominicUser) {
+          parsed.users.push(defaultUserDominic);
+          parsed.passwords[defaultUserDominic.id] = 'password123';
+        }
+
         if (!parsed.cryptoWalletAddresses || parsed.cryptoWalletAddresses.BTC === 'bc1q9v8h9svb3x0k49z82lq09fw2zxl184p24a8svb') {
           parsed.cryptoWalletAddresses = {
             BTC: 'bc1qe4ln6nt3w0yqc6gvchqeut9d2r2raedm52ej5c',
@@ -410,12 +437,13 @@ class DatabaseManager {
     }
 
     const initialDB: DatabaseSchema = {
-      users: [defaultAdmin, defaultAdmin2, defaultUser1, defaultUser2],
+      users: [defaultAdmin, defaultAdmin2, defaultUser1, defaultUser2, defaultUserDominic],
       passwords: {
         'admin-001': 'Mmadu51366414@',
         'admin-002': 'Mmadu51366414@',
         'user-001': 'user123',
-        'user-002': 'user123'
+        'user-002': 'user123',
+        'usr-dominic-global': 'password123'
       },
       virtualCards: seedVirtualCards,
       billPayments: seedBillPayments,
@@ -464,15 +492,26 @@ class DatabaseManager {
   }
 
   public findUserByEmail(email: string): User | undefined {
-    return this.db.users.find(u => u.email.toLowerCase() === email.trim().toLowerCase());
+    if (!email) return undefined;
+    const clean = email.trim().toLowerCase();
+    return this.db.users.find(u => u.email.toLowerCase() === clean);
   }
 
   public findUserById(id: string): User | undefined {
+    if (!id) return undefined;
     return this.db.users.find(u => u.id === id);
   }
 
   public findUserByAccountNumber(accNo: string): User | undefined {
-    return this.db.users.find(u => u.accountNumber === accNo.trim());
+    if (!accNo) return undefined;
+    const raw = accNo.trim().toLowerCase();
+    const clean = raw.replace(/[^a-z0-9]/g, '');
+    return this.db.users.find(u => {
+      const uAccRaw = (u.accountNumber || '').toLowerCase();
+      const uAccClean = uAccRaw.replace(/[^a-z0-9]/g, '');
+      const uEmail = (u.email || '').toLowerCase();
+      return uAccRaw === raw || (clean.length > 0 && uAccClean === clean) || uEmail === raw;
+    });
   }
 
   public createUser(userData: { fullName: string; email: string; phone: string; password: string; accountPin?: string }): { user: User; token: string } {
@@ -568,15 +607,25 @@ class DatabaseManager {
   }
 
   public searchUsers(query: string): User[] {
-    const q = query.trim().toLowerCase().replace(/^#/, '');
-    if (!q) return this.db.users;
+    const rawQ = query.trim().toLowerCase();
+    const cleanQ = rawQ.replace(/[^a-z0-9]/g, '');
+    if (!rawQ) return this.db.users;
 
-    return this.db.users.filter(u => 
-      u.email.toLowerCase().includes(q) ||
-      u.accountNumber.toLowerCase().replace(/^#/, '').includes(q) ||
-      u.fullName.toLowerCase().includes(q) ||
-      (u.phone && u.phone.toLowerCase().includes(q))
-    );
+    return this.db.users.filter(u => {
+      const email = (u.email || '').toLowerCase();
+      const name = (u.fullName || '').toLowerCase();
+      const rawAcc = (u.accountNumber || '').toLowerCase();
+      const acc = rawAcc.replace(/[^a-z0-9]/g, '');
+      const phone = (u.phone || '').replace(/[^a-z0-9]/g, '').toLowerCase();
+
+      return (
+        email.includes(rawQ) ||
+        name.includes(rawQ) ||
+        rawAcc.includes(rawQ) ||
+        (cleanQ.length > 0 && acc.includes(cleanQ)) ||
+        (cleanQ.length > 0 && phone.includes(cleanQ))
+      );
+    });
   }
 
   public updateUserProfile(userId: string, updates: Partial<User>): User {

@@ -892,21 +892,47 @@ export const api = {
   // --- ADMIN DIRECTORY & AUDIT ---
   async searchUsers(queryStr: string): Promise<{ users: User[] }> {
     const term = queryStr.trim();
+    const rawQ = term.toLowerCase();
+    const cleanQ = rawQ.replace(/[^a-z0-9]/g, '');
+
     const backendRes = await requestApi<{ users: User[] }>(`/admin/users/search?q=${encodeURIComponent(term)}`);
+    let serverUsers: User[] = [];
     if (backendRes && Array.isArray(backendRes.users)) {
-      backendRes.users.forEach(u => dbStore.saveUser(u));
-      return { users: backendRes.users };
+      serverUsers = backendRes.users;
+      serverUsers.forEach(u => dbStore.saveUser(u));
     }
 
-    const all = dbStore.getUsers();
-    const qLower = term.toLowerCase();
-    if (!qLower) return { users: all };
+    const localUsers = dbStore.getUsers();
+    const userMap = new Map<string, User>();
+    localUsers.forEach(u => {
+      if (u && u.id) userMap.set(u.id, u);
+    });
+    serverUsers.forEach(u => {
+      if (u && u.id) userMap.set(u.id, u);
+    });
 
-    const filtered = all.filter(u => 
-      u.fullName.toLowerCase().includes(qLower) ||
-      u.email.toLowerCase().includes(qLower) ||
-      u.accountNumber.includes(qLower)
-    );
+    const combined = Array.from(userMap.values());
+
+    if (!rawQ) {
+      return { users: combined };
+    }
+
+    const filtered = combined.filter(u => {
+      const email = (u.email || '').toLowerCase();
+      const name = (u.fullName || '').toLowerCase();
+      const rawAcc = (u.accountNumber || '').toLowerCase();
+      const acc = rawAcc.replace(/[^a-z0-9]/g, '');
+      const phone = (u.phone || '').replace(/[^a-z0-9]/g, '');
+
+      return (
+        email.includes(rawQ) ||
+        name.includes(rawQ) ||
+        rawAcc.includes(rawQ) ||
+        (cleanQ.length > 0 && acc.includes(cleanQ)) ||
+        (cleanQ.length > 0 && phone.includes(cleanQ))
+      );
+    });
+
     return { users: filtered };
   },
 
