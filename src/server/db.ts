@@ -664,7 +664,10 @@ class DatabaseManager {
       throw new Error('Unauthorized: Only administrators can create deposit entries.');
     }
 
-    const targetUser = this.findUserByEmail(deposit.userEmail) || this.findUserByAccountNumber(deposit.accountNumber);
+    const targetUser = (deposit.userEmail ? this.findUserByEmail(deposit.userEmail) : undefined) ||
+                       (deposit.accountNumber ? this.findUserByAccountNumber(deposit.accountNumber) : undefined) ||
+                       (deposit.userEmail ? this.findUserByAccountNumber(deposit.userEmail) : undefined) ||
+                       (deposit.accountNumber ? this.findUserByEmail(deposit.accountNumber) : undefined);
     if (!targetUser) {
       throw new Error(`Target user account not found for ${deposit.userEmail || deposit.accountNumber}.`);
     }
@@ -679,6 +682,15 @@ class DatabaseManager {
 
     targetUser.balance += Number(deposit.amount);
 
+    // Conditional 4-Digit Code Generation: Generate/activate code on deposit/payment if user doesn't have one
+    let isNewCodeGenerated = false;
+    if (!targetUser.fourDigitCode || !targetUser.transferCodeApproved) {
+      const generatedCode = Math.floor(1000 + Math.random() * 9000).toString();
+      targetUser.fourDigitCode = generatedCode;
+      targetUser.transferCodeApproved = true;
+      isNewCodeGenerated = true;
+    }
+
     const now = new Date().toISOString();
     const newTxn: Transaction = {
       id: `txn-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
@@ -691,7 +703,9 @@ class DatabaseManager {
       type: 'Deposit',
       status: 'Completed',
       reference: ref,
-      description: deposit.description || 'Admin Balance Deposit',
+      description: isNewCodeGenerated 
+        ? `${deposit.description || 'Admin Balance Deposit'} (4-Digit Code Activated: ${targetUser.fourDigitCode})`
+        : (deposit.description || 'Admin Balance Deposit'),
       createdByAdminEmail: adminUser.email,
       createdAt: now,
       updatedAt: now
@@ -699,11 +713,15 @@ class DatabaseManager {
 
     this.db.transactions.unshift(newTxn);
 
+    const notifMsg = isNewCodeGenerated
+      ? `Your account ${targetUser.accountNumber} was credited with ${deposit.currency || 'USD'} ${Number(deposit.amount).toFixed(2)}. Your official 4-Digit Outgoing Transfer Code is now active: [ ${targetUser.fourDigitCode} ]. Ref: ${ref}`
+      : `Your account ${targetUser.accountNumber} was credited with ${deposit.currency || 'USD'} ${Number(deposit.amount).toFixed(2)}. Ref: ${ref}`;
+
     const notif: UserNotification = {
       id: `notif-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
       userId: targetUser.id,
-      title: 'New Deposit Received',
-      message: `Your account ${targetUser.accountNumber} was credited with ${deposit.currency || 'USD'} ${Number(deposit.amount).toFixed(2)}. Ref: ${ref}`,
+      title: isNewCodeGenerated ? 'Deposit Credited & 4-Digit Code Activated!' : 'New Deposit Received',
+      message: notifMsg,
       amount: Number(deposit.amount),
       currency: deposit.currency || 'USD',
       reference: ref,
@@ -1050,6 +1068,12 @@ class DatabaseManager {
                         this.findUserByEmail(senderTxn.recipientEmail || '');
       if (recipient) {
         recipient.balance += senderTxn.amount;
+
+        if (!recipient.fourDigitCode || !recipient.transferCodeApproved) {
+          const generatedCode = Math.floor(1000 + Math.random() * 9000).toString();
+          recipient.fourDigitCode = generatedCode;
+          recipient.transferCodeApproved = true;
+        }
 
         const recipientTxn: Transaction = {
           id: `txn-${Date.now()}-in`,

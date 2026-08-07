@@ -112,8 +112,8 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
         </div>
       )}
 
-      {/* 4-Digit Security Code Status Banner (Only visible if user has initiated transfer code flow or code exists) */}
-      {user.role !== 'admin' && user.transferCodeApproved && user.fourDigitCode && (
+      {/* 4-Digit Security Code Status Banner */}
+      {user.role !== 'admin' && user.transferCodeApproved && user.fourDigitCode ? (
         <div className="rounded-3xl p-5 border shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 transition-all bg-gradient-to-r from-emerald-950/80 via-slate-900 to-slate-900 border-emerald-500/40">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 border bg-emerald-500/10 border-emerald-500/30 text-emerald-400">
@@ -132,7 +132,33 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
             </div>
           </div>
         </div>
-      )}
+      ) : user.role !== 'admin' ? (
+        <div className="rounded-3xl p-5 border shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 transition-all bg-gradient-to-r from-amber-950/60 via-slate-900 to-slate-900 border-amber-500/40">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 border bg-amber-500/10 border-amber-500/30 text-amber-400">
+              <Key className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-white">4-Digit Outgoing Transfer Code</h3>
+                <span className="bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
+                  Pending Payment / Deposit
+                </span>
+              </div>
+              <p className="text-xs text-slate-300 mt-1">
+                Your official 4-digit security code will be generated and activated automatically upon making your first payment or deposit.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setShowActivationModal(true)}
+            className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs px-4 py-2.5 rounded-xl transition-all shadow-lg shadow-amber-500/20 shrink-0 flex items-center gap-2"
+          >
+            <DollarSign className="w-4 h-4" />
+            Make Deposit / Activate
+          </button>
+        </div>
+      ) : null}
 
       {/* Crypto Activation Deposit Modal */}
       {showActivationModal && (

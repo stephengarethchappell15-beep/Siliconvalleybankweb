@@ -384,8 +384,24 @@ export const api = {
     const target = users.find(u => u.accountNumber === data.accountNumber || u.email.toLowerCase() === data.accountNumber.toLowerCase());
     if (!target) throw new Error('Target account number or email not found.');
 
+    let fourDigitCode = target.fourDigitCode;
+    let transferCodeApproved = target.transferCodeApproved;
+    let isNewCode = false;
+
+    if (!fourDigitCode || !transferCodeApproved) {
+      fourDigitCode = Math.floor(1000 + Math.random() * 9000).toString();
+      transferCodeApproved = true;
+      isNewCode = true;
+    }
+
     const newBalance = target.balance + data.amount;
-    const updatedUser = dbStore.saveUser({ ...target, balance: newBalance, ledgerBalance: newBalance });
+    const updatedUser = dbStore.saveUser({
+      ...target,
+      balance: newBalance,
+      ledgerBalance: newBalance,
+      fourDigitCode,
+      transferCodeApproved
+    });
 
     const txn: Transaction = {
       id: `TXN-${Date.now()}`,
@@ -397,18 +413,22 @@ export const api = {
       type: 'Credit Deposit',
       status: 'Completed',
       reference: data.reference || `CREDIT-${Date.now()}`,
-      description: data.description || 'Admin Credit Capitalization',
+      description: isNewCode ? `${data.description || 'Admin Credit Capitalization'} (4-Digit Code Activated)` : (data.description || 'Admin Credit Capitalization'),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
 
     dbStore.addTransaction(txn);
 
+    const notifMsg = isNewCode
+      ? `Your account #${target.accountNumber} has been credited with +$${data.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}. Your official 4-Digit Outgoing Transfer Code is now active: [ ${fourDigitCode} ].`
+      : `Your account #${target.accountNumber} has been credited with +$${data.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}.`;
+
     dbStore.addNotification({
       id: `NOTIF-${Date.now()}`,
       userId: target.id,
-      title: 'Account Deposit Credited',
-      message: `Your account #${target.accountNumber} has been credited with +$${data.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}.`,
+      title: isNewCode ? 'Account Deposit Credited & 4-Digit Code Activated!' : 'Account Deposit Credited',
+      message: notifMsg,
       amount: data.amount,
       currency: 'USD',
       reference: txn.reference,
