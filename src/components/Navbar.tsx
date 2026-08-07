@@ -55,21 +55,14 @@ export const Navbar: React.FC<NavbarProps> = ({
         {/* Silicon Valley Bank Brand Logo */}
         <button 
           onClick={() => setActiveTab(user ? 'dashboard' : 'home')}
-          className="flex items-center gap-3 group text-left"
+          className="flex items-center gap-3 group text-left transition-transform hover:opacity-95"
         >
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 via-blue-600 to-indigo-600 p-0.5 flex items-center justify-center shadow-lg shadow-cyan-500/20 group-hover:scale-105 transition-transform">
-            <div className="w-full h-full bg-slate-950 rounded-[10px] flex items-center justify-center">
-              <Building2 className="w-5 h-5 text-cyan-400" />
-            </div>
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-extrabold tracking-tight text-white text-lg">Silicon Valley Bank</span>
-              <span className="text-[10px] font-bold uppercase tracking-widest bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 px-2 py-0.5 rounded-full">
-                SVB Core
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-400 hidden sm:block font-medium">Commercial & Private Banking Platform</p>
+          <div className="bg-white p-1.5 sm:p-2 rounded-xl shadow-md border border-slate-200/20 group-hover:scale-[1.02] transition-transform">
+            <img 
+              src="/svb-logo.svg" 
+              alt="Silicon Valley Bank Logo" 
+              className="h-7 sm:h-8 w-auto object-contain"
+            />
           </div>
         </button>
 

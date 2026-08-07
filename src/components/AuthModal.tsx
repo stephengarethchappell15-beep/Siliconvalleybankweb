@@ -146,10 +146,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
             />
             <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/80 to-slate-950/30" />
             <div className="relative z-10 flex flex-col items-center">
-              <div className="inline-flex items-center justify-center w-10 h-10 rounded-2xl bg-cyan-500/20 border border-cyan-500/40 text-cyan-400 mb-1 shadow-lg backdrop-blur-md">
-                <Building2 className="w-5 h-5" />
+              <div className="bg-white p-1.5 rounded-xl shadow-md border border-slate-200/20 mb-1">
+                <img src="/svb-logo.svg" alt="Silicon Valley Bank Logo" className="h-7 w-auto object-contain" />
               </div>
-              <h2 className="text-lg font-extrabold text-white tracking-tight">Silicon Valley Bank</h2>
               <p className="text-[11px] text-slate-300 font-semibold">Official Online Banking Portal</p>
             </div>
           </div>
@@ -157,12 +156,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
           {/* Desktop Top Header Bar */}
           <div className="hidden lg:flex items-center justify-between px-6 pt-6 pb-2 border-b border-slate-800/80">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-xl bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-cyan-400">
-                <Building2 className="w-4.5 h-4.5" />
-              </div>
-              <div>
-                <h2 className="text-sm font-extrabold text-white">Silicon Valley Bank</h2>
-                <p className="text-[10px] text-slate-400">Official Secure Digital Client Portal</p>
+              <div className="bg-white p-1.5 rounded-xl shadow-md border border-slate-200/20">
+                <img src="/svb-logo.svg" alt="Silicon Valley Bank Logo" className="h-6 w-auto object-contain" />
               </div>
             </div>
             <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[10px] font-bold text-emerald-400">
