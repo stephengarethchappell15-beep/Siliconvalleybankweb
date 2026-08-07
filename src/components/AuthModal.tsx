@@ -146,9 +146,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
             />
             <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/80 to-slate-950/30" />
             <div className="relative z-10 flex flex-col items-center">
-              <div className="bg-white p-1.5 rounded-xl shadow-md border border-slate-200/20 mb-1">
-                <img src="/svb-logo.svg" alt="Silicon Valley Bank Logo" className="h-7 w-auto object-contain" />
-              </div>
+              <img src="/svb-logo.svg" alt="Silicon Valley Bank Logo" className="h-8 w-auto object-contain mb-1" />
               <p className="text-[11px] text-slate-300 font-semibold">Official Online Banking Portal</p>
             </div>
           </div>
@@ -156,9 +154,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
           {/* Desktop Top Header Bar */}
           <div className="hidden lg:flex items-center justify-between px-6 pt-6 pb-2 border-b border-slate-800/80">
             <div className="flex items-center gap-2">
-              <div className="bg-white p-1.5 rounded-xl shadow-md border border-slate-200/20">
-                <img src="/svb-logo.svg" alt="Silicon Valley Bank Logo" className="h-6 w-auto object-contain" />
-              </div>
+              <img src="/svb-logo.svg" alt="Silicon Valley Bank Logo" className="h-8 w-auto object-contain" />
             </div>
             <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[10px] font-bold text-emerald-400">
               <ShieldCheck className="w-3 h-3" /> 256-Bit SSL Encrypted
