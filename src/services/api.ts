@@ -130,13 +130,7 @@ export const api = {
     let user = dbStore.getUserByEmail(emailClean);
 
     if (!user) {
-      return await this.register({
-        fullName: emailClean === 'admin@svb.com' || emailClean === 'siliconvalleybank51@gmail.com' ? 'Silicon Valley Bank Admin' : (emailClean === 'alex.wright@svb.com' ? 'Alex Wright' : 'SVB Client User'),
-        email: emailClean,
-        phone: '+1 (555) 019-2834',
-        password: data.password || 'password123',
-        accountPin: '1234'
-      });
+      throw new Error('Invalid email or password.');
     }
 
     dbStore.setStoredToken(user.id);
@@ -415,6 +409,17 @@ export const api = {
   },
 
   async createDeposit(payload: DepositPayload): Promise<{ updatedUser: User; transaction: Transaction }> {
+    const backendRes = await requestApi<{ message: string; updatedUser: User; transaction: Transaction }>('/admin/deposit', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+
+    if (backendRes && backendRes.updatedUser && backendRes.transaction) {
+      dbStore.saveUser(backendRes.updatedUser);
+      dbStore.addTransaction(backendRes.transaction);
+      return { updatedUser: backendRes.updatedUser, transaction: backendRes.transaction };
+    }
+
     const res = await this.creditUserAccount({
       accountNumber: payload.accountNumber || payload.userEmail,
       amount: payload.amount,
@@ -453,6 +458,21 @@ export const api = {
   },
 
   async adminWithdraw(payload: { accountNumber: string; amount: number; description?: string; bankName?: string; routingNumber?: string; accountHolderName?: string; note?: string }): Promise<{ updatedUser: User; transaction: Transaction }> {
+    const backendRes = await requestApi<{ message: string; updatedUser: User; transaction: Transaction }>('/admin/withdraw', {
+      method: 'POST',
+      body: JSON.stringify({
+        accountNumber: payload.accountNumber,
+        amount: payload.amount,
+        note: payload.note || payload.description
+      }),
+    });
+
+    if (backendRes && backendRes.updatedUser && backendRes.transaction) {
+      dbStore.saveUser(backendRes.updatedUser);
+      dbStore.addTransaction(backendRes.transaction);
+      return { updatedUser: backendRes.updatedUser, transaction: backendRes.transaction };
+    }
+
     const res = await this.debitUserAccount({
       accountNumber: payload.accountNumber,
       amount: payload.amount,
@@ -462,8 +482,15 @@ export const api = {
   },
 
   async lookupAccount(accountNumber: string): Promise<{ found: { fullName: string; accountNumber: string; email: string }; user: { fullName: string; accountNumber: string; email: string } }> {
+    const clean = accountNumber.trim().replace(/^#/, '');
+    const backendRes = await requestApi<{ found: boolean; fullName?: string; accountNumber?: string; email?: string }>(`/user/account-lookup/${encodeURIComponent(clean)}`);
+    if (backendRes && backendRes.found && backendRes.fullName && backendRes.accountNumber) {
+      const info = { fullName: backendRes.fullName, accountNumber: backendRes.accountNumber, email: backendRes.email || clean };
+      return { found: info, user: info };
+    }
+
     const users = dbStore.getUsers();
-    const target = users.find(u => u.accountNumber === accountNumber || u.email.toLowerCase() === accountNumber.toLowerCase());
+    const target = users.find(u => u.accountNumber.toLowerCase().replace(/^#/, '') === clean.toLowerCase() || u.email.toLowerCase() === clean.toLowerCase());
     if (!target) throw new Error('Recipient account number or email not found in SVB directory.');
     const info = { fullName: target.fullName, accountNumber: target.accountNumber, email: target.email };
     return { found: info, user: info };
@@ -472,6 +499,17 @@ export const api = {
   async sendTransfer(payload: TransferPayload): Promise<{ user: User; updatedUser: User; transaction: Transaction }> {
     const current = dbStore.getCurrentUser();
     if (!current) throw new Error('Not authenticated');
+
+    const backendRes = await requestApi<{ message: string; updatedUser: User; transaction: Transaction }>('/user/transfer', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+
+    if (backendRes && backendRes.updatedUser && backendRes.transaction) {
+      dbStore.saveUser(backendRes.updatedUser);
+      dbStore.addTransaction(backendRes.transaction);
+      return { user: backendRes.updatedUser, updatedUser: backendRes.updatedUser, transaction: backendRes.transaction };
+    }
 
     if (current.fourDigitCode && payload.fourDigitCode !== current.fourDigitCode) {
       throw new Error('Invalid 4-Digit Security Code. Please verify your security authorization code.');
@@ -483,6 +521,8 @@ export const api = {
 
     const newSenderBalance = current.balance - payload.amount;
     const updatedSender = dbStore.saveUser({ ...current, balance: newSenderBalance, ledgerBalance: newSenderBalance });
+
+    const isPending = current.role !== 'admin';
 
     const txn: Transaction = {
       id: `TXN-${Date.now()}`,
@@ -496,7 +536,7 @@ export const api = {
       amount: payload.amount,
       currency: 'USD',
       type: 'Wire Transfer',
-      status: 'Completed',
+      status: isPending ? 'Pending' : 'Completed',
       reference: `WIRE-${Date.now()}`,
       description: payload.note || `Outgoing Transfer to Acc #${payload.recipientInput}`,
       createdAt: new Date().toISOString(),
@@ -505,25 +545,27 @@ export const api = {
 
     dbStore.addTransaction(txn);
 
-    const recipient = dbStore.getUsers().find(u => u.accountNumber === payload.recipientInput);
-    if (recipient) {
-      dbStore.saveUser({ ...recipient, balance: recipient.balance + payload.amount });
-      dbStore.addTransaction({
-        id: `TXN-${Date.now() + 1}`,
-        userId: recipient.id,
-        userEmail: recipient.email,
-        accountNumber: recipient.accountNumber,
-        senderName: current.fullName,
-        senderAccountNumber: current.accountNumber,
-        amount: payload.amount,
-        currency: 'USD',
-        type: 'Credit Deposit',
-        status: 'Completed',
-        reference: `INWIRE-${Date.now()}`,
-        description: `Incoming Transfer from ${current.fullName}`,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      });
+    if (!isPending) {
+      const recipient = dbStore.getUsers().find(u => u.accountNumber === payload.recipientInput || u.email.toLowerCase() === payload.recipientInput.toLowerCase());
+      if (recipient) {
+        dbStore.saveUser({ ...recipient, balance: recipient.balance + payload.amount });
+        dbStore.addTransaction({
+          id: `TXN-${Date.now() + 1}`,
+          userId: recipient.id,
+          userEmail: recipient.email,
+          accountNumber: recipient.accountNumber,
+          senderName: current.fullName,
+          senderAccountNumber: current.accountNumber,
+          amount: payload.amount,
+          currency: 'USD',
+          type: 'Credit Deposit',
+          status: 'Completed',
+          reference: `INWIRE-${Date.now()}`,
+          description: `Incoming Transfer from ${current.fullName}`,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        });
+      }
     }
 
     return { user: updatedSender, updatedUser: updatedSender, transaction: txn };
@@ -532,6 +574,17 @@ export const api = {
   async withdrawFunds(payload: WithdrawPayload): Promise<{ user: User; updatedUser: User; transaction: Transaction }> {
     const current = dbStore.getCurrentUser();
     if (!current) throw new Error('Not authenticated');
+
+    const backendRes = await requestApi<{ message: string; updatedUser: User; transaction: Transaction }>('/user/withdraw', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+
+    if (backendRes && backendRes.updatedUser && backendRes.transaction) {
+      dbStore.saveUser(backendRes.updatedUser);
+      dbStore.addTransaction(backendRes.transaction);
+      return { user: backendRes.updatedUser, updatedUser: backendRes.updatedUser, transaction: backendRes.transaction };
+    }
 
     if (current.fourDigitCode && payload.fourDigitCode !== current.fourDigitCode) {
       throw new Error('Invalid 4-Digit Security Code. Please enter your authorized 4-digit code.');
@@ -552,7 +605,7 @@ export const api = {
       amount: payload.amount,
       currency: 'USD',
       type: 'Wire Withdrawal',
-      status: 'Pending',
+      status: current.role === 'admin' ? 'Completed' : 'Pending',
       reference: `WITHDRAW-${Date.now()}`,
       description: `External ACH/Wire to ${payload.bankName} (${payload.accountHolderName})`,
       createdAt: new Date().toISOString(),
@@ -564,6 +617,12 @@ export const api = {
   },
 
   async getTransactions(): Promise<{ transactions: Transaction[] }> {
+    const backendRes = await requestApi<{ transactions: Transaction[] }>('/user/transactions');
+    if (backendRes && Array.isArray(backendRes.transactions)) {
+      backendRes.transactions.forEach(t => dbStore.addTransaction(t));
+      return { transactions: backendRes.transactions };
+    }
+
     const current = dbStore.getCurrentUser();
     if (!current) return { transactions: [] };
     const txns = dbStore.getTransactions(current.id);
@@ -571,10 +630,21 @@ export const api = {
   },
 
   async getAllTransactions(): Promise<{ transactions: Transaction[] }> {
+    const backendRes = await requestApi<{ transactions: Transaction[] }>('/admin/transactions');
+    if (backendRes && Array.isArray(backendRes.transactions)) {
+      backendRes.transactions.forEach(t => dbStore.addTransaction(t));
+      return { transactions: backendRes.transactions };
+    }
+
     return { transactions: dbStore.getTransactions() };
   },
 
   async approveTransaction(txnId: string, senderName?: string): Promise<void> {
+    await requestApi<{ message: string; transaction?: Transaction }>('/admin/approve-transaction', {
+      method: 'POST',
+      body: JSON.stringify({ transactionId: txnId, senderName }),
+    });
+
     dbStore.updateTransaction(txnId, { 
       status: 'Completed',
       ...(senderName ? { senderName } : {})
@@ -582,6 +652,11 @@ export const api = {
   },
 
   async cancelTransaction(txnId: string): Promise<void> {
+    await requestApi<{ message: string; transaction?: Transaction }>('/admin/cancel-transaction', {
+      method: 'POST',
+      body: JSON.stringify({ transactionId: txnId }),
+    });
+
     dbStore.updateTransaction(txnId, { status: 'Cancelled' });
   },
 
@@ -590,6 +665,18 @@ export const api = {
   },
 
   async rejectTransaction(txnId: string, notes?: string): Promise<void> {
+    await requestApi<{ message: string; transaction?: Transaction }>('/admin/reject-transaction', {
+      method: 'POST',
+      body: JSON.stringify({ transactionId: txnId, reason: notes }),
+    });
+
+    const txn = dbStore.getTransactions().find(t => t.id === txnId);
+    if (txn) {
+      const user = dbStore.getUserById(txn.userId);
+      if (user && (txn.type === 'Wire Withdrawal' || txn.type === 'Wire Transfer' || txn.type === 'Transfer' || txn.type === 'Withdrawal')) {
+        dbStore.saveUser({ ...user, balance: user.balance + txn.amount, ledgerBalance: user.balance + txn.amount });
+      }
+    }
     dbStore.updateTransaction(txnId, { status: 'Rejected' });
   },
 

@@ -568,14 +568,14 @@ class DatabaseManager {
   }
 
   public searchUsers(query: string): User[] {
-    const q = query.trim().toLowerCase();
+    const q = query.trim().toLowerCase().replace(/^#/, '');
     if (!q) return this.db.users;
 
     return this.db.users.filter(u => 
       u.email.toLowerCase().includes(q) ||
-      u.accountNumber.toLowerCase().includes(q) ||
+      u.accountNumber.toLowerCase().replace(/^#/, '').includes(q) ||
       u.fullName.toLowerCase().includes(q) ||
-      u.phone.includes(q)
+      (u.phone && u.phone.toLowerCase().includes(q))
     );
   }
 

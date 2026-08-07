@@ -574,7 +574,7 @@ export const SendPanel: React.FC<SendPanelProps> = ({ user, onSuccess }) => {
 
             <div className="text-center space-y-2">
               <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-full">
-                Security Verification Feature (Demo Environment)
+                Security Verification Protocol
               </span>
               <h3 className="text-xl font-bold text-white pt-1">Authorize Wire Transfer</h3>
               <p className="text-xs text-slate-300 leading-relaxed">
