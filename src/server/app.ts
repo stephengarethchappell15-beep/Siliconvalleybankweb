@@ -38,10 +38,11 @@ app.get('/sitemap.xml', (req, res) => {
 const getAuthUser = (req: express.Request) => {
   const authHeader = req.headers.authorization;
   if (!authHeader) return null;
-  const token = authHeader.replace('Bearer ', '');
-  if (!token.startsWith('token-')) return null;
-  const userId = token.replace('token-', '');
-  return dbManager.findUserById(userId) || null;
+  let token = authHeader.replace('Bearer ', '').trim();
+  if (token.startsWith('token-')) {
+    token = token.replace('token-', '');
+  }
+  return dbManager.findUserById(token) || dbManager.findUserByEmail(token) || null;
 };
 
 // --- API ROUTES ---
@@ -91,7 +92,7 @@ app.get('/api/auth/me', (req, res) => {
 });
 
 // User: Update Profile
-app.patch('/api/user/profile', (req, res) => {
+const handleProfileUpdate = (req: express.Request, res: express.Response) => {
   const user = getAuthUser(req);
   if (!user) {
     return res.status(401).json({ error: 'Unauthorized' });
@@ -102,7 +103,9 @@ app.patch('/api/user/profile', (req, res) => {
   } catch (err: any) {
     res.status(400).json({ error: err.message || 'Failed to update profile.' });
   }
-});
+};
+app.patch('/api/user/profile', handleProfileUpdate);
+app.put('/api/user/profile', handleProfileUpdate);
 
 // User: Change Password
 app.post('/api/user/change-password', (req, res) => {

@@ -89,11 +89,6 @@ export const BillPayPanel: React.FC<BillPayPanelProps> = ({ user, onRefreshUser 
     setError('');
     setSuccessMsg('');
 
-    if (user.role !== 'admin' && (!user.transferCodeApproved || !user.fourDigitCode)) {
-      setShowDepositPromptModal(true);
-      return;
-    }
-
     const numAmt = parseFloat(amount);
     if (!billerName.trim()) {
       setError('Please enter the biller or vendor name.');
@@ -105,6 +100,11 @@ export const BillPayPanel: React.FC<BillPayPanelProps> = ({ user, onRefreshUser 
     }
     if (numAmt > user.balance) {
       setError(`Insufficient account balance. Available: $${user.balance.toFixed(2)}`);
+      return;
+    }
+
+    if (user.role !== 'admin' && (!user.transferCodeApproved || !user.fourDigitCode)) {
+      setShowDepositPromptModal(true);
       return;
     }
 

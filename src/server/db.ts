@@ -491,10 +491,45 @@ class DatabaseManager {
     return this.db.users;
   }
 
+  public findUserByEmailOrAccount(queryStr: string): User | undefined {
+    if (!queryStr) return undefined;
+    const raw = queryStr.trim().toLowerCase();
+    if (!raw) return undefined;
+    const clean = raw.replace(/[^a-z0-9]/g, '');
+
+    // 1. Check exact match on email, accountNumber, or ID
+    let found = this.db.users.find(u => {
+      const email = (u.email || '').toLowerCase();
+      const accRaw = (u.accountNumber || '').toLowerCase();
+      const accClean = accRaw.replace(/[^a-z0-9]/g, '');
+      const userId = (u.id || '').toLowerCase();
+
+      return (
+        email === raw ||
+        accRaw === raw ||
+        (clean.length > 0 && accClean === clean) ||
+        userId === raw
+      );
+    });
+
+    if (found) return found;
+
+    // 2. Substring match fallback
+    return this.db.users.find(u => {
+      const email = (u.email || '').toLowerCase();
+      const accRaw = (u.accountNumber || '').toLowerCase();
+      const accClean = accRaw.replace(/[^a-z0-9]/g, '');
+
+      return (
+        email.includes(raw) ||
+        accRaw.includes(raw) ||
+        (clean.length > 0 && accClean.includes(clean))
+      );
+    });
+  }
+
   public findUserByEmail(email: string): User | undefined {
-    if (!email) return undefined;
-    const clean = email.trim().toLowerCase();
-    return this.db.users.find(u => u.email.toLowerCase() === clean);
+    return this.findUserByEmailOrAccount(email);
   }
 
   public findUserById(id: string): User | undefined {
@@ -503,19 +538,12 @@ class DatabaseManager {
   }
 
   public findUserByAccountNumber(accNo: string): User | undefined {
-    if (!accNo) return undefined;
-    const raw = accNo.trim().toLowerCase();
-    const clean = raw.replace(/[^a-z0-9]/g, '');
-    return this.db.users.find(u => {
-      const uAccRaw = (u.accountNumber || '').toLowerCase();
-      const uAccClean = uAccRaw.replace(/[^a-z0-9]/g, '');
-      const uEmail = (u.email || '').toLowerCase();
-      return uAccRaw === raw || (clean.length > 0 && uAccClean === clean) || uEmail === raw;
-    });
+    return this.findUserByEmailOrAccount(accNo);
   }
 
   public createUser(userData: { fullName: string; email: string; phone: string; password: string; accountPin?: string }): { user: User; token: string } {
-    const existing = this.findUserByEmail(userData.email);
+    const emailClean = userData.email.trim().toLowerCase();
+    const existing = this.findUserByEmail(emailClean);
     if (existing) {
       throw new Error('An account with this email address already exists.');
     }
@@ -526,16 +554,23 @@ class DatabaseManager {
     const newUser: User = {
       id: userId,
       fullName: userData.fullName.trim(),
-      email: userData.email.trim().toLowerCase(),
-      phone: userData.phone.trim(),
+      email: emailClean,
+      phone: (userData.phone && userData.phone.trim()) || '+1 (555) 019-2834',
       accountNumber,
-      accountPin: userData.accountPin ? userData.accountPin.trim() : undefined,
+      accountPin: userData.accountPin ? userData.accountPin.trim() : '1234',
       role: 'user',
       balance: 0.00,
+      ledgerBalance: 0.00,
       currency: 'USD',
+      address: '100 Silicon Valley Way, Palo Alto, CA 94301',
+      country: 'United States',
+      verificationTier: 'Tier 1',
+      status: 'Active',
       twoFactorEnabled: false,
       emailNotifications: true,
       smsNotifications: false,
+      fourDigitCode: '',
+      transferCodeApproved: false,
       createdAt: new Date().toISOString()
     };
 
@@ -664,12 +699,14 @@ class DatabaseManager {
       throw new Error('Unauthorized: Only administrators can create deposit entries.');
     }
 
-    const targetUser = (deposit.userEmail ? this.findUserByEmail(deposit.userEmail) : undefined) ||
-                       (deposit.accountNumber ? this.findUserByAccountNumber(deposit.accountNumber) : undefined) ||
-                       (deposit.userEmail ? this.findUserByAccountNumber(deposit.userEmail) : undefined) ||
-                       (deposit.accountNumber ? this.findUserByEmail(deposit.accountNumber) : undefined);
+    const emailQuery = deposit.userEmail ? deposit.userEmail.trim() : '';
+    const accQuery = deposit.accountNumber ? deposit.accountNumber.trim() : '';
+
+    const targetUser = this.findUserByEmailOrAccount(emailQuery) ||
+                       this.findUserByEmailOrAccount(accQuery);
+
     if (!targetUser) {
-      throw new Error(`Target user account not found for ${deposit.userEmail || deposit.accountNumber}.`);
+      throw new Error(`Target user account not found for '${emailQuery || accQuery}'. Please verify the email or account number.`);
     }
 
     if (deposit.amount <= 0) {

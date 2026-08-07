@@ -36,8 +36,17 @@ async function requestApi<T>(path: string, options: RequestInit = {}): Promise<T
     if (res.ok) {
       return await res.json();
     }
-  } catch (e) {
-    // API offline or static fallback
+    const errData = await res.json().catch(() => null);
+    if (errData && errData.error) {
+      const err = new Error(errData.error);
+      (err as any).status = res.status;
+      throw err;
+    }
+    throw new Error(`Server request to ${path} failed with status ${res.status}`);
+  } catch (e: any) {
+    if (e && e.message && !e.message.includes('Failed to fetch') && e.name !== 'TypeError') {
+      throw e;
+    }
   }
   return null;
 }
@@ -915,11 +924,15 @@ export const api = {
     const rawQ = term.toLowerCase();
     const cleanQ = rawQ.replace(/[^a-z0-9]/g, '');
 
-    const backendRes = await requestApi<{ users: User[] }>(`/admin/users/search?q=${encodeURIComponent(term)}`);
     let serverUsers: User[] = [];
-    if (backendRes && Array.isArray(backendRes.users)) {
-      serverUsers = backendRes.users;
-      serverUsers.forEach(u => dbStore.saveUser(u));
+    try {
+      const backendRes = await requestApi<{ users: User[] }>(`/admin/users/search?q=${encodeURIComponent(term)}`);
+      if (backendRes && Array.isArray(backendRes.users)) {
+        serverUsers = backendRes.users;
+        serverUsers.forEach(u => dbStore.saveUser(u));
+      }
+    } catch (err) {
+      console.warn('Server user search endpoint call error:', err);
     }
 
     const localUsers = dbStore.getUsers();
@@ -965,6 +978,18 @@ export const api = {
   },
 
   async regenerateFourDigitCode(userId: string): Promise<{ message: string; user: User; code: string }> {
+    try {
+      const backendRes = await requestApi<{ message: string; user: User; code: string }>(`/admin/users/${userId}/regenerate-code`, {
+        method: 'POST'
+      });
+      if (backendRes && backendRes.user) {
+        dbStore.saveUser(backendRes.user);
+        return backendRes;
+      }
+    } catch (e) {
+      console.warn('Backend regenerate code call failed:', e);
+    }
+
     const user = dbStore.getUserById(userId);
     if (!user) throw new Error('User not found');
 
@@ -975,6 +1000,19 @@ export const api = {
   },
 
   async toggleRole(userId: string, role: 'user' | 'admin'): Promise<{ user: User }> {
+    try {
+      const backendRes = await requestApi<{ user: User }>(`/admin/users/${userId}/role`, {
+        method: 'POST',
+        body: JSON.stringify({ role })
+      });
+      if (backendRes && backendRes.user) {
+        dbStore.saveUser(backendRes.user);
+        return backendRes;
+      }
+    } catch (e) {
+      console.warn('Backend toggle role call failed:', e);
+    }
+
     const user = dbStore.getUserById(userId);
     if (!user) throw new Error('User not found');
 

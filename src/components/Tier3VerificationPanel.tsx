@@ -198,7 +198,7 @@ export const Tier3VerificationPanel: React.FC<Tier3VerificationPanelProps> = ({ 
           </p>
         </div>
       ) : (
-        <form onSubmit={handleSubmit} className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-5">
+        <form onSubmit={handleInitialProceed} className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-5">
           <div className="border-b border-slate-800 pb-3 flex items-center justify-between">
             <h3 className="text-sm font-bold text-white flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-cyan-400" />
