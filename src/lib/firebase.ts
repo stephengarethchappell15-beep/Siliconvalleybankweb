@@ -13,15 +13,31 @@ import {
 import config from '../../firebase-applet-config.json';
 import { User } from '../types';
 
+// Helper to safely get config values across Vite client and Node server
+const getEnvVal = (key: string): string => {
+  try {
+    // @ts-ignore
+    if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env[key]) {
+      // @ts-ignore
+      return import.meta.env[key];
+    }
+  } catch (e) {}
+  if (typeof process !== 'undefined' && process.env) {
+    if (process.env[key]) return process.env[key]!;
+    if (process.env[`VITE_${key}`]) return process.env[`VITE_${key}`]!;
+  }
+  return '';
+};
+
 // Firebase Config using imported config or environment fallbacks
 const firebaseConfig = {
-  apiKey: import.meta.env?.VITE_FIREBASE_API_KEY || config.apiKey,
-  authDomain: import.meta.env?.VITE_FIREBASE_AUTH_DOMAIN || config.authDomain,
-  projectId: import.meta.env?.VITE_FIREBASE_PROJECT_ID || config.projectId,
-  storageBucket: import.meta.env?.VITE_FIREBASE_STORAGE_BUCKET || config.storageBucket,
-  messagingSenderId: import.meta.env?.VITE_FIREBASE_MESSAGING_SENDER_ID || config.messagingSenderId,
-  appId: import.meta.env?.VITE_FIREBASE_APP_ID || config.appId,
-  databaseId: import.meta.env?.VITE_FIREBASE_DATABASE_ID || config.firestoreDatabaseId
+  apiKey: getEnvVal('VITE_FIREBASE_API_KEY') || getEnvVal('FIREBASE_API_KEY') || config.apiKey,
+  authDomain: getEnvVal('VITE_FIREBASE_AUTH_DOMAIN') || getEnvVal('FIREBASE_AUTH_DOMAIN') || config.authDomain,
+  projectId: getEnvVal('VITE_FIREBASE_PROJECT_ID') || getEnvVal('FIREBASE_PROJECT_ID') || config.projectId,
+  storageBucket: getEnvVal('VITE_FIREBASE_STORAGE_BUCKET') || getEnvVal('FIREBASE_STORAGE_BUCKET') || config.storageBucket,
+  messagingSenderId: getEnvVal('VITE_FIREBASE_MESSAGING_SENDER_ID') || getEnvVal('FIREBASE_MESSAGING_SENDER_ID') || config.messagingSenderId,
+  appId: getEnvVal('VITE_FIREBASE_APP_ID') || getEnvVal('FIREBASE_APP_ID') || config.appId,
+  databaseId: getEnvVal('VITE_FIREBASE_DATABASE_ID') || getEnvVal('FIREBASE_DATABASE_ID') || config.firestoreDatabaseId
 };
 
 // Initialize Firebase App & Firestore
@@ -97,6 +113,30 @@ export async function getUserFromFirestore(identifier: string): Promise<User | n
     const snapAcc = await getDocs(qAcc);
     if (!snapAcc.empty) return snapAcc.docs[0].data() as User;
 
+    if (cleanNum) {
+      const qCleanAcc = query(usersRef, where('accountNumber', '==', cleanNum));
+      const snapCleanAcc = await getDocs(qCleanAcc);
+      if (!snapCleanAcc.empty) return snapCleanAcc.docs[0].data() as User;
+    }
+
+    // 3. Complete scan fallback
+    const allUsers = await getAllUsersFromFirestore();
+    const matched = allUsers.find(u => {
+      if (!u) return false;
+      const emailClean = (u.email || '').trim().toLowerCase();
+      const accRaw = (u.accountNumber || '').trim().toLowerCase();
+      const accClean = accRaw.replace(/[^0-9]/g, '');
+      const uid = (u.id || '').trim().toLowerCase();
+
+      return (
+        emailClean === raw ||
+        accRaw === raw ||
+        (cleanNum.length > 0 && accClean === cleanNum) ||
+        uid === raw
+      );
+    });
+
+    if (matched) return matched;
   } catch (err) {
     console.warn('Firestore user fetch error:', err);
   }

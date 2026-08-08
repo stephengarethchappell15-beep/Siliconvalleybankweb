@@ -56,11 +56,17 @@ export default function App() {
         try {
           const res = await api.getMe();
           setUser(res.user);
+          if (res.user.role === 'admin') {
+            setActiveTab(prev => prev === 'home' ? 'admin' : prev);
+          }
         } catch (apiErr) {
           console.warn('api.getMe error, checking local fallback:', apiErr);
           const localUser = dbStore.getCurrentUser();
           if (localUser) {
             setUser(localUser);
+            if (localUser.role === 'admin') {
+              setActiveTab(prev => prev === 'home' ? 'admin' : prev);
+            }
           } else {
             removeStoredToken();
             setUser(null);
@@ -74,6 +80,9 @@ export default function App() {
       const localUser = dbStore.getCurrentUser();
       if (localUser) {
         setUser(localUser);
+        if (localUser.role === 'admin') {
+          setActiveTab(prev => prev === 'home' ? 'admin' : prev);
+        }
       } else {
         removeStoredToken();
         setUser(null);
@@ -332,7 +341,11 @@ export default function App() {
         onClose={() => setShowAuthModal(false)}
         onSuccess={(u) => {
           setUser(u);
-          setActiveTab('dashboard');
+          if (u.role === 'admin') {
+            setActiveTab('admin');
+          } else {
+            setActiveTab('dashboard');
+          }
         }}
       />
 

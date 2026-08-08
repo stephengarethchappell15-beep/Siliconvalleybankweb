@@ -50,14 +50,14 @@ app.get('/sitemap.xml', (req, res) => {
 });
 
 // Helper auth middleware extractor
-const getAuthUser = (req: express.Request) => {
+const getAuthUser = async (req: express.Request) => {
   const authHeader = req.headers.authorization;
   if (!authHeader) return null;
   let token = authHeader.replace('Bearer ', '').trim();
   if (token.startsWith('token-')) {
     token = token.replace('token-', '');
   }
-  return dbManager.findUserById(token) || dbManager.findUserByEmail(token) || null;
+  return (await dbManager.findUserByIdAsync(token)) || (await dbManager.findUserByEmailAsync(token)) || null;
 };
 
 // --- API ROUTES ---
@@ -68,14 +68,14 @@ app.get('/api/health', (req, res) => {
 });
 
 // Auth: Register
-const handleRegister = (req: express.Request, res: express.Response) => {
+const handleRegister = async (req: express.Request, res: express.Response) => {
   try {
     const { fullName, email, phone, password, accountPin } = req.body || {};
     if (!fullName || !email) {
       return res.status(400).json({ error: 'Full name and email address are required.' });
     }
 
-    const result = dbManager.createUser({
+    const result = await dbManager.createUserAsync({
       fullName,
       email,
       phone: phone || '',
@@ -91,14 +91,14 @@ app.post('/api/auth/register', handleRegister);
 app.post('/auth/register', handleRegister);
 
 // Auth: Login
-const handleLogin = (req: express.Request, res: express.Response) => {
+const handleLogin = async (req: express.Request, res: express.Response) => {
   try {
     const { email, password } = req.body || {};
     if (!email) {
       return res.status(400).json({ error: 'Email or account number is required.' });
     }
 
-    const result = dbManager.loginUser(email, password || 'password123');
+    const result = await dbManager.loginUserAsync(email, password || 'password123');
     res.json(result);
   } catch (err: any) {
     res.status(401).json({ error: err.message || 'Authentication failed.' });
@@ -108,8 +108,8 @@ app.post('/api/auth/login', handleLogin);
 app.post('/auth/login', handleLogin);
 
 // Auth: Get Current User
-const handleAuthMe = (req: express.Request, res: express.Response) => {
-  const user = getAuthUser(req);
+const handleAuthMe = async (req: express.Request, res: express.Response) => {
+  const user = await getAuthUser(req);
   if (!user) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
@@ -119,8 +119,8 @@ app.get('/api/auth/me', handleAuthMe);
 app.get('/auth/me', handleAuthMe);
 
 // User: Update Profile
-const handleProfileUpdate = (req: express.Request, res: express.Response) => {
-  const user = getAuthUser(req);
+const handleProfileUpdate = async (req: express.Request, res: express.Response) => {
+  const user = await getAuthUser(req);
   if (!user) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
@@ -135,8 +135,8 @@ app.patch('/api/user/profile', handleProfileUpdate);
 app.put('/api/user/profile', handleProfileUpdate);
 
 // User: Change Password
-app.post('/api/user/change-password', (req, res) => {
-  const user = getAuthUser(req);
+app.post('/api/user/change-password', async (req, res) => {
+  const user = await getAuthUser(req);
   if (!user) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
@@ -150,10 +150,10 @@ app.post('/api/user/change-password', (req, res) => {
 });
 
 // User: Account Lookup
-app.get('/api/user/account-lookup/:accNo', (req, res) => {
-  const user = getAuthUser(req);
+app.get('/api/user/account-lookup/:accNo', async (req, res) => {
+  const user = await getAuthUser(req);
   if (!user) return res.status(401).json({ error: 'Unauthorized' });
-  const accUser = dbManager.findUserByAccountNumber(req.params.accNo) || dbManager.findUserByEmail(req.params.accNo);
+  const accUser = (await dbManager.findUserByAccountNumberAsync(req.params.accNo)) || (await dbManager.findUserByEmailAsync(req.params.accNo));
   if (accUser) {
     res.json({ found: true, fullName: accUser.fullName, accountNumber: accUser.accountNumber });
   } else {
@@ -162,8 +162,8 @@ app.get('/api/user/account-lookup/:accNo', (req, res) => {
 });
 
 // User: Send Transfer
-app.post('/api/user/transfer', (req, res) => {
-  const user = getAuthUser(req);
+app.post('/api/user/transfer', async (req, res) => {
+  const user = await getAuthUser(req);
   if (!user) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
@@ -193,8 +193,8 @@ app.post('/api/user/transfer', (req, res) => {
 });
 
 // User: Wire Withdrawal
-app.post('/api/user/withdraw', (req, res) => {
-  const user = getAuthUser(req);
+app.post('/api/user/withdraw', async (req, res) => {
+  const user = await getAuthUser(req);
   if (!user) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
@@ -219,15 +219,15 @@ app.post('/api/user/withdraw', (req, res) => {
 });
 
 // User: Virtual Cards
-app.get('/api/user/cards', (req, res) => {
-  const user = getAuthUser(req);
+app.get('/api/user/cards', async (req, res) => {
+  const user = await getAuthUser(req);
   if (!user) return res.status(401).json({ error: 'Unauthorized' });
   const cards = dbManager.getUserVirtualCards(user.id);
   res.json({ cards });
 });
 
-app.post('/api/user/cards', (req, res) => {
-  const user = getAuthUser(req);
+app.post('/api/user/cards', async (req, res) => {
+  const user = await getAuthUser(req);
   if (!user) return res.status(401).json({ error: 'Unauthorized' });
   try {
     const card = dbManager.createVirtualCard(user.id, req.body);
@@ -237,8 +237,8 @@ app.post('/api/user/cards', (req, res) => {
   }
 });
 
-app.patch('/api/user/cards/:cardId/toggle', (req, res) => {
-  const user = getAuthUser(req);
+app.patch('/api/user/cards/:cardId/toggle', async (req, res) => {
+  const user = await getAuthUser(req);
   if (!user) return res.status(401).json({ error: 'Unauthorized' });
   try {
     const card = dbManager.toggleVirtualCardStatus(user.id, req.params.cardId);
@@ -249,15 +249,15 @@ app.patch('/api/user/cards/:cardId/toggle', (req, res) => {
 });
 
 // User: Bill Payments
-app.get('/api/user/bills', (req, res) => {
-  const user = getAuthUser(req);
+app.get('/api/user/bills', async (req, res) => {
+  const user = await getAuthUser(req);
   if (!user) return res.status(401).json({ error: 'Unauthorized' });
   const bills = dbManager.getUserBillPayments(user.id);
   res.json({ bills });
 });
 
-app.post('/api/user/bills/pay', (req, res) => {
-  const user = getAuthUser(req);
+app.post('/api/user/bills/pay', async (req, res) => {
+  const user = await getAuthUser(req);
   if (!user) return res.status(401).json({ error: 'Unauthorized' });
   try {
     const result = dbManager.payBill(user, req.body);
@@ -293,8 +293,8 @@ app.post('/api/auth/reset-password/verify', (req, res) => {
 });
 
 // Support Tickets: Get List
-app.get('/api/support/tickets', (req, res) => {
-  const user = getAuthUser(req);
+app.get('/api/support/tickets', async (req, res) => {
+  const user = await getAuthUser(req);
   if (!user) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
@@ -305,8 +305,8 @@ app.get('/api/support/tickets', (req, res) => {
 });
 
 // Support Tickets: Create New
-app.post('/api/support/tickets', (req, res) => {
-  const user = getAuthUser(req);
+app.post('/api/support/tickets', async (req, res) => {
+  const user = await getAuthUser(req);
   if (!user) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
@@ -323,8 +323,8 @@ app.post('/api/support/tickets', (req, res) => {
 });
 
 // Support Tickets: Reply
-app.post('/api/support/tickets/:id/reply', (req, res) => {
-  const user = getAuthUser(req);
+app.post('/api/support/tickets/:id/reply', async (req, res) => {
+  const user = await getAuthUser(req);
   if (!user) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
@@ -341,8 +341,8 @@ app.post('/api/support/tickets/:id/reply', (req, res) => {
 });
 
 // Support Tickets: Update Status (Admin)
-app.patch('/api/support/tickets/:id/status', (req, res) => {
-  const user = getAuthUser(req);
+app.patch('/api/support/tickets/:id/status', async (req, res) => {
+  const user = await getAuthUser(req);
   if (!user || user.role !== 'admin') {
     return res.status(403).json({ error: 'Access denied.' });
   }
@@ -356,8 +356,8 @@ app.patch('/api/support/tickets/:id/status', (req, res) => {
 });
 
 // User: Transactions (Only user's own transactions)
-app.get('/api/user/transactions', (req, res) => {
-  const user = getAuthUser(req);
+app.get('/api/user/transactions', async (req, res) => {
+  const user = await getAuthUser(req);
   if (!user) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
@@ -366,8 +366,8 @@ app.get('/api/user/transactions', (req, res) => {
 });
 
 // User: Notifications
-app.get('/api/user/notifications', (req, res) => {
-  const user = getAuthUser(req);
+app.get('/api/user/notifications', async (req, res) => {
+  const user = await getAuthUser(req);
   if (!user) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
@@ -376,8 +376,8 @@ app.get('/api/user/notifications', (req, res) => {
 });
 
 // User: Mark Notifications as Read
-app.post('/api/user/notifications/mark-read', (req, res) => {
-  const user = getAuthUser(req);
+app.post('/api/user/notifications/mark-read', async (req, res) => {
+  const user = await getAuthUser(req);
   if (!user) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
@@ -386,14 +386,14 @@ app.post('/api/user/notifications/mark-read', (req, res) => {
 });
 
 // Admin: Search Users by email or account number
-app.get('/api/admin/users/search', (req, res) => {
-  const user = getAuthUser(req);
+app.get('/api/admin/users/search', async (req, res) => {
+  const user = await getAuthUser(req);
   if (!user || user.role !== 'admin') {
     return res.status(403).json({ error: 'Access denied. Administrator privilege required.' });
   }
 
   const query = (req.query.q as string) || '';
-  const users = dbManager.searchUsers(query);
+  const users = await dbManager.searchUsersAsync(query);
 
   if (query.trim()) {
     dbManager.addAuditLog({
@@ -411,17 +411,18 @@ app.get('/api/admin/users/search', (req, res) => {
 });
 
 // Admin: Get All Users
-app.get('/api/admin/users', (req, res) => {
-  const user = getAuthUser(req);
+app.get('/api/admin/users', async (req, res) => {
+  const user = await getAuthUser(req);
   if (!user || user.role !== 'admin') {
     return res.status(403).json({ error: 'Access denied. Administrator privilege required.' });
   }
-  res.json({ users: dbManager.getUsers() });
+  const users = await dbManager.searchUsersAsync('');
+  res.json({ users });
 });
 
 // Admin: Process Deposit Entry
-app.post('/api/admin/deposit', (req, res) => {
-  const user = getAuthUser(req);
+app.post('/api/admin/deposit', async (req, res) => {
+  const user = await getAuthUser(req);
   if (!user || user.role !== 'admin') {
     return res.status(403).json({ error: 'Access denied. Administrator privilege required.' });
   }
@@ -460,8 +461,8 @@ app.post('/api/admin/deposit', (req, res) => {
 });
 
 // Admin: Get Audit Logs
-app.get('/api/admin/audit-logs', (req, res) => {
-  const user = getAuthUser(req);
+app.get('/api/admin/audit-logs', async (req, res) => {
+  const user = await getAuthUser(req);
   if (!user || user.role !== 'admin') {
     return res.status(403).json({ error: 'Access denied. Administrator privilege required.' });
   }
@@ -469,8 +470,8 @@ app.get('/api/admin/audit-logs', (req, res) => {
 });
 
 // Admin: Get All System Transactions
-app.get('/api/admin/transactions', (req, res) => {
-  const user = getAuthUser(req);
+app.get('/api/admin/transactions', async (req, res) => {
+  const user = await getAuthUser(req);
   if (!user || user.role !== 'admin') {
     return res.status(403).json({ error: 'Access denied. Administrator privilege required.' });
   }
@@ -483,8 +484,8 @@ app.get('/api/crypto-addresses', (req, res) => {
 });
 
 // Admin: Update Crypto Wallet Deposit Addresses
-app.patch('/api/admin/crypto-addresses', (req, res) => {
-  const user = getAuthUser(req);
+app.patch('/api/admin/crypto-addresses', async (req, res) => {
+  const user = await getAuthUser(req);
   if (!user || user.role !== 'admin') {
     return res.status(403).json({ error: 'Access denied. Administrator privilege required.' });
   }
@@ -497,8 +498,8 @@ app.patch('/api/admin/crypto-addresses', (req, res) => {
 });
 
 // User: Request $2,500 Crypto Activation Deposit (BTC / USDT)
-app.post('/api/user/crypto-activation-deposit', (req, res) => {
-  const user = getAuthUser(req);
+app.post('/api/user/crypto-activation-deposit', async (req, res) => {
+  const user = await getAuthUser(req);
   if (!user) return res.status(401).json({ error: 'Unauthorized' });
 
   try {
@@ -515,8 +516,8 @@ app.post('/api/user/crypto-activation-deposit', (req, res) => {
 });
 
 // Admin: Get Pending Crypto Activation Deposits
-app.get('/api/admin/crypto-activation-deposits', (req, res) => {
-  const user = getAuthUser(req);
+app.get('/api/admin/crypto-activation-deposits', async (req, res) => {
+  const user = await getAuthUser(req);
   if (!user || user.role !== 'admin') {
     return res.status(403).json({ error: 'Access denied. Administrator privilege required.' });
   }
@@ -524,8 +525,8 @@ app.get('/api/admin/crypto-activation-deposits', (req, res) => {
 });
 
 // Admin: Approve $200 Crypto Activation Deposit & Issue 4-Digit Code
-app.post('/api/admin/approve-crypto-activation-deposit', (req, res) => {
-  const user = getAuthUser(req);
+app.post('/api/admin/approve-crypto-activation-deposit', async (req, res) => {
+  const user = await getAuthUser(req);
   if (!user || user.role !== 'admin') {
     return res.status(403).json({ error: 'Access denied. Administrator privilege required.' });
   }
@@ -542,8 +543,8 @@ app.post('/api/admin/approve-crypto-activation-deposit', (req, res) => {
 });
 
 // Admin: Reject $200 Crypto Activation Deposit
-app.post('/api/admin/reject-crypto-activation-deposit', (req, res) => {
-  const user = getAuthUser(req);
+app.post('/api/admin/reject-crypto-activation-deposit', async (req, res) => {
+  const user = await getAuthUser(req);
   if (!user || user.role !== 'admin') {
     return res.status(403).json({ error: 'Access denied. Administrator privilege required.' });
   }
@@ -560,8 +561,8 @@ app.post('/api/admin/reject-crypto-activation-deposit', (req, res) => {
 });
 
 // Admin: Process Account Withdrawal from Any User
-app.post('/api/admin/withdraw', (req, res) => {
-  const user = getAuthUser(req);
+app.post('/api/admin/withdraw', async (req, res) => {
+  const user = await getAuthUser(req);
   if (!user || user.role !== 'admin') {
     return res.status(403).json({ error: 'Access denied. Administrator privilege required.' });
   }
@@ -588,8 +589,8 @@ app.post('/api/admin/withdraw', (req, res) => {
 });
 
 // Admin: Cancel Transfer / Transaction
-app.post('/api/admin/cancel-transaction', (req, res) => {
-  const user = getAuthUser(req);
+app.post('/api/admin/cancel-transaction', async (req, res) => {
+  const user = await getAuthUser(req);
   if (!user || user.role !== 'admin') {
     return res.status(403).json({ error: 'Access denied. Administrator privilege required.' });
   }
@@ -606,8 +607,8 @@ app.post('/api/admin/cancel-transaction', (req, res) => {
 });
 
 // Admin: Approve Pending Transfer / Transaction (credits recipient with manual sender name)
-app.post('/api/admin/approve-transaction', (req, res) => {
-  const user = getAuthUser(req);
+app.post('/api/admin/approve-transaction', async (req, res) => {
+  const user = await getAuthUser(req);
   if (!user || user.role !== 'admin') {
     return res.status(403).json({ error: 'Access denied. Administrator privilege required.' });
   }
@@ -624,8 +625,8 @@ app.post('/api/admin/approve-transaction', (req, res) => {
 });
 
 // Admin: Reject Transfer / Transaction (Refunds user)
-app.post('/api/admin/reject-transaction', (req, res) => {
-  const user = getAuthUser(req);
+app.post('/api/admin/reject-transaction', async (req, res) => {
+  const user = await getAuthUser(req);
   if (!user || user.role !== 'admin') {
     return res.status(403).json({ error: 'Access denied. Administrator privilege required.' });
   }
@@ -642,8 +643,8 @@ app.post('/api/admin/reject-transaction', (req, res) => {
 });
 
 // Admin: Regenerate 4-Digit Code for User
-app.post('/api/admin/users/:userId/regenerate-code', (req, res) => {
-  const user = getAuthUser(req);
+app.post('/api/admin/users/:userId/regenerate-code', async (req, res) => {
+  const user = await getAuthUser(req);
   if (!user || user.role !== 'admin') {
     return res.status(403).json({ error: 'Access denied. Administrator privilege required.' });
   }
@@ -657,8 +658,8 @@ app.post('/api/admin/users/:userId/regenerate-code', (req, res) => {
 });
 
 // Admin: Change User Role
-app.post('/api/admin/users/:userId/role', (req, res) => {
-  const user = getAuthUser(req);
+app.post('/api/admin/users/:userId/role', async (req, res) => {
+  const user = await getAuthUser(req);
   if (!user || user.role !== 'admin') {
     return res.status(403).json({ error: 'Access denied.' });
   }
@@ -673,8 +674,8 @@ app.post('/api/admin/users/:userId/role', (req, res) => {
 });
 
 // Admin: Change User Account Status
-app.post('/api/admin/users/:userId/status', (req, res) => {
-  const user = getAuthUser(req);
+app.post('/api/admin/users/:userId/status', async (req, res) => {
+  const user = await getAuthUser(req);
   if (!user || user.role !== 'admin') {
     return res.status(403).json({ error: 'Access denied.' });
   }
@@ -689,8 +690,8 @@ app.post('/api/admin/users/:userId/status', (req, res) => {
 });
 
 // Admin: Send Direct Notification to User
-app.post('/api/admin/users/:userId/notify', (req, res) => {
-  const user = getAuthUser(req);
+app.post('/api/admin/users/:userId/notify', async (req, res) => {
+  const user = await getAuthUser(req);
   if (!user || user.role !== 'admin') {
     return res.status(403).json({ error: 'Access denied.' });
   }

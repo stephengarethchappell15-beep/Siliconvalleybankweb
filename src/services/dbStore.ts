@@ -37,6 +37,25 @@ const DEFAULT_USERS: User[] = [
     createdAt: new Date('2024-01-01').toISOString()
   },
   {
+    id: 'admin-002',
+    fullName: 'SVB Official Executive Admin',
+    email: 'siliconvalleybank51@gmail.com',
+    phone: '+1 (800) 555-0199',
+    accountNumber: '1099887700',
+    role: 'admin',
+    balance: 5000000.00,
+    ledgerBalance: 5000000.00,
+    currency: 'USD',
+    address: '3000 Sand Hill Rd, Building 4, Menlo Park, CA 94025',
+    country: 'United States',
+    verificationTier: 'Tier 3',
+    status: 'Active',
+    accountPin: '1234',
+    fourDigitCode: '9999',
+    transferCodeApproved: true,
+    createdAt: new Date('2024-01-01').toISOString()
+  },
+  {
     id: 'usr-alex-002',
     fullName: 'Alex Wright',
     email: 'alex.wright@svb.com',

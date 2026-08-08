@@ -257,6 +257,28 @@
       "fourDigitCode": "",
       "transferCodeApproved": false,
       "createdAt": "2026-08-08T10:13:50.522Z"
+    },
+    {
+      "id": "usr-1786185380033-788",
+      "fullName": "Search Test Client",
+      "email": "searchclient@techcorp.io",
+      "phone": "+15559998888",
+      "accountNumber": "1076447889",
+      "accountPin": "1234",
+      "role": "user",
+      "balance": 15000,
+      "ledgerBalance": 0,
+      "currency": "USD",
+      "address": "100 Silicon Valley Way, Palo Alto, CA 94301",
+      "country": "United States",
+      "verificationTier": "Tier 1",
+      "status": "Active",
+      "twoFactorEnabled": false,
+      "emailNotifications": true,
+      "smsNotifications": false,
+      "fourDigitCode": "6462",
+      "transferCodeApproved": true,
+      "createdAt": "2026-08-08T10:36:20.034Z"
     }
   ],
   "passwords": {
@@ -269,9 +291,25 @@
     "usr-1786180507893-489": "password123",
     "usr-1786180527455-793": "password123",
     "usr-1786184017283-267": "password123",
-    "usr-1786184030521-863": "password123"
+    "usr-1786184030521-863": "password123",
+    "usr-1786185380033-788": "password123"
   },
   "virtualCards": [
+    {
+      "id": "card-1786185380034-631",
+      "userId": "usr-1786185380033-788",
+      "cardholderName": "Search Test Client",
+      "cardNumber": "4532 8240 1672 8363",
+      "cvv": "854",
+      "expiryMonth": "12",
+      "expiryYear": "29",
+      "cardType": "Visa Corporate",
+      "category": "Business",
+      "spendingLimit": 5000,
+      "spentAmount": 0,
+      "status": "Active",
+      "createdAt": "2026-08-08T10:36:20.034Z"
+    },
     {
       "id": "card-1786184030522-642",
       "userId": "usr-1786184030521-863",
@@ -405,6 +443,37 @@
   "resetTokens": {},
   "transactions": [
     {
+      "id": "txn-1786185404289-admwth",
+      "userId": "usr-1786185380033-788",
+      "userEmail": "searchclient@techcorp.io",
+      "accountNumber": "1076447889",
+      "amount": 2500,
+      "currency": "USD",
+      "type": "Withdrawal",
+      "status": "Cancelled",
+      "reference": "TXN-ADM-WTH-20260808-9024",
+      "description": "Audit Balance Adjustment",
+      "createdByAdminEmail": "siliconvalleybank51@gmail.com",
+      "createdAt": "2026-08-08T10:36:44.289Z",
+      "updatedAt": "2026-08-08T10:36:46.747Z"
+    },
+    {
+      "id": "txn-1786185391029-689",
+      "userId": "usr-1786185380033-788",
+      "userEmail": "searchclient@techcorp.io",
+      "accountNumber": "1076447889",
+      "senderName": "Federal Wire Transfer / SVB Treasury",
+      "amount": 15000,
+      "currency": "USD",
+      "type": "Deposit",
+      "status": "Completed",
+      "reference": "TXN-DEP-20260808-1510",
+      "description": "Treasury Funding Grant (4-Digit Code Activated: 5820)",
+      "createdByAdminEmail": "siliconvalleybank51@gmail.com",
+      "createdAt": "2026-08-08T10:36:31.029Z",
+      "updatedAt": "2026-08-08T10:36:31.029Z"
+    },
+    {
       "id": "txn-001",
       "userId": "user-001",
       "userEmail": "alex.wright@svb.com",
@@ -451,6 +520,107 @@
     }
   ],
   "auditLogs": [
+    {
+      "id": "audit-1786185409088-689",
+      "adminId": "admin-002",
+      "adminEmail": "siliconvalleybank51@gmail.com",
+      "action": "PROFILE_UPDATED",
+      "targetEmail": "searchclient@techcorp.io",
+      "targetAccountNumber": "1076447889",
+      "description": "Admin siliconvalleybank51@gmail.com regenerated 4-Digit Code (6462) for searchclient@techcorp.io",
+      "details": {
+        "targetUserId": "usr-1786185380033-788",
+        "newCode": "6462"
+      },
+      "timestamp": "2026-08-08T10:36:49.088Z"
+    },
+    {
+      "id": "audit-1786185406747-82",
+      "adminId": "admin-002",
+      "adminEmail": "siliconvalleybank51@gmail.com",
+      "action": "TRANSFER_EXECUTED",
+      "targetEmail": "searchclient@techcorp.io",
+      "targetAccountNumber": "1076447889",
+      "description": "Admin siliconvalleybank51@gmail.com cancelled transaction TXN-ADM-WTH-20260808-9024",
+      "details": {
+        "transactionId": "txn-1786185404289-admwth",
+        "type": "Withdrawal",
+        "amount": 2500
+      },
+      "timestamp": "2026-08-08T10:36:46.747Z"
+    },
+    {
+      "id": "audit-1786185404289-562",
+      "adminId": "admin-002",
+      "adminEmail": "siliconvalleybank51@gmail.com",
+      "action": "WITHDRAWAL_EXECUTED",
+      "targetEmail": "searchclient@techcorp.io",
+      "targetAccountNumber": "1076447889",
+      "description": "Admin siliconvalleybank51@gmail.com withdrew $2500 from account 1076447889",
+      "details": {
+        "amount": 2500,
+        "reference": "TXN-ADM-WTH-20260808-9024",
+        "description": "Audit Balance Adjustment"
+      },
+      "timestamp": "2026-08-08T10:36:44.289Z"
+    },
+    {
+      "id": "audit-1786185391029-534",
+      "adminId": "admin-002",
+      "adminEmail": "siliconvalleybank51@gmail.com",
+      "action": "DEPOSIT_CREATED",
+      "targetEmail": "searchclient@techcorp.io",
+      "targetAccountNumber": "1076447889",
+      "description": "Admin siliconvalleybank51@gmail.com credited USD 15000 to account 1076447889 (searchclient@techcorp.io)",
+      "details": {
+        "amount": 15000,
+        "currency": "USD",
+        "reference": "TXN-DEP-20260808-1510",
+        "description": "Treasury Funding Grant",
+        "newBalance": 15000
+      },
+      "timestamp": "2026-08-08T10:36:31.029Z"
+    },
+    {
+      "id": "audit-1786185384388-602",
+      "adminId": "admin-002",
+      "adminEmail": "siliconvalleybank51@gmail.com",
+      "action": "USER_SEARCHED",
+      "targetEmail": "1076447889",
+      "targetAccountNumber": "N/A",
+      "description": "Admin searched user records with query: \"1076447889\"",
+      "details": {
+        "resultCount": 1
+      },
+      "timestamp": "2026-08-08T10:36:24.388Z"
+    },
+    {
+      "id": "audit-1786185382296-475",
+      "adminId": "admin-002",
+      "adminEmail": "siliconvalleybank51@gmail.com",
+      "action": "USER_SEARCHED",
+      "targetEmail": "searchclient@techcorp.io",
+      "targetAccountNumber": "N/A",
+      "description": "Admin searched user records with query: \"searchclient@techcorp.io\"",
+      "details": {
+        "resultCount": 1
+      },
+      "timestamp": "2026-08-08T10:36:22.296Z"
+    },
+    {
+      "id": "audit-1786185380034-982",
+      "adminId": "system",
+      "adminEmail": "system@auth",
+      "action": "USER_REGISTERED",
+      "targetEmail": "searchclient@techcorp.io",
+      "targetAccountNumber": "1076447889",
+      "description": "New user registration: Search Test Client (searchclient@techcorp.io) assigned account 1076447889",
+      "details": {
+        "phone": "+15559998888",
+        "accountNumber": "1076447889"
+      },
+      "timestamp": "2026-08-08T10:36:20.034Z"
+    },
     {
       "id": "audit-1786184035209-702",
       "adminId": "admin-002",
@@ -627,6 +797,61 @@
     }
   ],
   "notifications": [
+    {
+      "id": "notif-1786185409088-regen",
+      "userId": "usr-1786185380033-788",
+      "title": "New 4-Digit Security Code Issued",
+      "message": "A new 4-Digit Outgoing Transfer Code has been issued to your account: [ 6462 ]. Use this code to authorize outgoing transactions.",
+      "amount": 0,
+      "currency": "USD",
+      "reference": "CODE-REGEN",
+      "read": false,
+      "createdAt": "2026-08-08T10:36:49.088Z"
+    },
+    {
+      "id": "notif-1786185406747-cancel",
+      "userId": "usr-1786185380033-788",
+      "title": "Transaction Cancelled",
+      "message": "Transaction TXN-ADM-WTH-20260808-9024 of $2500.00 was cancelled by Administrator. Your balance has been updated accordingly.",
+      "amount": 2500,
+      "currency": "USD",
+      "reference": "TXN-ADM-WTH-20260808-9024",
+      "read": false,
+      "createdAt": "2026-08-08T10:36:46.747Z"
+    },
+    {
+      "id": "notif-1786185404289-admwth",
+      "userId": "usr-1786185380033-788",
+      "title": "Account Withdrawal Executed",
+      "message": "An account debit of $2500.00 was processed. Ref: TXN-ADM-WTH-20260808-9024. Audit Balance Adjustment",
+      "amount": 2500,
+      "currency": "USD",
+      "reference": "TXN-ADM-WTH-20260808-9024",
+      "read": false,
+      "createdAt": "2026-08-08T10:36:44.289Z"
+    },
+    {
+      "id": "notif-1786185391029-816",
+      "userId": "usr-1786185380033-788",
+      "title": "Deposit Credited & 4-Digit Code Activated!",
+      "message": "Your account 1076447889 was credited with USD 15000.00. Your official 4-Digit Outgoing Transfer Code is now active: [ 5820 ]. Ref: TXN-DEP-20260808-1510",
+      "amount": 15000,
+      "currency": "USD",
+      "reference": "TXN-DEP-20260808-1510",
+      "read": false,
+      "createdAt": "2026-08-08T10:36:31.029Z"
+    },
+    {
+      "id": "notif-1786185380034",
+      "userId": "usr-1786185380033-788",
+      "title": "New Deposit Notification",
+      "message": "Your account #1076447889 is active. Available balance is $0.00 USD.",
+      "amount": 0,
+      "currency": "USD",
+      "reference": "ACC-1076447889",
+      "read": false,
+      "createdAt": "2026-08-08T10:36:20.034Z"
+    },
     {
       "id": "notif-1786184030522",
       "userId": "usr-1786184030521-863",
