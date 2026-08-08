@@ -126,23 +126,50 @@ const DEFAULT_TRANSACTIONS: Transaction[] = [
   }
 ];
 
+const EXTRA_USERS_KEY = 'svb_registered_users_v2';
+
 function getInitialDB(): DBStructure {
+  let loadedUsers: User[] = [];
+  try {
+    const rawExtra = localStorage.getItem(EXTRA_USERS_KEY);
+    if (rawExtra) {
+      const parsedExtra = JSON.parse(rawExtra);
+      if (Array.isArray(parsedExtra)) {
+        loadedUsers = parsedExtra;
+      }
+    }
+  } catch (e) {
+    console.warn('Error reading extra users', e);
+  }
+
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (parsed && Array.isArray(parsed.users) && parsed.users.length > 0) {
+      if (parsed && Array.isArray(parsed.users)) {
         const userMap = new Map<string, User>();
-        for (const u of parsed.users) {
-          if (u && u.id && u.email) {
-            userMap.set(u.email.toLowerCase(), u);
-          }
-        }
+        
+        // Load default users first
         for (const defUser of DEFAULT_USERS) {
-          if (!userMap.has(defUser.email.toLowerCase())) {
+          if (defUser && defUser.email) {
             userMap.set(defUser.email.toLowerCase(), defUser);
           }
         }
+
+        // Merge users from main storage
+        for (const u of parsed.users) {
+          if (u && u.email) {
+            userMap.set(u.email.toLowerCase(), { ...userMap.get(u.email.toLowerCase()), ...u });
+          }
+        }
+
+        // Merge users from extra registered backup
+        for (const u of loadedUsers) {
+          if (u && u.email) {
+            userMap.set(u.email.toLowerCase(), { ...userMap.get(u.email.toLowerCase()), ...u });
+          }
+        }
+
         parsed.users = Array.from(userMap.values());
         parsed.transactions = parsed.transactions || DEFAULT_TRANSACTIONS;
         parsed.notifications = parsed.notifications || [];
@@ -165,8 +192,18 @@ function getInitialDB(): DBStructure {
     console.error('Error loading local DB', e);
   }
 
+  const userMap = new Map<string, User>();
+  for (const defUser of DEFAULT_USERS) {
+    userMap.set(defUser.email.toLowerCase(), defUser);
+  }
+  for (const extra of loadedUsers) {
+    if (extra && extra.email) {
+      userMap.set(extra.email.toLowerCase(), extra);
+    }
+  }
+
   const initial: DBStructure = {
-    users: DEFAULT_USERS,
+    users: Array.from(userMap.values()),
     transactions: DEFAULT_TRANSACTIONS,
     notifications: [
       {
@@ -216,6 +253,9 @@ function getInitialDB(): DBStructure {
 function saveDB(db: DBStructure): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+    if (db && Array.isArray(db.users)) {
+      localStorage.setItem(EXTRA_USERS_KEY, JSON.stringify(db.users));
+    }
   } catch (e) {
     console.error('Error saving local DB', e);
   }
@@ -256,25 +296,47 @@ class LocalDBStore {
   }
 
   getUserById(id: string): User | null {
+    if (!id) return null;
     this.refresh();
-    return this.db.users.find(u => u.id === id) || null;
+    const clean = id.trim().toLowerCase();
+    const cleanNum = clean.replace(/[^0-9]/g, '');
+
+    return (
+      this.db.users.find(u => 
+        u.id === id || 
+        u.id.toLowerCase() === clean || 
+        u.email.toLowerCase() === clean ||
+        u.accountNumber === id ||
+        (cleanNum.length > 0 && u.accountNumber.replace(/[^0-9]/g, '') === cleanNum)
+      ) || null
+    );
   }
 
   getUserByEmail(email: string): User | null {
+    if (!email) return null;
     this.refresh();
     const clean = email.trim().toLowerCase();
-    return this.db.users.find(u => u.email.toLowerCase() === clean) || null;
+    const cleanNum = clean.replace(/[^0-9]/g, '');
+
+    return (
+      this.db.users.find(u => 
+        u.email.toLowerCase() === clean || 
+        u.accountNumber.toLowerCase() === clean ||
+        (cleanNum.length > 0 && u.accountNumber.replace(/[^0-9]/g, '') === cleanNum) ||
+        u.id.toLowerCase() === clean
+      ) || null
+    );
   }
 
   getCurrentUser(): User | null {
     const token = this.getStoredToken();
     if (!token) return null;
-    return this.getUserById(token);
+    return this.getUserById(token) || this.getUserByEmail(token);
   }
 
   saveUser(user: User): User {
     this.refresh();
-    const idx = this.db.users.findIndex(u => u.id === user.id);
+    const idx = this.db.users.findIndex(u => u.id === user.id || u.email.toLowerCase() === user.email.toLowerCase());
     if (idx >= 0) {
       this.db.users[idx] = { ...this.db.users[idx], ...user };
     } else {

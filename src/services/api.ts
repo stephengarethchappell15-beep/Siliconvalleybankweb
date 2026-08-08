@@ -14,6 +14,7 @@ import {
   DepositPayload
 } from '../types';
 import { dbStore } from './dbStore';
+import { syncUserToFirestore, getUserFromFirestore, getAllUsersFromFirestore } from '../lib/firebase';
 
 export const getStoredToken = (): string | null => dbStore.getStoredToken();
 export const setStoredToken = (token: string): void => dbStore.setStoredToken(token);
@@ -55,95 +56,130 @@ export const api = {
   // --- AUTHENTICATION ---
   async register(data: { fullName: string; email: string; phone?: string; password?: string; accountPin?: string }): Promise<AuthResponse> {
     const emailClean = data.email.trim().toLowerCase();
-    
+    let finalUser: User | null = null;
+    let tokenStr = '';
+
     // 1. Try Express backend API
-    const backendRes = await requestApi<{ user: User; token: string }>('/auth/register', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
+    try {
+      const backendRes = await requestApi<{ user: User; token: string }>('/auth/register', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
 
-    if (backendRes && backendRes.user) {
-      const token = backendRes.token.replace(/^token-/, '');
-      dbStore.saveUser(backendRes.user);
-      dbStore.setStoredToken(token);
-      return { user: backendRes.user, token };
+      if (backendRes && backendRes.user) {
+        finalUser = backendRes.user;
+        tokenStr = backendRes.token.replace(/^token-/, '');
+      }
+    } catch (err) {
+      console.warn('Backend register call fallback:', err);
     }
 
-    // 2. Local fallback
-    let existing = dbStore.getUserByEmail(emailClean);
-    if (existing) {
-      dbStore.setStoredToken(existing.id);
-      return { user: existing, token: existing.id };
+    // 2. Local fallback if server unreachable or errored
+    if (!finalUser) {
+      let existing = dbStore.getUserByEmail(emailClean);
+      if (existing) {
+        finalUser = existing;
+        tokenStr = existing.id;
+      } else {
+        const isAdmin = emailClean.includes('admin') || emailClean === 'admin@svb.com' || emailClean === 'siliconvalleybank51@gmail.com';
+        const accountNumber = `10${Math.floor(1000000000 + Math.random() * 9000000000)}`;
+        const uid = `usr-${Date.now()}`;
+
+        finalUser = {
+          id: uid,
+          fullName: data.fullName.trim(),
+          email: emailClean,
+          phone: (data.phone && data.phone.trim()) || '+1 (555) 019-2834',
+          accountNumber,
+          role: isAdmin ? 'admin' : 'user',
+          balance: isAdmin ? 5000000 : 0.00,
+          ledgerBalance: isAdmin ? 5000000 : 0.00,
+          currency: 'USD',
+          address: '100 Silicon Valley Way, Palo Alto, CA 94301',
+          country: 'United States',
+          verificationTier: 'Tier 1',
+          status: 'Active',
+          accountPin: data.accountPin || '1234',
+          fourDigitCode: isAdmin ? '8842' : '',
+          transferCodeApproved: isAdmin ? true : false,
+          createdAt: new Date().toISOString()
+        };
+        tokenStr = uid;
+
+        // Initial Welcome Deposit Notification (Account Created)
+        dbStore.addNotification({
+          id: `NOTIF-${Date.now()}`,
+          userId: uid,
+          title: 'New Deposit Notification',
+          message: `Your account #${accountNumber} is active. Available balance is $0.00 USD.`,
+          amount: 0.00,
+          currency: 'USD',
+          reference: `ACC-${accountNumber}`,
+          read: false,
+          createdAt: new Date().toISOString()
+        });
+      }
     }
 
-    const isAdmin = emailClean.includes('admin') || emailClean === 'admin@svb.com' || emailClean === 'siliconvalleybank51@gmail.com';
-    const accountNumber = `10${Math.floor(1000000000 + Math.random() * 9000000000)}`;
-    const uid = `usr-${Date.now()}`;
+    // Save to local store and set auth token
+    dbStore.saveUser(finalUser);
+    dbStore.setStoredToken(tokenStr || finalUser.id);
 
-    const newUser: User = {
-      id: uid,
-      fullName: data.fullName.trim(),
-      email: emailClean,
-      phone: (data.phone && data.phone.trim()) || '+1 (555) 019-2834',
-      accountNumber,
-      role: isAdmin ? 'admin' : 'user',
-      balance: isAdmin ? 5000000 : 0.00,
-      ledgerBalance: isAdmin ? 5000000 : 0.00,
-      currency: 'USD',
-      address: '100 Silicon Valley Way, Palo Alto, CA 94301',
-      country: 'United States',
-      verificationTier: 'Tier 1',
-      status: 'Active',
-      accountPin: data.accountPin || '1234',
-      fourDigitCode: isAdmin ? '8842' : '',
-      transferCodeApproved: isAdmin ? true : false,
-      createdAt: new Date().toISOString()
-    };
+    // Sync user asynchronously to Firebase Firestore SDK so accounts NEVER vanish
+    syncUserToFirestore(finalUser, data.password || 'password123');
 
-    dbStore.saveUser(newUser);
-
-    // Initial Welcome Deposit Notification (Account Created)
-    dbStore.addNotification({
-      id: `NOTIF-${Date.now()}`,
-      userId: uid,
-      title: 'New Deposit Notification',
-      message: `Your account #${accountNumber} is active. Available balance is $0.00 USD.`,
-      amount: 0.00,
-      currency: 'USD',
-      reference: `ACC-${accountNumber}`,
-      read: false,
-      createdAt: new Date().toISOString()
-    });
-
-    dbStore.setStoredToken(uid);
-    return { user: newUser, token: uid };
+    return { user: finalUser, token: tokenStr || finalUser.id };
   },
 
   async login(data: { email: string; password?: string }): Promise<AuthResponse> {
-    const emailClean = data.email.trim().toLowerCase();
+    const identifier = data.email.trim().toLowerCase();
+    let finalUser: User | null = null;
+    let tokenStr = '';
 
     // 1. Try Express backend API
-    const backendRes = await requestApi<{ user: User; token: string }>('/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ email: emailClean, password: data.password || 'password123' }),
-    });
+    try {
+      const backendRes = await requestApi<{ user: User; token: string }>('/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ email: identifier, password: data.password || 'password123' }),
+      });
 
-    if (backendRes && backendRes.user) {
-      const token = backendRes.token.replace(/^token-/, '');
-      dbStore.saveUser(backendRes.user);
-      dbStore.setStoredToken(token);
-      return { user: backendRes.user, token };
+      if (backendRes && backendRes.user) {
+        finalUser = backendRes.user;
+        tokenStr = backendRes.token.replace(/^token-/, '');
+      }
+    } catch (err) {
+      console.warn('Backend login endpoint call fallback:', err);
     }
 
-    // 2. Local fallback
-    let user = dbStore.getUserByEmail(emailClean);
-
-    if (!user) {
-      throw new Error('Invalid email or password.');
+    // 2. Check Firestore SDK
+    if (!finalUser) {
+      const fsUser = await getUserFromFirestore(identifier);
+      if (fsUser) {
+        finalUser = fsUser;
+        tokenStr = fsUser.id;
+      }
     }
 
-    dbStore.setStoredToken(user.id);
-    return { user, token: user.id };
+    // 3. Check local dbStore fallback
+    if (!finalUser) {
+      let localUser = dbStore.getUserByEmail(identifier) || dbStore.getUserById(identifier);
+      if (localUser) {
+        finalUser = localUser;
+        tokenStr = localUser.id;
+      }
+    }
+
+    if (!finalUser) {
+      throw new Error('User account not found. Please check your email address or 10-digit account number.');
+    }
+
+    dbStore.saveUser(finalUser);
+    dbStore.setStoredToken(tokenStr || finalUser.id);
+
+    // Sync to Firestore SDK
+    syncUserToFirestore(finalUser, data.password || 'password123');
+
+    return { user: finalUser, token: tokenStr || finalUser.id };
   },
 
   async logout(): Promise<void> {
@@ -155,14 +191,29 @@ export const api = {
     const backendRes = await requestApi<{ user: User }>('/auth/me');
     if (backendRes && backendRes.user) {
       dbStore.saveUser(backendRes.user);
+      syncUserToFirestore(backendRes.user);
       return { user: backendRes.user };
     }
 
-    // 2. Local fallback
-    const user = dbStore.getCurrentUser();
+    // 2. Local dbStore session restoration
+    let user = dbStore.getCurrentUser();
+
+    // 3. Firestore fallback session restoration
+    if (!user) {
+      const storedToken = dbStore.getStoredToken();
+      if (storedToken) {
+        const fsUser = await getUserFromFirestore(storedToken);
+        if (fsUser) {
+          user = fsUser;
+          dbStore.saveUser(fsUser);
+        }
+      }
+    }
+
     if (!user) {
       throw new Error('Not authenticated');
     }
+
     return { user };
   },
 
@@ -936,8 +987,18 @@ export const api = {
     }
 
     const localUsers = dbStore.getUsers();
+    let fsUsers: User[] = [];
+    try {
+      fsUsers = await getAllUsersFromFirestore();
+    } catch (e) {
+      console.warn('Firestore getAllUsers in search error:', e);
+    }
+
     const userMap = new Map<string, User>();
     localUsers.forEach(u => {
+      if (u && u.id) userMap.set(u.id, u);
+    });
+    fsUsers.forEach(u => {
       if (u && u.id) userMap.set(u.id, u);
     });
     serverUsers.forEach(u => {

@@ -18,6 +18,7 @@ import { Homepage } from './components/Homepage';
 import { LegalModal, LegalDocType } from './components/LegalModal';
 import { SupportChatWidget } from './components/SupportChatWidget';
 import { api, getStoredToken, removeStoredToken } from './services/api';
+import { dbStore } from './services/dbStore';
 import { User, Transaction, UserNotification } from './types';
 import { ShieldCheck, Building2, ShieldAlert } from 'lucide-react';
 
@@ -52,15 +53,31 @@ export default function App() {
     try {
       const token = getStoredToken();
       if (token) {
-        const res = await api.getMe();
-        setUser(res.user);
+        try {
+          const res = await api.getMe();
+          setUser(res.user);
+        } catch (apiErr) {
+          console.warn('api.getMe error, checking local fallback:', apiErr);
+          const localUser = dbStore.getCurrentUser();
+          if (localUser) {
+            setUser(localUser);
+          } else {
+            removeStoredToken();
+            setUser(null);
+          }
+        }
       } else {
         setUser(null);
       }
     } catch (err) {
       console.warn('Session restoration error:', err);
-      removeStoredToken();
-      setUser(null);
+      const localUser = dbStore.getCurrentUser();
+      if (localUser) {
+        setUser(localUser);
+      } else {
+        removeStoredToken();
+        setUser(null);
+      }
     } finally {
       setLoading(false);
     }
