@@ -108,17 +108,35 @@ export async function getUserFromFirestore(identifier: string): Promise<User | n
  * Get all users from Firestore
  */
 export async function getAllUsersFromFirestore(): Promise<User[]> {
+  const userMap = new Map<string, User>();
+
   try {
     const snap = await getDocs(collection(db, 'users'));
-    const list: User[] = [];
     snap.forEach((d) => {
       if (d.exists()) {
-        list.push(d.data() as User);
+        const data = d.data() as User;
+        if (data && data.email) {
+          userMap.set(data.email.toLowerCase(), data);
+        }
       }
     });
-    return list;
   } catch (err) {
-    console.warn('Firestore getAllUsers error:', err);
-    return [];
+    console.warn('Firestore getAllUsers main collection error:', err);
   }
+
+  try {
+    const emailSnap = await getDocs(collection(db, 'users_by_email'));
+    emailSnap.forEach((d) => {
+      if (d.exists()) {
+        const data = d.data() as User;
+        if (data && data.email && !userMap.has(data.email.toLowerCase())) {
+          userMap.set(data.email.toLowerCase(), data);
+        }
+      }
+    });
+  } catch (err) {
+    console.warn('Firestore getAllUsers email collection error:', err);
+  }
+
+  return Array.from(userMap.values());
 }

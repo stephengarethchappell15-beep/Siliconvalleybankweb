@@ -440,8 +440,25 @@ export const api = {
 
   // --- FUNDING & TRANSACTIONS ---
   async creditUserAccount(data: { accountNumber: string; amount: number; reference?: string; description?: string }): Promise<{ user: User; transaction: Transaction; updatedUser: User }> {
-    const users = dbStore.getUsers();
-    const target = users.find(u => u.accountNumber === data.accountNumber || u.email.toLowerCase() === data.accountNumber.toLowerCase());
+    let users = dbStore.getUsers();
+    let target = users.find(u => 
+      u.accountNumber === data.accountNumber || 
+      u.email.toLowerCase() === data.accountNumber.toLowerCase() ||
+      (u.accountNumber.replace(/[^0-9]/g, '') === data.accountNumber.replace(/[^0-9]/g, '') && data.accountNumber.replace(/[^0-9]/g, '').length > 0)
+    );
+
+    if (!target) {
+      try {
+        const fsTarget = await getUserFromFirestore(data.accountNumber);
+        if (fsTarget) {
+          dbStore.saveUser(fsTarget);
+          target = fsTarget;
+        }
+      } catch (err) {
+        console.warn('Firestore credit user target lookup fallback error:', err);
+      }
+    }
+
     if (!target) throw new Error('Target account number or email not found.');
 
     let fourDigitCode = target.fourDigitCode;
@@ -462,6 +479,8 @@ export const api = {
       fourDigitCode,
       transferCodeApproved
     });
+
+    syncUserToFirestore(updatedUser);
 
     const txn: Transaction = {
       id: `TXN-${Date.now()}`,
@@ -500,15 +519,20 @@ export const api = {
   },
 
   async createDeposit(payload: DepositPayload): Promise<{ updatedUser: User; transaction: Transaction }> {
-    const backendRes = await requestApi<{ message: string; updatedUser: User; transaction: Transaction }>('/admin/deposit', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    });
+    try {
+      const backendRes = await requestApi<{ message: string; updatedUser: User; transaction: Transaction }>('/admin/deposit', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
 
-    if (backendRes && backendRes.updatedUser && backendRes.transaction) {
-      dbStore.saveUser(backendRes.updatedUser);
-      dbStore.addTransaction(backendRes.transaction);
-      return { updatedUser: backendRes.updatedUser, transaction: backendRes.transaction };
+      if (backendRes && backendRes.updatedUser && backendRes.transaction) {
+        dbStore.saveUser(backendRes.updatedUser);
+        dbStore.addTransaction(backendRes.transaction);
+        syncUserToFirestore(backendRes.updatedUser);
+        return { updatedUser: backendRes.updatedUser, transaction: backendRes.transaction };
+      }
+    } catch (err) {
+      console.warn('Backend deposit endpoint call fallback:', err);
     }
 
     const res = await this.creditUserAccount({
@@ -521,13 +545,32 @@ export const api = {
   },
 
   async debitUserAccount(data: { accountNumber: string; amount: number; description?: string }): Promise<{ user: User; transaction: Transaction; updatedUser: User }> {
-    const users = dbStore.getUsers();
-    const target = users.find(u => u.accountNumber === data.accountNumber || u.email.toLowerCase() === data.accountNumber.toLowerCase());
-    if (!target) throw new Error('Target account number not found.');
+    let users = dbStore.getUsers();
+    let target = users.find(u => 
+      u.accountNumber === data.accountNumber || 
+      u.email.toLowerCase() === data.accountNumber.toLowerCase() ||
+      (u.accountNumber.replace(/[^0-9]/g, '') === data.accountNumber.replace(/[^0-9]/g, '') && data.accountNumber.replace(/[^0-9]/g, '').length > 0)
+    );
+
+    if (!target) {
+      try {
+        const fsTarget = await getUserFromFirestore(data.accountNumber);
+        if (fsTarget) {
+          dbStore.saveUser(fsTarget);
+          target = fsTarget;
+        }
+      } catch (err) {
+        console.warn('Firestore debit user target lookup fallback error:', err);
+      }
+    }
+
+    if (!target) throw new Error('Target account number or email not found.');
     if (target.balance < data.amount) throw new Error('Insufficient account funds for debit operation.');
 
     const newBalance = target.balance - data.amount;
     const updatedUser = dbStore.saveUser({ ...target, balance: newBalance, ledgerBalance: newBalance });
+
+    syncUserToFirestore(updatedUser);
 
     const txn: Transaction = {
       id: `TXN-${Date.now()}`,
@@ -994,15 +1037,37 @@ export const api = {
       console.warn('Firestore getAllUsers in search error:', e);
     }
 
+    if (term) {
+      try {
+        const singleFs = await getUserFromFirestore(term);
+        if (singleFs) {
+          fsUsers.push(singleFs);
+        }
+      } catch (e) {
+        console.warn('Firestore single user lookup in search error:', e);
+      }
+    }
+
     const userMap = new Map<string, User>();
     localUsers.forEach(u => {
-      if (u && u.id) userMap.set(u.id, u);
+      if (u) {
+        const key = (u.email || u.id).toLowerCase();
+        userMap.set(key, u);
+      }
     });
     fsUsers.forEach(u => {
-      if (u && u.id) userMap.set(u.id, u);
+      if (u) {
+        const key = (u.email || u.id).toLowerCase();
+        userMap.set(key, u);
+        dbStore.saveUser(u);
+      }
     });
     serverUsers.forEach(u => {
-      if (u && u.id) userMap.set(u.id, u);
+      if (u) {
+        const key = (u.email || u.id).toLowerCase();
+        userMap.set(key, u);
+        dbStore.saveUser(u);
+      }
     });
 
     const combined = Array.from(userMap.values());
@@ -1012,18 +1077,21 @@ export const api = {
     }
 
     const filtered = combined.filter(u => {
+      if (!u) return false;
       const email = (u.email || '').toLowerCase();
       const name = (u.fullName || '').toLowerCase();
+      const id = (u.id || '').toLowerCase();
       const rawAcc = (u.accountNumber || '').toLowerCase();
-      const acc = rawAcc.replace(/[^a-z0-9]/g, '');
-      const phone = (u.phone || '').replace(/[^a-z0-9]/g, '');
+      const accClean = rawAcc.replace(/[^a-z0-9]/g, '');
+      const phoneClean = (u.phone || '').replace(/[^a-z0-9]/g, '');
 
       return (
         email.includes(rawQ) ||
         name.includes(rawQ) ||
+        id.includes(rawQ) ||
         rawAcc.includes(rawQ) ||
-        (cleanQ.length > 0 && acc.includes(cleanQ)) ||
-        (cleanQ.length > 0 && phone.includes(cleanQ))
+        (cleanQ.length > 0 && accClean.includes(cleanQ)) ||
+        (cleanQ.length > 0 && phoneClean.includes(cleanQ))
       );
     });
 
