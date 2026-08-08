@@ -13,7 +13,7 @@ interface DBStructure {
   cryptoDeposits: CryptoActivationDeposit[];
   verifications: Tier3VerificationRequest[];
   auditLogs: AuditLog[];
-  cryptoAddresses: { BTC: string; USDT: string };
+  cryptoAddresses: { BTC: string; USDT: string; TRX: string };
 }
 
 const DEFAULT_USERS: User[] = [
@@ -521,14 +521,26 @@ class LocalDBStore {
   // Crypto Addresses
   getCryptoAddresses() {
     this.refresh();
+    if (!this.db.cryptoAddresses) {
+      this.db.cryptoAddresses = {
+        BTC: 'bc1q9v8h9svb3x0k49z82lq09fw2zxl184p24a8svb',
+        USDT: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',
+        TRX: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t'
+      };
+      this.persist();
+    }
     return this.db.cryptoAddresses;
   }
 
-  updateCryptoAddresses(addresses: { BTC: string; USDT: string }) {
+  updateCryptoAddresses(addresses: { BTC?: string; USDT?: string; TRX?: string }) {
     this.refresh();
-    this.db.cryptoAddresses = addresses;
+    const current = this.getCryptoAddresses();
+    if (addresses.BTC) current.BTC = addresses.BTC;
+    if (addresses.USDT) current.USDT = addresses.USDT;
+    if (addresses.TRX) current.TRX = addresses.TRX;
+    this.db.cryptoAddresses = current;
     this.persist();
-    return addresses;
+    return current;
   }
 }
 

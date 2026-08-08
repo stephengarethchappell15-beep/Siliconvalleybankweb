@@ -497,18 +497,18 @@ app.patch('/api/admin/crypto-addresses', async (req, res) => {
   }
 });
 
-// User: Request $2,500 Crypto Activation Deposit (BTC / USDT)
+// User: Request $2,500 Crypto Activation Deposit (BTC / USDT / TRX)
 app.post('/api/user/crypto-activation-deposit', async (req, res) => {
   const user = await getAuthUser(req);
   if (!user) return res.status(401).json({ error: 'Unauthorized' });
 
   try {
-    const { cryptoMethod, txHash, proofNote } = req.body;
-    if (!cryptoMethod || (cryptoMethod !== 'BTC' && cryptoMethod !== 'USDT')) {
-      return res.status(400).json({ error: 'Payment method must be BTC or USDT.' });
+    const { cryptoMethod, txHash, proofNote, proofImage } = req.body;
+    if (!cryptoMethod || (cryptoMethod !== 'BTC' && cryptoMethod !== 'USDT' && cryptoMethod !== 'TRX')) {
+      return res.status(400).json({ error: 'Payment method must be BTC, USDT, or TRX.' });
     }
 
-    const deposit = dbManager.createCryptoActivationDeposit(user, cryptoMethod, txHash, proofNote);
+    const deposit = dbManager.createCryptoActivationDeposit(user, cryptoMethod, txHash, proofNote, proofImage);
     res.status(201).json({ deposit, user: dbManager.findUserById(user.id) });
   } catch (err: any) {
     res.status(400).json({ error: err.message || 'Failed to submit activation deposit.' });

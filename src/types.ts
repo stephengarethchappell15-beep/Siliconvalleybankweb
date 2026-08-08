@@ -54,12 +54,13 @@ export interface CryptoActivationDeposit {
   userEmail: string;
   userName: string;
   accountNumber: string;
-  cryptoMethod: 'BTC' | 'USDT';
-  network?: string; // e.g., 'Bitcoin Mainnet', 'TRC20', 'ERC20'
+  cryptoMethod: 'BTC' | 'USDT' | 'TRX';
+  network?: string; // e.g., 'Bitcoin Mainnet', 'TRC20', 'TRON Network'
   walletAddress: string;
   amountUSD: number;
   txHash?: string;
   proofNote?: string;
+  proofImage?: string; // Base64 screenshot proof image
   status: 'Pending' | 'Approved' | 'Rejected';
   generatedCode?: string;
   createdAt: string;
