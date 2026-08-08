@@ -1,0 +1,36 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Registered bank user account",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "fullName": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "accountNumber": { "type": "string" },
+        "role": { "type": "string" },
+        "balance": { "type": "number" },
+        "ledgerBalance": { "type": "number" },
+        "currency": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "email", "fullName"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User documents by ID"
+    },
+    "/users_by_email/{email}": {
+      "schema": "User",
+      "description": "User lookup documents by email"
+    },
+    "/users_by_account/{accNo}": {
+      "schema": "User",
+      "description": "User lookup documents by account number"
+    }
+  }
+}

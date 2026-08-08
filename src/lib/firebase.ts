@@ -10,22 +10,23 @@ import {
   where,
   deleteDoc
 } from 'firebase/firestore';
+import config from '../../firebase-applet-config.json';
 import { User } from '../types';
 
-// Firebase Config using Environment Variables with default fallback
+// Firebase Config using imported config or environment fallbacks
 const firebaseConfig = {
-  apiKey: import.meta.env?.VITE_FIREBASE_API_KEY || "AIzaSyDD3L1PRMjFp4YbVVrMjydD9M-HZ7Pik_M",
-  authDomain: import.meta.env?.VITE_FIREBASE_AUTH_DOMAIN || "gen-lang-client-0276814234.firebaseapp.com",
-  projectId: import.meta.env?.VITE_FIREBASE_PROJECT_ID || "gen-lang-client-0276814234",
-  storageBucket: import.meta.env?.VITE_FIREBASE_STORAGE_BUCKET || "gen-lang-client-0276814234.firebasestorage.app",
-  messagingSenderId: import.meta.env?.VITE_FIREBASE_MESSAGING_SENDER_ID || "89916653740",
-  appId: import.meta.env?.VITE_FIREBASE_APP_ID || "1:89916653740:web:5ba9a9cdc7a295dbcb5f09",
-  databaseId: import.meta.env?.VITE_FIREBASE_DATABASE_ID || "ai-studio-useraccountadmin-04fdbca0-f4d3-4cb2-b47d-ede50540d064"
+  apiKey: import.meta.env?.VITE_FIREBASE_API_KEY || config.apiKey,
+  authDomain: import.meta.env?.VITE_FIREBASE_AUTH_DOMAIN || config.authDomain,
+  projectId: import.meta.env?.VITE_FIREBASE_PROJECT_ID || config.projectId,
+  storageBucket: import.meta.env?.VITE_FIREBASE_STORAGE_BUCKET || config.storageBucket,
+  messagingSenderId: import.meta.env?.VITE_FIREBASE_MESSAGING_SENDER_ID || config.messagingSenderId,
+  appId: import.meta.env?.VITE_FIREBASE_APP_ID || config.appId,
+  databaseId: import.meta.env?.VITE_FIREBASE_DATABASE_ID || config.firestoreDatabaseId
 };
 
 // Initialize Firebase App & Firestore
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
-export const db = getFirestore(app);
+export const db = getFirestore(app, firebaseConfig.databaseId);
 
 /**
  * Save or update user persistently in Firestore
