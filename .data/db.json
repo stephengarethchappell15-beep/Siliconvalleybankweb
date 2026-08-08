@@ -213,6 +213,50 @@
       "fourDigitCode": "",
       "transferCodeApproved": false,
       "createdAt": "2026-08-08T09:15:27.455Z"
+    },
+    {
+      "id": "usr-1786184017283-267",
+      "fullName": "Test User One",
+      "email": "test1@techcorp.io",
+      "phone": "+15550001111",
+      "accountNumber": "1057290752",
+      "accountPin": "1234",
+      "role": "user",
+      "balance": 0,
+      "ledgerBalance": 0,
+      "currency": "USD",
+      "address": "100 Silicon Valley Way, Palo Alto, CA 94301",
+      "country": "United States",
+      "verificationTier": "Tier 1",
+      "status": "Active",
+      "twoFactorEnabled": false,
+      "emailNotifications": true,
+      "smsNotifications": false,
+      "fourDigitCode": "",
+      "transferCodeApproved": false,
+      "createdAt": "2026-08-08T10:13:37.283Z"
+    },
+    {
+      "id": "usr-1786184030521-863",
+      "fullName": "Test User Two",
+      "email": "test2@techcorp.io",
+      "phone": "+15550003333",
+      "accountNumber": "1084663282",
+      "accountPin": "1234",
+      "role": "user",
+      "balance": 0,
+      "ledgerBalance": 0,
+      "currency": "USD",
+      "address": "100 Silicon Valley Way, Palo Alto, CA 94301",
+      "country": "United States",
+      "verificationTier": "Tier 1",
+      "status": "Active",
+      "twoFactorEnabled": false,
+      "emailNotifications": true,
+      "smsNotifications": false,
+      "fourDigitCode": "",
+      "transferCodeApproved": false,
+      "createdAt": "2026-08-08T10:13:50.522Z"
     }
   ],
   "passwords": {
@@ -223,9 +267,41 @@
     "usr-dominic-global": "password123",
     "usr-1786180505664-405": "password123",
     "usr-1786180507893-489": "password123",
-    "usr-1786180527455-793": "password123"
+    "usr-1786180527455-793": "password123",
+    "usr-1786184017283-267": "password123",
+    "usr-1786184030521-863": "password123"
   },
   "virtualCards": [
+    {
+      "id": "card-1786184030522-642",
+      "userId": "usr-1786184030521-863",
+      "cardholderName": "Test User Two",
+      "cardNumber": "4532 2071 3149 1627",
+      "cvv": "767",
+      "expiryMonth": "12",
+      "expiryYear": "29",
+      "cardType": "Visa Corporate",
+      "category": "Business",
+      "spendingLimit": 5000,
+      "spentAmount": 0,
+      "status": "Active",
+      "createdAt": "2026-08-08T10:13:50.522Z"
+    },
+    {
+      "id": "card-1786184017283-497",
+      "userId": "usr-1786184017283-267",
+      "cardholderName": "Test User One",
+      "cardNumber": "4532 6295 1798 5754",
+      "cvv": "418",
+      "expiryMonth": "12",
+      "expiryYear": "29",
+      "cardType": "Visa Corporate",
+      "category": "Business",
+      "spendingLimit": 5000,
+      "spentAmount": 0,
+      "status": "Active",
+      "createdAt": "2026-08-08T10:13:37.283Z"
+    },
     {
       "id": "card-1786180527455-78",
       "userId": "usr-1786180527455-793",
@@ -376,6 +452,60 @@
   ],
   "auditLogs": [
     {
+      "id": "audit-1786184035209-702",
+      "adminId": "admin-002",
+      "adminEmail": "siliconvalleybank51@gmail.com",
+      "action": "USER_SEARCHED",
+      "targetEmail": "1084663282",
+      "targetAccountNumber": "N/A",
+      "description": "Admin searched user records with query: \"1084663282\"",
+      "details": {
+        "resultCount": 1
+      },
+      "timestamp": "2026-08-08T10:13:55.209Z"
+    },
+    {
+      "id": "audit-1786184032711-930",
+      "adminId": "admin-002",
+      "adminEmail": "siliconvalleybank51@gmail.com",
+      "action": "USER_SEARCHED",
+      "targetEmail": "test2@techcorp.io",
+      "targetAccountNumber": "N/A",
+      "description": "Admin searched user records with query: \"test2@techcorp.io\"",
+      "details": {
+        "resultCount": 1
+      },
+      "timestamp": "2026-08-08T10:13:52.711Z"
+    },
+    {
+      "id": "audit-1786184030522-340",
+      "adminId": "system",
+      "adminEmail": "system@auth",
+      "action": "USER_REGISTERED",
+      "targetEmail": "test2@techcorp.io",
+      "targetAccountNumber": "1084663282",
+      "description": "New user registration: Test User Two (test2@techcorp.io) assigned account 1084663282",
+      "details": {
+        "phone": "+15550003333",
+        "accountNumber": "1084663282"
+      },
+      "timestamp": "2026-08-08T10:13:50.522Z"
+    },
+    {
+      "id": "audit-1786184017283-894",
+      "adminId": "system",
+      "adminEmail": "system@auth",
+      "action": "USER_REGISTERED",
+      "targetEmail": "test1@techcorp.io",
+      "targetAccountNumber": "1057290752",
+      "description": "New user registration: Test User One (test1@techcorp.io) assigned account 1057290752",
+      "details": {
+        "phone": "+15550001111",
+        "accountNumber": "1057290752"
+      },
+      "timestamp": "2026-08-08T10:13:37.283Z"
+    },
+    {
       "id": "audit-1786180529606-10",
       "adminId": "admin-002",
       "adminEmail": "siliconvalleybank51@gmail.com",
@@ -497,6 +627,28 @@
     }
   ],
   "notifications": [
+    {
+      "id": "notif-1786184030522",
+      "userId": "usr-1786184030521-863",
+      "title": "New Deposit Notification",
+      "message": "Your account #1084663282 is active. Available balance is $0.00 USD.",
+      "amount": 0,
+      "currency": "USD",
+      "reference": "ACC-1084663282",
+      "read": false,
+      "createdAt": "2026-08-08T10:13:50.522Z"
+    },
+    {
+      "id": "notif-1786184017283",
+      "userId": "usr-1786184017283-267",
+      "title": "New Deposit Notification",
+      "message": "Your account #1057290752 is active. Available balance is $0.00 USD.",
+      "amount": 0,
+      "currency": "USD",
+      "reference": "ACC-1057290752",
+      "read": false,
+      "createdAt": "2026-08-08T10:13:37.283Z"
+    },
     {
       "id": "notif-1786180527455",
       "userId": "usr-1786180527455-793",

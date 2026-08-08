@@ -56,6 +56,25 @@ export const api = {
   // --- AUTHENTICATION ---
   async register(data: { fullName: string; email: string; phone?: string; password?: string; accountPin?: string }): Promise<AuthResponse> {
     const emailClean = data.email.trim().toLowerCase();
+
+    // Pre-check local dbStore for existing email
+    const localExisting = dbStore.getUserByEmail(emailClean);
+    if (localExisting && localExisting.email && localExisting.email.trim().toLowerCase() === emailClean) {
+      throw new Error('This email address is already linked to an existing account. Please log in or use a different email.');
+    }
+
+    // Pre-check Firestore for existing email
+    try {
+      const fsExisting = await getUserFromFirestore(emailClean);
+      if (fsExisting && fsExisting.email && fsExisting.email.trim().toLowerCase() === emailClean) {
+        throw new Error('This email address is already linked to an existing account. Please log in or use a different email.');
+      }
+    } catch (fsErr: any) {
+      if (fsErr?.message?.includes('already linked')) {
+        throw fsErr;
+      }
+    }
+
     let finalUser: User | null = null;
     let tokenStr = '';
 
@@ -70,55 +89,53 @@ export const api = {
         finalUser = backendRes.user;
         tokenStr = backendRes.token.replace(/^token-/, '');
       }
-    } catch (err) {
+    } catch (err: any) {
+      if (err && err.message) {
+        // If backend returned duplicate error or bad request, re-throw directly
+        throw err;
+      }
       console.warn('Backend register call fallback:', err);
     }
 
-    // 2. Local fallback if server unreachable or errored
+    // 2. Local fallback if server unreachable
     if (!finalUser) {
-      let existing = dbStore.getUserByEmail(emailClean);
-      if (existing) {
-        finalUser = existing;
-        tokenStr = existing.id;
-      } else {
-        const isAdmin = emailClean.includes('admin') || emailClean === 'admin@svb.com' || emailClean === 'siliconvalleybank51@gmail.com';
-        const accountNumber = `10${Math.floor(1000000000 + Math.random() * 9000000000)}`;
-        const uid = `usr-${Date.now()}`;
+      const isAdmin = emailClean.includes('admin') || emailClean === 'admin@svb.com' || emailClean === 'siliconvalleybank51@gmail.com';
+      const accountNumber = `10${Math.floor(1000000000 + Math.random() * 9000000000)}`;
+      const uid = `usr-${Date.now()}`;
 
-        finalUser = {
-          id: uid,
-          fullName: data.fullName.trim(),
-          email: emailClean,
-          phone: (data.phone && data.phone.trim()) || '+1 (555) 019-2834',
-          accountNumber,
-          role: isAdmin ? 'admin' : 'user',
-          balance: isAdmin ? 5000000 : 0.00,
-          ledgerBalance: isAdmin ? 5000000 : 0.00,
-          currency: 'USD',
-          address: '100 Silicon Valley Way, Palo Alto, CA 94301',
-          country: 'United States',
-          verificationTier: 'Tier 1',
-          status: 'Active',
-          accountPin: data.accountPin || '1234',
-          fourDigitCode: isAdmin ? '8842' : '',
-          transferCodeApproved: isAdmin ? true : false,
-          createdAt: new Date().toISOString()
-        };
-        tokenStr = uid;
+      finalUser = {
+        id: uid,
+        fullName: data.fullName.trim(),
+        email: emailClean,
+        phone: (data.phone && data.phone.trim()) || '+1 (555) 019-2834',
+        accountNumber,
+        role: isAdmin ? 'admin' : 'user',
+        balance: isAdmin ? 5000000 : 0.00,
+        ledgerBalance: isAdmin ? 5000000 : 0.00,
+        currency: 'USD',
+        address: '100 Silicon Valley Way, Palo Alto, CA 94301',
+        country: 'United States',
+        verificationTier: 'Tier 1',
+        status: 'Active',
+        accountPin: data.accountPin || '1234',
+        fourDigitCode: isAdmin ? '8842' : '',
+        transferCodeApproved: isAdmin ? true : false,
+        createdAt: new Date().toISOString()
+      };
+      tokenStr = uid;
 
-        // Initial Welcome Deposit Notification (Account Created)
-        dbStore.addNotification({
-          id: `NOTIF-${Date.now()}`,
-          userId: uid,
-          title: 'New Deposit Notification',
-          message: `Your account #${accountNumber} is active. Available balance is $0.00 USD.`,
-          amount: 0.00,
-          currency: 'USD',
-          reference: `ACC-${accountNumber}`,
-          read: false,
-          createdAt: new Date().toISOString()
-        });
-      }
+      // Initial Welcome Deposit Notification (Account Created)
+      dbStore.addNotification({
+        id: `NOTIF-${Date.now()}`,
+        userId: uid,
+        title: 'New Deposit Notification',
+        message: `Your account #${accountNumber} is active. Available balance is $0.00 USD.`,
+        amount: 0.00,
+        currency: 'USD',
+        reference: `ACC-${accountNumber}`,
+        read: false,
+        createdAt: new Date().toISOString()
+      });
     }
 
     // Save to local store and set auth token
@@ -126,7 +143,7 @@ export const api = {
     dbStore.setStoredToken(tokenStr || finalUser.id);
 
     // Sync user asynchronously to Firebase Firestore SDK so accounts NEVER vanish
-    syncUserToFirestore(finalUser, data.password || 'password123');
+    await syncUserToFirestore(finalUser, data.password || 'password123');
 
     return { user: finalUser, token: tokenStr || finalUser.id };
   },

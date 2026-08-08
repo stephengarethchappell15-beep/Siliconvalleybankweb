@@ -528,6 +528,12 @@ class DatabaseManager {
     });
   }
 
+  public findUserByExactEmail(email: string): User | undefined {
+    if (!email) return undefined;
+    const clean = email.trim().toLowerCase();
+    return this.db.users.find(u => u.email && u.email.trim().toLowerCase() === clean);
+  }
+
   public findUserByEmail(email: string): User | undefined {
     return this.findUserByEmailOrAccount(email);
   }
@@ -543,9 +549,9 @@ class DatabaseManager {
 
   public createUser(userData: { fullName: string; email: string; phone: string; password: string; accountPin?: string }): { user: User; token: string } {
     const emailClean = userData.email.trim().toLowerCase();
-    const existing = this.findUserByEmail(emailClean);
+    const existing = this.findUserByExactEmail(emailClean);
     if (existing) {
-      throw new Error('An account with this email address already exists.');
+      throw new Error('This email address is already linked to an existing account. Please log in or use a different email.');
     }
 
     const userId = `usr-${Date.now()}-${Math.floor(Math.random() * 1000)}`;

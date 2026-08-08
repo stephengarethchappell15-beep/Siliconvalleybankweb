@@ -4,7 +4,7 @@ import { api } from '../services/api';
 import { AdminDepositPanel } from './AdminDepositPanel';
 import { AdminAuditLogs } from './AdminAuditLogs';
 import { CustomerSupportPanel } from './CustomerSupportPanel';
-import { ShieldAlert, Users, Sparkles, FileText, Headphones, Search, UserCheck, Shield, DollarSign, ArrowUpRight, CheckCircle2, XCircle, Clock, Key, ArrowDownRight, Ban, ShieldCheck } from 'lucide-react';
+import { ShieldAlert, Users, Sparkles, FileText, Headphones, Search, UserCheck, Shield, DollarSign, ArrowUpRight, CheckCircle2, XCircle, Clock, Key, ArrowDownRight, Ban, ShieldCheck, UserPlus, X, Plus } from 'lucide-react';
 
 interface AdminPanelProps {
   adminUser: User;
@@ -17,6 +17,45 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
   const [searchQuery, setSearchQuery] = useState('');
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [selectedUserForDeposit, setSelectedUserForDeposit] = useState<User | null>(null);
+
+  // Create User Account Modal State
+  const [showCreateUserModal, setShowCreateUserModal] = useState(false);
+  const [newFullName, setNewFullName] = useState('');
+  const [newEmail, setNewEmail] = useState('');
+  const [newPhone, setNewPhone] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [newAccountPin, setNewAccountPin] = useState('1234');
+  const [createUserLoading, setCreateUserLoading] = useState(false);
+  const [createUserError, setCreateUserError] = useState<string | null>(null);
+  const [createUserSuccess, setCreateUserSuccess] = useState<string | null>(null);
+
+  const handleCreateUserSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCreateUserError(null);
+    setCreateUserSuccess(null);
+    setCreateUserLoading(true);
+
+    try {
+      const res = await api.register({
+        fullName: newFullName,
+        email: newEmail,
+        phone: newPhone,
+        password: newPassword || 'password123',
+        accountPin: newAccountPin || '1234'
+      });
+      setCreateUserSuccess(`User account created successfully! Generated Account Number: ${res.user.accountNumber}`);
+      setNewFullName('');
+      setNewEmail('');
+      setNewPhone('');
+      setNewPassword('');
+      setNewAccountPin('1234');
+      fetchUsers(searchQuery);
+    } catch (err: any) {
+      setCreateUserError(err.message || 'Failed to create user account.');
+    } finally {
+      setCreateUserLoading(false);
+    }
+  };
 
   // Tier 3 Verifications State
   const [verifications, setVerifications] = useState<Tier3VerificationRequest[]>([]);
@@ -383,15 +422,28 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
               <p className="text-xs text-slate-400 mt-0.5">Search clients by email, 10-digit account number, or name.</p>
             </div>
 
-            <div className="relative w-full sm:w-72">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search email, account #..."
-                className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-xl pl-10 pr-4 py-2 text-xs text-white placeholder-slate-500 outline-none"
-              />
+            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+              <div className="relative flex-1 sm:w-64">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search email, account #..."
+                  className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-xl pl-10 pr-4 py-2 text-xs text-white placeholder-slate-500 outline-none"
+                />
+              </div>
+              <button
+                onClick={() => {
+                  setCreateUserError(null);
+                  setCreateUserSuccess(null);
+                  setShowCreateUserModal(true);
+                }}
+                className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-md shrink-0 cursor-pointer"
+              >
+                <UserPlus className="w-4 h-4" />
+                <span>Create Account</span>
+              </button>
             </div>
           </div>
 
@@ -963,6 +1015,118 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
       {/* Sub-Tab 6: Global Support Ticket Manager */}
       {subTab === 'support' && (
         <CustomerSupportPanel user={adminUser} />
+      )}
+
+      {/* Create User Account Modal */}
+      {showCreateUserModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-5">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+              <div className="flex items-center gap-2">
+                <UserPlus className="w-5 h-5 text-amber-400" />
+                <h3 className="text-base font-bold text-white">Create New User Account</h3>
+              </div>
+              <button
+                onClick={() => setShowCreateUserModal(false)}
+                className="text-slate-400 hover:text-white transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {createUserError && (
+              <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-xs text-rose-300 font-medium flex items-start gap-2">
+                <XCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                <span>{createUserError}</span>
+              </div>
+            )}
+
+            {createUserSuccess && (
+              <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-xs text-emerald-300 font-medium flex items-start gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                <span>{createUserSuccess}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleCreateUserSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1">Full Legal Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={newFullName}
+                  onChange={(e) => setNewFullName(e.target.value)}
+                  placeholder="e.g. Eleanor Vance"
+                  className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-xl px-3.5 py-2.5 text-xs text-white outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1">Email Address *</label>
+                <input
+                  type="email"
+                  required
+                  value={newEmail}
+                  onChange={(e) => setNewEmail(e.target.value)}
+                  placeholder="e.g. eleanor@techcorp.io"
+                  className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-xl px-3.5 py-2.5 text-xs text-white outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1">Phone Number</label>
+                <input
+                  type="text"
+                  value={newPhone}
+                  onChange={(e) => setNewPhone(e.target.value)}
+                  placeholder="+1 (555) 019-2834"
+                  className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-xl px-3.5 py-2.5 text-xs text-white outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">Password</label>
+                  <input
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="password123"
+                    className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-xl px-3.5 py-2.5 text-xs text-white outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">4-Digit Account PIN</label>
+                  <input
+                    type="text"
+                    maxLength={4}
+                    value={newAccountPin}
+                    onChange={(e) => setNewAccountPin(e.target.value)}
+                    placeholder="1234"
+                    className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-xl px-3.5 py-2.5 text-xs text-white outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateUserModal(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white transition-colors cursor-pointer"
+                >
+                  Close
+                </button>
+                <button
+                  type="submit"
+                  disabled={createUserLoading}
+                  className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-4 py-2 rounded-xl text-xs transition-all shadow-md flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+                >
+                  {createUserLoading ? 'Creating...' : 'Create Account'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );
