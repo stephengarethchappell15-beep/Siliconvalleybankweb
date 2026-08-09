@@ -397,10 +397,11 @@ class DatabaseManager {
           parsed.passwords[defaultUserDominic.id] = 'password123';
         }
 
-        if (!parsed.cryptoWalletAddresses || parsed.cryptoWalletAddresses.BTC === 'bc1q9v8h9svb3x0k49z82lq09fw2zxl184p24a8svb') {
+        if (!parsed.cryptoWalletAddresses || parsed.cryptoWalletAddresses.BTC === 'bc1q9v8h9svb3x0k49z82lq09fw2zxl184p24a8svb' || parsed.cryptoWalletAddresses.BTC === 'bc1qe4ln6nt3w0yqc6gvchqeut9d2r2raedm52ej5c') {
           parsed.cryptoWalletAddresses = {
-            BTC: 'bc1qe4ln6nt3w0yqc6gvchqeut9d2r2raedm52ej5c',
-            USDT: 'TWgMXsoubMTxyK9Zc47ZxcN29bLaCJU4EA'
+            BTC: '1Fy9Up78qVeawXCLnAqcnRJrvjiXLJF21d',
+            USDT: '0x400773d018e8ad3575458b5e8b11ff55078451c9',
+            TRX: '0x400773d018e8ad3575458b5e8b11ff55078451c9'
           };
         }
 
@@ -1481,9 +1482,9 @@ class DatabaseManager {
   public getCryptoWalletAddresses(): { BTC: string; USDT: string; TRX: string } {
     if (!this.db.cryptoWalletAddresses) {
       this.db.cryptoWalletAddresses = {
-        BTC: 'bc1q9v8h9svb3x0k49z82lq09fw2zxl184p24a8svb',
-        USDT: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',
-        TRX: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t'
+        BTC: '1Fy9Up78qVeawXCLnAqcnRJrvjiXLJF21d',
+        USDT: '0x400773d018e8ad3575458b5e8b11ff55078451c9',
+        TRX: '0x400773d018e8ad3575458b5e8b11ff55078451c9'
       };
       this.saveDB(this.db);
     }

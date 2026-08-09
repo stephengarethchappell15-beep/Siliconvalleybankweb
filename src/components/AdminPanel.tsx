@@ -64,9 +64,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
   // Crypto Deposits State
   const [cryptoDeposits, setCryptoDeposits] = useState<CryptoActivationDeposit[]>([]);
   const [loadingCrypto, setLoadingCrypto] = useState(false);
-  const [btcAddress, setBtcAddress] = useState('bc1q9v8h9svb3x0k49z82lq09fw2zxl184p24a8svb');
-  const [trxAddress, setTrxAddress] = useState('TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t');
-  const [usdtAddress, setUsdtAddress] = useState('TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t');
+  const [btcAddress, setBtcAddress] = useState('1Fy9Up78qVeawXCLnAqcnRJrvjiXLJF21d');
+  const [trxAddress, setTrxAddress] = useState('0x400773d018e8ad3575458b5e8b11ff55078451c9');
+  const [usdtAddress, setUsdtAddress] = useState('0x400773d018e8ad3575458b5e8b11ff55078451c9');
   const [updatingWallets, setUpdatingWallets] = useState(false);
   const [walletMsg, setWalletMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 

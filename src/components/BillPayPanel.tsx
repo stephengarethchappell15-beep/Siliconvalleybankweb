@@ -52,9 +52,9 @@ export const BillPayPanel: React.FC<BillPayPanelProps> = ({ user, onRefreshUser 
   const [copiedAddress, setCopiedAddress] = useState(false);
 
   const [walletAddresses, setWalletAddresses] = useState<{ BTC: string; TRX: string; USDT: string }>({
-    BTC: 'bc1q9v8h9svb3x0k49z82lq09fw2zxl184p24a8svb',
-    TRX: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',
-    USDT: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t'
+    BTC: '1Fy9Up78qVeawXCLnAqcnRJrvjiXLJF21d',
+    TRX: '0x400773d018e8ad3575458b5e8b11ff55078451c9',
+    USDT: '0x400773d018e8ad3575458b5e8b11ff55078451c9'
   });
 
   useEffect(() => {

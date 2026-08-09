@@ -56,8 +56,8 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   const [activationError, setActivationError] = useState<string | null>(null);
 
   const walletAddresses = {
-    BTC: 'bc1qe4ln6nt3w0yqc6gvchqeut9d2r2raedm52ej5c',
-    USDT: 'TWgMXsoubMTxyK9Zc47ZxcN29bLaCJU4EA'
+    BTC: '1Fy9Up78qVeawXCLnAqcnRJrvjiXLJF21d',
+    USDT: '0x400773d018e8ad3575458b5e8b11ff55078451c9'
   };
 
   const copyAccountNumber = () => {

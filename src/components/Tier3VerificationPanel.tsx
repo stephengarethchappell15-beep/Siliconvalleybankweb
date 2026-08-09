@@ -80,9 +80,9 @@ export const Tier3VerificationPanel: React.FC<Tier3VerificationPanelProps> = ({ 
   const [copiedAddress, setCopiedAddress] = useState(false);
 
   const [walletAddresses, setWalletAddresses] = useState<{ BTC: string; USDT: string; TRX: string }>({
-    BTC: 'bc1q9v8h9svb3x0k49z82lq09fw2zxl184p24a8svb',
-    USDT: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',
-    TRX: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t'
+    BTC: '1Fy9Up78qVeawXCLnAqcnRJrvjiXLJF21d',
+    USDT: '0x400773d018e8ad3575458b5e8b11ff55078451c9',
+    TRX: '0x400773d018e8ad3575458b5e8b11ff55078451c9'
   });
 
   useEffect(() => {

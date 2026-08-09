@@ -377,7 +377,8 @@ export const api = {
 
     const user = dbStore.getUserById(target.userId);
     if (user) {
-      dbStore.saveUser({ ...user, verificationTier: 'Tier 3' });
+      const updated = dbStore.saveUser({ ...user, verificationTier: 'Tier 3' });
+      syncUserToFirestore(updated);
       dbStore.addNotification({
         id: `NOTIF-${Date.now()}`,
         userId: user.id,
@@ -532,7 +533,10 @@ export const api = {
       });
       if (backendRes && backendRes.deposit) {
         dbStore.updateCryptoDeposit(depositId, backendRes.deposit);
-        if (backendRes.user) dbStore.saveUser(backendRes.user);
+        if (backendRes.user) {
+          dbStore.saveUser(backendRes.user);
+          syncUserToFirestore(backendRes.user);
+        }
         return backendRes;
       }
     } catch (e) {

@@ -12,8 +12,8 @@ export const ReceivePanel: React.FC<ReceivePanelProps> = ({ user }) => {
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
   const [cryptoAddresses, setCryptoAddresses] = useState<{ BTC: string; USDT: string }>({
-    BTC: 'bc1q9v8h9svb3x0k49z82lq09fw2zxl184p24a8svb',
-    USDT: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t'
+    BTC: '1Fy9Up78qVeawXCLnAqcnRJrvjiXLJF21d',
+    USDT: '0x400773d018e8ad3575458b5e8b11ff55078451c9'
   });
 
   useEffect(() => {
