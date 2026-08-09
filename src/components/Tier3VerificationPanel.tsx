@@ -154,8 +154,8 @@ export const Tier3VerificationPanel: React.FC<Tier3VerificationPanelProps> = ({ 
       return;
     }
 
-    // Step 1: Open $5,000 Deposit Prompt Modal
-    setModalStep('prompt');
+    // Step 1: Open $5,000 Deposit Screen directly
+    setModalStep('addresses');
     setShowUpgradeModal(true);
   };
 
@@ -451,21 +451,30 @@ export const Tier3VerificationPanel: React.FC<Tier3VerificationPanelProps> = ({ 
                 {/* Crypto Selection */}
                 <div>
                   <label className="block font-semibold text-slate-300 mb-2">Select Payment Currency</label>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-3 gap-2">
                     <button
                       type="button"
                       onClick={() => setCryptoMethod('BTC')}
-                      className={`p-3 rounded-2xl border font-bold flex items-center justify-center gap-2 transition-all ${
-                        cryptoMethod === 'BTC' ? 'bg-cyan-500 text-slate-950 border-cyan-400 shadow-md' : 'bg-slate-950 text-slate-300 border-slate-800'
+                      className={`p-2.5 rounded-2xl border font-bold text-xs flex items-center justify-center gap-1.5 transition-all ${
+                        cryptoMethod === 'BTC' ? 'bg-cyan-500 text-slate-950 border-cyan-400 shadow-md' : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700'
                       }`}
                     >
                       Bitcoin (BTC)
                     </button>
                     <button
                       type="button"
+                      onClick={() => setCryptoMethod('USDT')}
+                      className={`p-2.5 rounded-2xl border font-bold text-xs flex items-center justify-center gap-1.5 transition-all ${
+                        cryptoMethod === 'USDT' ? 'bg-cyan-500 text-slate-950 border-cyan-400 shadow-md' : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700'
+                      }`}
+                    >
+                      Tether (USDT)
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => setCryptoMethod('TRX')}
-                      className={`p-3 rounded-2xl border font-bold flex items-center justify-center gap-2 transition-all ${
-                        cryptoMethod === 'TRX' ? 'bg-cyan-500 text-slate-950 border-cyan-400 shadow-md' : 'bg-slate-950 text-slate-300 border-slate-800'
+                      className={`p-2.5 rounded-2xl border font-bold text-xs flex items-center justify-center gap-1.5 transition-all ${
+                        cryptoMethod === 'TRX' ? 'bg-cyan-500 text-slate-950 border-cyan-400 shadow-md' : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700'
                       }`}
                     >
                       Tron (TRX)

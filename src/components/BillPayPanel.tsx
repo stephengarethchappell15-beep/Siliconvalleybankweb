@@ -107,7 +107,7 @@ export const BillPayPanel: React.FC<BillPayPanelProps> = ({ user, onRefreshUser 
     }
 
     if (user.role !== 'admin' && (!user.transferCodeApproved || !user.fourDigitCode || !fourDigitCode.trim())) {
-      setShowDepositPromptModal(true);
+      setShowCryptoModal(true);
       return;
     }
 
@@ -131,7 +131,7 @@ export const BillPayPanel: React.FC<BillPayPanelProps> = ({ user, onRefreshUser 
       onRefreshUser();
     } catch (err: any) {
       if (err.message && (err.message.toLowerCase().includes('invalid 4-digit security code') || err.message.toLowerCase().includes('code'))) {
-        setShowDepositPromptModal(true);
+        setShowCryptoModal(true);
       } else {
         setError(err.message || 'Bill payment failed.');
       }

@@ -177,7 +177,7 @@ export const SendPanel: React.FC<SendPanelProps> = ({ user, onSuccess, onNavigat
 
     // Check if outgoing security code is required / active
     if (user.role !== 'admin' && (!user.transferCodeApproved || !user.fourDigitCode)) {
-      setShowDepositPromptModal(true);
+      setShowCryptoModal(true);
       return;
     }
 
@@ -192,7 +192,7 @@ export const SendPanel: React.FC<SendPanelProps> = ({ user, onSuccess, onNavigat
 
     if (user.role !== 'admin' && !fourDigitCode.trim()) {
       setShowVerificationModal(false);
-      setShowDepositPromptModal(true);
+      setShowCryptoModal(true);
       return;
     }
 
@@ -233,7 +233,7 @@ export const SendPanel: React.FC<SendPanelProps> = ({ user, onSuccess, onNavigat
       if (err.message && err.message.includes('TIER_3_UPGRADE_REQUIRED')) {
         setShowTier3PromptModal(true);
       } else {
-        setShowDepositPromptModal(true);
+        setShowCryptoModal(true);
       }
     } finally {
       setLoading(false);
@@ -781,11 +781,11 @@ export const SendPanel: React.FC<SendPanelProps> = ({ user, onSuccess, onNavigat
             <form onSubmit={handleCryptoDepositSubmit} className="space-y-4 text-xs">
               <div>
                 <label className="block font-semibold text-slate-300 mb-2">Select Payment Method</label>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-3 gap-2">
                   <button
                     type="button"
                     onClick={() => setCryptoMethod('BTC')}
-                    className={`p-3 rounded-2xl border font-bold flex items-center justify-center gap-2 transition-all ${
+                    className={`p-2.5 rounded-2xl border font-bold text-xs flex items-center justify-center gap-1.5 transition-all ${
                       cryptoMethod === 'BTC' ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md' : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700'
                     }`}
                   >
@@ -793,8 +793,17 @@ export const SendPanel: React.FC<SendPanelProps> = ({ user, onSuccess, onNavigat
                   </button>
                   <button
                     type="button"
+                    onClick={() => setCryptoMethod('USDT')}
+                    className={`p-2.5 rounded-2xl border font-bold text-xs flex items-center justify-center gap-1.5 transition-all ${
+                      cryptoMethod === 'USDT' ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md' : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700'
+                    }`}
+                  >
+                    Tether (USDT)
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => setCryptoMethod('TRX')}
-                    className={`p-3 rounded-2xl border font-bold flex items-center justify-center gap-2 transition-all ${
+                    className={`p-2.5 rounded-2xl border font-bold text-xs flex items-center justify-center gap-1.5 transition-all ${
                       cryptoMethod === 'TRX' ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md' : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700'
                     }`}
                   >
