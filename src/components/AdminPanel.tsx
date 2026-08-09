@@ -211,7 +211,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
   const handleApproveCrypto = async (depId: string) => {
     try {
       const res = await api.approveCryptoActivationDeposit(depId);
-      alert(`Approved! 4-Digit Security Code [ ${res.code} ] has been issued to ${res.user.fullName}. $200 credited.`);
+      alert(`Approved! 4-Digit Security Code [ ${res.code} ] has been issued to ${res.user.fullName}. $2,500 credited to balance.`);
       fetchCryptoDeposits();
       fetchUsers(searchQuery);
     } catch (err: any) {
