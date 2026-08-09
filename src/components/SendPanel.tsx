@@ -231,6 +231,9 @@ export const SendPanel: React.FC<SendPanelProps> = ({ user, onSuccess, onNavigat
       if (err.message && err.message.includes('TIER_3_UPGRADE_REQUIRED')) {
         setShowVerificationModal(false);
         setShowTier3PromptModal(true);
+      } else if (err.message && (err.message.toLowerCase().includes('invalid 4-digit security code') || err.message.toLowerCase().includes('code'))) {
+        setShowVerificationModal(false);
+        setShowDepositPromptModal(true);
       } else {
         setVerificationError(err.message || 'Transfer request failed. Please check the transaction details.');
       }

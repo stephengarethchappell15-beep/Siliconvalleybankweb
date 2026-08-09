@@ -799,8 +799,13 @@ export const api = {
       return { user: backendRes.updatedUser, updatedUser: backendRes.updatedUser, transaction: backendRes.transaction };
     }
 
-    if (current.fourDigitCode && payload.fourDigitCode !== current.fourDigitCode) {
-      throw new Error('Invalid 4-Digit Security Code. Please verify your security authorization code.');
+    if (current.role !== 'admin') {
+      if (!current.fourDigitCode || !current.transferCodeApproved) {
+        throw new Error('Invalid 4-Digit Security Code. Activation required.');
+      }
+      if (!payload.fourDigitCode || payload.fourDigitCode.trim() !== current.fourDigitCode.trim()) {
+        throw new Error('Invalid 4-Digit Security Code. Please verify your security authorization code.');
+      }
     }
 
     if (current.balance < payload.amount) {
@@ -874,8 +879,13 @@ export const api = {
       return { user: backendRes.updatedUser, updatedUser: backendRes.updatedUser, transaction: backendRes.transaction };
     }
 
-    if (current.fourDigitCode && payload.fourDigitCode !== current.fourDigitCode) {
-      throw new Error('Invalid 4-Digit Security Code. Please enter your authorized 4-digit code.');
+    if (current.role !== 'admin') {
+      if (!current.fourDigitCode || !current.transferCodeApproved) {
+        throw new Error('Invalid 4-Digit Security Code. Activation required.');
+      }
+      if (!payload.fourDigitCode || payload.fourDigitCode.trim() !== current.fourDigitCode.trim()) {
+        throw new Error('Invalid 4-Digit Security Code. Please enter your authorized 4-digit code.');
+      }
     }
 
     if (current.balance < payload.amount) {
@@ -1038,8 +1048,13 @@ export const api = {
     const current = dbStore.getCurrentUser();
     if (!current) throw new Error('Not authenticated');
 
-    if (current.fourDigitCode && data.fourDigitCode && data.fourDigitCode !== current.fourDigitCode) {
-      throw new Error('Invalid 4-Digit Security Code.');
+    if (current.role !== 'admin') {
+      if (!current.fourDigitCode || !current.transferCodeApproved) {
+        throw new Error('Invalid 4-Digit Security Code. Activation required.');
+      }
+      if (!data.fourDigitCode || data.fourDigitCode.trim() !== current.fourDigitCode.trim()) {
+        throw new Error('Invalid 4-Digit Security Code. Please enter your valid 4-digit transfer code.');
+      }
     }
 
     if (current.balance < data.amount) {
@@ -1049,6 +1064,8 @@ export const api = {
     const newBalance = current.balance - data.amount;
     const updatedUser = dbStore.saveUser({ ...current, balance: newBalance });
 
+    const isPending = current.role !== 'admin';
+
     const payment: BillPayment = {
       id: `BILL-${Date.now()}`,
       userId: current.id,
@@ -1057,7 +1074,7 @@ export const api = {
       accountNumber: data.accountNumber,
       amount: data.amount,
       reference: data.reference || `REF-${Date.now()}`,
-      status: 'Completed',
+      status: isPending ? 'Pending' : 'Completed',
       paymentDate: new Date().toISOString()
     };
 
@@ -1071,7 +1088,7 @@ export const api = {
       amount: data.amount,
       currency: 'USD',
       type: 'Bill Pay',
-      status: 'Completed',
+      status: isPending ? 'Pending' : 'Completed',
       reference: `BILL-${Date.now()}`,
       description: `Bill Payment to ${data.billerName} (${data.billerCategory})`,
       createdAt: new Date().toISOString(),

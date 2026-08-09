@@ -130,7 +130,11 @@ export const BillPayPanel: React.FC<BillPayPanelProps> = ({ user, onRefreshUser 
       loadBills();
       onRefreshUser();
     } catch (err: any) {
-      setError(err.message || 'Bill payment failed.');
+      if (err.message && (err.message.toLowerCase().includes('invalid 4-digit security code') || err.message.toLowerCase().includes('code'))) {
+        setShowDepositPromptModal(true);
+      } else {
+        setError(err.message || 'Bill payment failed.');
+      }
     } finally {
       setSubmitting(false);
     }
