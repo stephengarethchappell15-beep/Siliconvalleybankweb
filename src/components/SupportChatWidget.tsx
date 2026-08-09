@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { User, SupportTicket } from '../types';
 import { api } from '../services/api';
-import { MessageSquare, X, Send, Headphones, ShieldCheck, Clock, CheckCircle2 } from 'lucide-react';
+import { MessageSquare, X, Send, Headphones, ShieldCheck, Image, CheckCircle2 } from 'lucide-react';
 
 interface SupportChatWidgetProps {
   user: User;
@@ -12,9 +12,11 @@ export const SupportChatWidget: React.FC<SupportChatWidgetProps> = ({ user }) =>
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [activeTicket, setActiveTicket] = useState<SupportTicket | null>(null);
   const [messageText, setMessageText] = useState('');
+  const [attachedImage, setAttachedImage] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [hasUnread, setHasUnread] = useState(false);
+  const [selectedImageModal, setSelectedImageModal] = useState<string | null>(null);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -57,26 +59,45 @@ export const SupportChatWidget: React.FC<SupportChatWidgetProps> = ({ user }) =>
     }
   }, [isOpen, activeTicket?.messages]);
 
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        alert('Image file size must be under 5MB.');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setAttachedImage(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!messageText.trim()) return;
+    if (!messageText.trim() && !attachedImage) return;
 
     try {
       setSending(true);
+      const images = attachedImage ? [attachedImage] : undefined;
+
       if (activeTicket) {
-        const res = await api.replySupportTicket(activeTicket.id, messageText.trim());
+        const res = await api.replySupportTicket(activeTicket.id, messageText.trim() || 'Attached Image', images);
         setActiveTicket(res.ticket);
       } else {
         const res = await api.createSupportTicket({
           subject: 'Customer Support Consultation',
           category: 'General',
           priority: 'Medium',
-          message: messageText.trim()
+          message: messageText.trim() || 'Attached Image',
+          images
         });
         setActiveTicket(res.ticket);
         fetchUserTickets(true);
       }
       setMessageText('');
+      setAttachedImage('');
     } catch (err: any) {
       alert(err.message || 'Failed to send message to Customer Support.');
     } finally {
@@ -109,7 +130,7 @@ export const SupportChatWidget: React.FC<SupportChatWidgetProps> = ({ user }) =>
 
       {/* Floating Chat Panel */}
       {isOpen && (
-        <div className="w-[360px] sm:w-[400px] h-[500px] bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-fadeIn">
+        <div className="w-[360px] sm:w-[400px] h-[520px] bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-fadeIn">
           {/* Header */}
           <div className="bg-slate-950 p-4 border-b border-slate-800 flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -147,7 +168,7 @@ export const SupportChatWidget: React.FC<SupportChatWidgetProps> = ({ user }) =>
                 <div>
                   <p className="font-semibold text-slate-200 text-xs">Welcome to Client Support</p>
                   <p className="text-[11px] text-slate-400 mt-1 max-w-[240px] mx-auto">
-                    How can we assist you today? Send a message below to connect directly with our support team.
+                    How can we assist you today? Send a message or upload deposit proof screenshots below.
                   </p>
                 </div>
               </div>
@@ -163,7 +184,7 @@ export const SupportChatWidget: React.FC<SupportChatWidgetProps> = ({ user }) =>
                   >
                     <div className="flex items-center gap-1 text-[10px] text-slate-400 mb-0.5">
                       <span className="font-semibold text-slate-300">
-                        {isUser ? 'You' : 'Customer Support'}
+                        {isUser ? 'You' : (m.senderName || 'Customer Support')}
                       </span>
                       <span>•</span>
                       <span>
@@ -174,13 +195,28 @@ export const SupportChatWidget: React.FC<SupportChatWidgetProps> = ({ user }) =>
                       </span>
                     </div>
                     <div
-                      className={`p-3 rounded-2xl text-xs text-slate-100 ${
+                      className={`p-3 rounded-2xl text-xs space-y-2 ${
                         isUser
-                          ? 'bg-emerald-600/30 border border-emerald-500/40 rounded-tr-none'
+                          ? 'bg-emerald-600/30 border border-emerald-500/40 rounded-tr-none text-slate-100'
                           : 'bg-slate-900 border border-slate-800 rounded-tl-none text-slate-200'
                       }`}
                     >
-                      {m.message}
+                      <p className="whitespace-pre-wrap">{m.message}</p>
+
+                      {/* Render attached images */}
+                      {m.images && m.images.length > 0 && (
+                        <div className="flex flex-wrap gap-2 pt-1">
+                          {m.images.map((img, idx) => (
+                            <img
+                              key={idx}
+                              src={img}
+                              alt="Attached proof"
+                              onClick={() => setSelectedImageModal(img)}
+                              className="w-24 h-24 object-cover rounded-xl border border-slate-700 cursor-pointer hover:opacity-90 transition-opacity shadow-sm"
+                            />
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
@@ -189,24 +225,67 @@ export const SupportChatWidget: React.FC<SupportChatWidgetProps> = ({ user }) =>
             <div ref={chatEndRef} />
           </div>
 
+          {/* Attached Image Preview */}
+          {attachedImage && (
+            <div className="p-2 bg-slate-900 border-t border-slate-800 flex items-center justify-between text-xs px-3">
+              <div className="flex items-center gap-2">
+                <img src={attachedImage} alt="Attachment" className="w-8 h-8 object-cover rounded-lg border border-slate-700" />
+                <span className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Image attached
+                </span>
+              </div>
+              <button
+                onClick={() => setAttachedImage('')}
+                className="text-slate-400 hover:text-rose-400 p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
           {/* Input Footer */}
           <form onSubmit={handleSendMessage} className="p-3 bg-slate-950 border-t border-slate-800 flex items-center gap-2">
+            <label className="p-2 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-cyan-400 rounded-xl border border-slate-800 cursor-pointer transition-colors shrink-0" title="Attach Image">
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleImageUpload}
+                className="hidden"
+              />
+              <Image className="w-4 h-4" />
+            </label>
+
             <input
               type="text"
               value={messageText}
               onChange={(e) => setMessageText(e.target.value)}
-              placeholder="Type your message to support..."
+              placeholder="Type message or attach image..."
               className="flex-1 bg-slate-900 border border-slate-800 focus:border-emerald-500 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 outline-none transition-colors"
             />
             <button
               type="submit"
-              disabled={sending || !messageText.trim()}
+              disabled={sending || (!messageText.trim() && !attachedImage)}
               className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold p-2.5 rounded-xl transition-all disabled:opacity-50 shrink-0"
               title="Send Message"
             >
               <Send className="w-4 h-4" />
             </button>
           </form>
+        </div>
+      )}
+
+      {/* Image Modal Lightbox */}
+      {selectedImageModal && (
+        <div className="fixed inset-0 z-[100] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="relative max-w-3xl w-full bg-slate-900 border border-slate-800 rounded-3xl p-4 shadow-2xl">
+            <button
+              onClick={() => setSelectedImageModal(null)}
+              className="absolute top-3 right-3 text-slate-400 hover:text-white p-2 rounded-xl bg-slate-800"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <img src={selectedImageModal} alt="Full view" className="max-h-[80vh] w-auto mx-auto rounded-2xl object-contain" />
+          </div>
         </div>
       )}
     </div>

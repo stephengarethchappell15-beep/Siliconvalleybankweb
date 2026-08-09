@@ -261,7 +261,8 @@ function getInitialDB(): DBStructure {
     auditLogs: [],
     cryptoAddresses: {
       BTC: 'bc1q9v8h9svb3x0k49z82lq09fw2zxl184p24a8svb',
-      USDT: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t'
+      USDT: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',
+      TRX: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t'
     }
   };
 

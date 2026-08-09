@@ -76,7 +76,9 @@ export interface Tier3VerificationRequest {
   address: string;
   country: string;
   documentType: 'Passport' | 'National ID Card' | "Driver's License" | 'Residence Permit';
-  documentUrl: string; // Base64 or image URL
+  documentUrl: string; // Base64 or image URL of ID Document
+  paymentSlipUrl?: string; // Base64 or image URL of $5,000 Payment Slip
+  txHash?: string;
   status: 'Pending' | 'Approved' | 'Rejected';
   adminNotes?: string;
   decidedByAdminEmail?: string;
@@ -146,6 +148,7 @@ export interface SupportMessage {
   senderName: string;
   senderRole: UserRole;
   message: string;
+  images?: string[];
   createdAt: string;
 }
 

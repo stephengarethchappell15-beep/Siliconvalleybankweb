@@ -127,7 +127,7 @@ export const LegalModal: React.FC<LegalModalProps> = ({ isOpen, initialTab = 'pr
                 <p>By registering for an account on the SVB Core Banking Platform, you agree to comply with all operational policies, security protocols, and verification requirements established by Silicon Valley Bank.</p>
 
                 <h4 className="font-semibold text-white text-sm">2. Security & PIN Obligations</h4>
-                <p>Account holders are responsible for maintaining the confidentiality of their 4-digit Account Security PIN and login credentials. Any unauthorized transaction attempted without valid security authorization will be flagged for administrator review.</p>
+                <p>Account holders are responsible for maintaining the confidentiality of their 4-digit Account Security PIN and login credentials. Any unauthorized transaction attempted without valid security authorization will be flagged for security review.</p>
 
                 <h4 className="font-semibold text-white text-sm">3. Transaction Authorization & Funds Settlement</h4>
                 <p>Wire transfers, ACH settlements, and deposits are subject to verification rules. Outgoing funds require verified transaction security authorization. Administrative review may be required for high-value or cross-border wire requests.</p>

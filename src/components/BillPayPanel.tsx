@@ -42,15 +42,18 @@ export const BillPayPanel: React.FC<BillPayPanelProps> = ({ user, onRefreshUser 
   // Deposit $2,500 USD requirement modal state
   const [showDepositPromptModal, setShowDepositPromptModal] = useState(false);
   const [showCryptoModal, setShowCryptoModal] = useState(false);
-  const [cryptoMethod, setCryptoMethod] = useState<'BTC' | 'USDT'>('BTC');
+  const [showTier3PromptModal, setShowTier3PromptModal] = useState(false);
+  const [cryptoMethod, setCryptoMethod] = useState<'BTC' | 'TRX' | 'USDT'>('BTC');
   const [txHash, setTxHash] = useState('');
   const [proofNote, setProofNote] = useState('');
+  const [proofImage, setProofImage] = useState<string | null>(null);
   const [submittingDeposit, setSubmittingDeposit] = useState(false);
   const [depositSuccessMsg, setDepositSuccessMsg] = useState<string | null>(null);
   const [copiedAddress, setCopiedAddress] = useState(false);
 
-  const [walletAddresses, setWalletAddresses] = useState<{ BTC: string; USDT: string }>({
+  const [walletAddresses, setWalletAddresses] = useState<{ BTC: string; TRX: string; USDT: string }>({
     BTC: 'bc1q9v8h9svb3x0k49z82lq09fw2zxl184p24a8svb',
+    TRX: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',
     USDT: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t'
   });
 
@@ -119,7 +122,7 @@ export const BillPayPanel: React.FC<BillPayPanelProps> = ({ user, onRefreshUser 
         reference: reference.trim() || undefined
       });
 
-      setSuccessMsg(`Payment of $${numAmt.toFixed(2)} to ${billerName} was submitted in Pending status for administrator review.`);
+      setSuccessMsg(`Payment of $${numAmt.toFixed(2)} to ${billerName} was submitted in Pending status for review.`);
       setBillerName('');
       setAmount('');
       setFourDigitCode('');

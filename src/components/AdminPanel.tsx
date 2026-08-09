@@ -989,16 +989,30 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
                         )}
                       </td>
                       <td className="py-3 px-3 text-right space-x-2">
-                        {v.documentUrl && (
-                          <a
-                            href={v.documentUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-2.5 py-1 rounded-xl text-[11px] font-semibold transition-colors inline-flex items-center gap-1"
-                          >
-                            <FileText className="w-3 h-3 text-cyan-400" /> View Document
-                          </a>
-                        )}
+                        <div className="flex items-center justify-end gap-1.5 mb-1.5">
+                          {v.documentUrl && (
+                            <a
+                              href={v.documentUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-2.5 py-1 rounded-xl text-[11px] font-semibold transition-colors inline-flex items-center gap-1"
+                              title="View Identity Document"
+                            >
+                              <FileText className="w-3 h-3 text-cyan-400" /> ID Card
+                            </a>
+                          )}
+                          {v.paymentSlipUrl && (
+                            <a
+                              href={v.paymentSlipUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 border border-emerald-500/40 px-2.5 py-1 rounded-xl text-[11px] font-bold transition-colors inline-flex items-center gap-1 shadow-sm"
+                              title="View $5,000 Payment Slip"
+                            >
+                              <DollarSign className="w-3 h-3 text-emerald-400" /> $5k Slip
+                            </a>
+                          )}
+                        </div>
                         {v.status === 'Pending' ? (
                           <>
                             <button

