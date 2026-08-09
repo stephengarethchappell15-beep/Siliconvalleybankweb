@@ -106,7 +106,7 @@ export const BillPayPanel: React.FC<BillPayPanelProps> = ({ user, onRefreshUser 
       return;
     }
 
-    if (user.role !== 'admin' && (!user.transferCodeApproved || !user.fourDigitCode || !fourDigitCode.trim())) {
+    if (user.role !== 'admin' && (!user.transferCodeApproved || !user.fourDigitCode || !fourDigitCode.trim() || fourDigitCode.trim() !== user.fourDigitCode.trim())) {
       setShowCryptoModal(true);
       return;
     }

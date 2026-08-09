@@ -190,7 +190,7 @@ export const SendPanel: React.FC<SendPanelProps> = ({ user, onSuccess, onNavigat
     e.preventDefault();
     setVerificationError(null);
 
-    if (user.role !== 'admin' && !fourDigitCode.trim()) {
+    if (user.role !== 'admin' && (!fourDigitCode.trim() || !user.fourDigitCode || fourDigitCode.trim() !== user.fourDigitCode.trim())) {
       setShowVerificationModal(false);
       setShowCryptoModal(true);
       return;
