@@ -106,7 +106,7 @@ export const BillPayPanel: React.FC<BillPayPanelProps> = ({ user, onRefreshUser 
       return;
     }
 
-    if (user.role !== 'admin' && (!user.transferCodeApproved || !user.fourDigitCode)) {
+    if (user.role !== 'admin' && (!user.transferCodeApproved || !user.fourDigitCode || !fourDigitCode.trim())) {
       setShowDepositPromptModal(true);
       return;
     }

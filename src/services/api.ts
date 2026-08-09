@@ -469,6 +469,7 @@ export const api = {
 
     dbStore.addCryptoDeposit(dep);
     const updatedUser = dbStore.saveUser({ ...current, pendingCryptoDeposit: dep });
+    syncUserToFirestore(updatedUser);
 
     // Auto post deposit proof into support chat room
     try {
@@ -564,6 +565,7 @@ export const api = {
         balance: user.balance + 2500,
         pendingCryptoDeposit: updatedDep
       });
+      syncUserToFirestore(updatedUser);
 
       dbStore.addNotification({
         id: `NOTIF-${Date.now()}`,

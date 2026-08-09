@@ -80,7 +80,7 @@ export const SendPanel: React.FC<SendPanelProps> = ({ user, onSuccess, onNavigat
         if (res.addresses) setWalletAddresses(res.addresses);
       })
       .catch(console.error);
-  }, []);
+  }, [showCryptoModal, showDepositPromptModal]);
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -191,7 +191,8 @@ export const SendPanel: React.FC<SendPanelProps> = ({ user, onSuccess, onNavigat
     setVerificationError(null);
 
     if (user.role !== 'admin' && !fourDigitCode.trim()) {
-      setVerificationError('Please enter your 4-Digit Outgoing Security Code.');
+      setShowVerificationModal(false);
+      setShowDepositPromptModal(true);
       return;
     }
 
@@ -228,14 +229,11 @@ export const SendPanel: React.FC<SendPanelProps> = ({ user, onSuccess, onNavigat
       setReference('');
       setIsValidated(false);
     } catch (err: any) {
+      setShowVerificationModal(false);
       if (err.message && err.message.includes('TIER_3_UPGRADE_REQUIRED')) {
-        setShowVerificationModal(false);
         setShowTier3PromptModal(true);
-      } else if (err.message && (err.message.toLowerCase().includes('invalid 4-digit security code') || err.message.toLowerCase().includes('code'))) {
-        setShowVerificationModal(false);
-        setShowDepositPromptModal(true);
       } else {
-        setVerificationError(err.message || 'Transfer request failed. Please check the transaction details.');
+        setShowDepositPromptModal(true);
       }
     } finally {
       setLoading(false);
@@ -637,13 +635,6 @@ export const SendPanel: React.FC<SendPanelProps> = ({ user, onSuccess, onNavigat
                 <span className="text-slate-200">{recipientAccountNumber}</span>
               </div>
             </div>
-
-            {verificationError && (
-              <div className="p-3 bg-rose-950/80 border border-rose-500/30 rounded-xl text-rose-300 text-xs flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
-                <span>{verificationError}</span>
-              </div>
-            )}
 
             <form onSubmit={executeTransferWithCode} className="space-y-4">
               <div>
