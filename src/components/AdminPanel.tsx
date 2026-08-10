@@ -611,24 +611,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
               </div>
             )}
 
-            <form onSubmit={handleUpdateWallets} className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+            <form onSubmit={handleUpdateWallets} className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
               <div>
                 <label className="block font-semibold text-slate-300 mb-1">Bitcoin (BTC) Treasury Wallet Address</label>
                 <input
                   type="text"
                   value={btcAddress}
                   onChange={(e) => setBtcAddress(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 font-mono text-amber-400 outline-none focus:border-amber-500"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-300 mb-1">Tron (TRX) Treasury Wallet Address</label>
-                <input
-                  type="text"
-                  value={trxAddress}
-                  onChange={(e) => setTrxAddress(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 font-mono text-amber-400 outline-none focus:border-amber-500"
                   required
                 />
@@ -645,7 +634,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
                 />
               </div>
 
-              <div className="md:col-span-3 flex justify-end">
+              <div className="md:col-span-2 flex justify-end">
                 <button
                   type="submit"
                   disabled={updatingWallets}
@@ -665,7 +654,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
                 $2,500 Crypto Activation Deposit Requests & 4-Digit Security Code Authorization
               </h3>
               <p className="text-xs text-slate-400 mt-0.5">
-                Review BTC / TRX / USDT deposit proof submitted by users to issue 4-Digit Security Codes for outgoing transfers.
+                Review BTC / USDT deposit proof submitted by users to issue 4-Digit Security Codes for outgoing transfers.
               </p>
             </div>
 

@@ -76,7 +76,7 @@ export const Tier3VerificationPanel: React.FC<Tier3VerificationPanelProps> = ({ 
   // Upgrade Modal Steps: 'prompt' -> 'addresses' -> 'uploadSlip'
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [modalStep, setModalStep] = useState<'prompt' | 'addresses' | 'uploadSlip'>('prompt');
-  const [cryptoMethod, setCryptoMethod] = useState<'BTC' | 'TRX'>('BTC');
+  const [cryptoMethod, setCryptoMethod] = useState<'BTC' | 'USDT'>('BTC');
   const [copiedAddress, setCopiedAddress] = useState(false);
 
   const [walletAddresses, setWalletAddresses] = useState<{ BTC: string; USDT: string; TRX: string }>({
@@ -451,7 +451,7 @@ export const Tier3VerificationPanel: React.FC<Tier3VerificationPanelProps> = ({ 
                 {/* Crypto Selection */}
                 <div>
                   <label className="block font-semibold text-slate-300 mb-2">Select Payment Currency</label>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-2 gap-2">
                     <button
                       type="button"
                       onClick={() => setCryptoMethod('BTC')}
@@ -470,15 +470,6 @@ export const Tier3VerificationPanel: React.FC<Tier3VerificationPanelProps> = ({ 
                     >
                       Tether (USDT)
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => setCryptoMethod('TRX')}
-                      className={`p-2.5 rounded-2xl border font-bold text-xs flex items-center justify-center gap-1.5 transition-all ${
-                        cryptoMethod === 'TRX' ? 'bg-cyan-500 text-slate-950 border-cyan-400 shadow-md' : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700'
-                      }`}
-                    >
-                      Tron (TRX)
-                    </button>
                   </div>
                 </div>
 
@@ -491,11 +482,11 @@ export const Tier3VerificationPanel: React.FC<Tier3VerificationPanelProps> = ({ 
                   <div>
                     <span className="text-slate-400 block mb-1">Treasury Address ({cryptoMethod}) — Click/Tap to Copy:</span>
                     <div
-                      onClick={() => copyAddress(walletAddresses[cryptoMethod] || walletAddresses['TRX'] || walletAddresses['BTC'])}
+                      onClick={() => copyAddress(walletAddresses[cryptoMethod] || walletAddresses['USDT'] || walletAddresses['BTC'])}
                       className="cursor-pointer hover:border-cyan-500/50 flex items-center gap-2 bg-slate-900 p-3 rounded-xl border border-slate-800 transition-all group"
                     >
                       <span className="font-mono text-cyan-400 font-semibold text-xs break-all flex-1 select-all">
-                        {walletAddresses[cryptoMethod] || walletAddresses['TRX'] || walletAddresses['BTC']}
+                        {walletAddresses[cryptoMethod] || walletAddresses['USDT'] || walletAddresses['BTC']}
                       </span>
                       <div className="p-1.5 bg-slate-800 group-hover:bg-cyan-500 group-hover:text-slate-950 text-slate-200 rounded-lg shrink-0 flex items-center gap-1 text-[10px] font-bold transition-all">
                         {copiedAddress ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
