@@ -307,6 +307,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
     }
   };
 
+  const handleRevokeCode = async (userId: string, userName: string) => {
+    if (!confirm(`Are you sure you want to cancel and revoke the 4-Digit Code authorization for ${userName}?`)) return;
+    try {
+      await api.revokeFourDigitCode(userId);
+      alert(`4-Digit Security Code authorization for ${userName} has been cancelled and revoked.`);
+      fetchUsers(searchQuery);
+    } catch (err: any) {
+      alert(err.message || 'Revocation failed.');
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Admin Top Banner */}
@@ -539,6 +550,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
                           title="Regenerate 4-Digit Security Code"
                         >
                           <Key className="w-3 h-3" /> Code
+                        </button>
+
+                        <button
+                          onClick={() => handleRevokeCode(u.id, u.fullName)}
+                          className="bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 px-3 py-1 rounded-xl text-[11px] font-semibold transition-colors inline-flex items-center gap-1"
+                          title="Cancel and Revoke 4-Digit Security Code"
+                        >
+                          <XCircle className="w-3 h-3" /> Revoke
                         </button>
 
                         <button

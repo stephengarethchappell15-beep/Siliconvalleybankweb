@@ -11,7 +11,7 @@ import {
   deleteDoc
 } from 'firebase/firestore';
 import config from '../../firebase-applet-config.json';
-import { User } from '../types';
+import { User, VirtualCard, CryptoActivationDeposit, Tier3VerificationRequest, Transaction } from '../types';
 
 // Helper to safely get config values across Vite client and Node server
 const getEnvVal = (key: string): string => {
@@ -180,3 +180,140 @@ export async function getAllUsersFromFirestore(): Promise<User[]> {
 
   return Array.from(userMap.values());
 }
+
+/**
+ * Sync Virtual Card to Firestore for permanent cross-session storage
+ */
+export async function syncVirtualCardToFirestore(card: VirtualCard): Promise<void> {
+  if (!card || !card.id) return;
+  try {
+    await setDoc(doc(db, 'virtual_cards', card.id), {
+      ...card,
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
+  } catch (err) {
+    console.warn('Firestore virtual card sync error:', err);
+  }
+}
+
+/**
+ * Fetch Virtual Cards for a user from Firestore
+ */
+export async function getVirtualCardsFromFirestore(userId: string): Promise<VirtualCard[]> {
+  if (!userId) return [];
+  try {
+    const q = query(collection(db, 'virtual_cards'), where('userId', '==', userId));
+    const snap = await getDocs(q);
+    const cards: VirtualCard[] = [];
+    snap.forEach((d) => {
+      if (d.exists()) cards.push(d.data() as VirtualCard);
+    });
+    return cards;
+  } catch (err) {
+    console.warn('Firestore getVirtualCards error:', err);
+    return [];
+  }
+}
+
+/**
+ * Sync Crypto Activation Deposit ($2,500 deposit for 4-digit code) to Firestore
+ */
+export async function syncCryptoDepositToFirestore(deposit: CryptoActivationDeposit): Promise<void> {
+  if (!deposit || !deposit.id) return;
+  try {
+    await setDoc(doc(db, 'crypto_activation_deposits', deposit.id), {
+      ...deposit,
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
+  } catch (err) {
+    console.warn('Firestore crypto deposit sync error:', err);
+  }
+}
+
+/**
+ * Get all Crypto Activation Deposits from Firestore for admin queue
+ */
+export async function getAllCryptoDepositsFromFirestore(): Promise<CryptoActivationDeposit[]> {
+  try {
+    const snap = await getDocs(collection(db, 'crypto_activation_deposits'));
+    const list: CryptoActivationDeposit[] = [];
+    snap.forEach((d) => {
+      if (d.exists()) list.push(d.data() as CryptoActivationDeposit);
+    });
+    return list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  } catch (err) {
+    console.warn('Firestore getAllCryptoDeposits error:', err);
+    return [];
+  }
+}
+
+/**
+ * Sync Tier 3 Verification Request ($5,000 upgrade deposit) to Firestore
+ */
+export async function syncVerificationToFirestore(verif: Tier3VerificationRequest): Promise<void> {
+  if (!verif || !verif.id) return;
+  try {
+    await setDoc(doc(db, 'tier3_verifications', verif.id), {
+      ...verif,
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
+  } catch (err) {
+    console.warn('Firestore verification sync error:', err);
+  }
+}
+
+/**
+ * Get all Tier 3 Verification Requests from Firestore for admin queue
+ */
+export async function getAllVerificationsFromFirestore(): Promise<Tier3VerificationRequest[]> {
+  try {
+    const snap = await getDocs(collection(db, 'tier3_verifications'));
+    const list: Tier3VerificationRequest[] = [];
+    snap.forEach((d) => {
+      if (d.exists()) list.push(d.data() as Tier3VerificationRequest);
+    });
+    return list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  } catch (err) {
+    console.warn('Firestore getAllVerifications error:', err);
+    return [];
+  }
+}
+
+/**
+ * Sync Transaction to Firestore
+ */
+export async function syncTransactionToFirestore(txn: Transaction): Promise<void> {
+  if (!txn || !txn.id) return;
+  try {
+    await setDoc(doc(db, 'transactions', txn.id), {
+      ...txn,
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
+  } catch (err) {
+    console.warn('Firestore transaction sync error:', err);
+  }
+}
+
+/**
+ * Get Transactions for user from Firestore
+ */
+export async function getTransactionsFromFirestore(userId?: string): Promise<Transaction[]> {
+  try {
+    let q;
+    if (userId) {
+      q = query(collection(db, 'transactions'), where('userId', '==', userId));
+    } else {
+      q = collection(db, 'transactions');
+    }
+    const snap = await getDocs(q);
+    const list: Transaction[] = [];
+    snap.forEach((d) => {
+      if (d.exists()) list.push(d.data() as Transaction);
+    });
+    return list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  } catch (err) {
+    console.warn('Firestore getTransactions error:', err);
+    return [];
+  }
+}
+

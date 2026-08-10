@@ -657,6 +657,28 @@ app.post('/api/admin/users/:userId/regenerate-code', async (req, res) => {
   }
 });
 
+// Admin: Revoke 4-Digit Code for User
+app.post('/api/admin/users/:userId/revoke-code', async (req, res) => {
+  const user = await getAuthUser(req);
+  if (!user || user.role !== 'admin') {
+    return res.status(403).json({ error: 'Access denied. Administrator privilege required.' });
+  }
+
+  try {
+    const targetUser = dbManager.findUserById(req.params.userId);
+    if (!targetUser) return res.status(404).json({ error: 'User not found.' });
+
+    const updatedUser = dbManager.updateUserProfile(targetUser.id, {
+      transferCodeApproved: false,
+      fourDigitCode: ''
+    });
+
+    res.json({ message: '4-Digit Code authorization revoked successfully.', user: updatedUser });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || 'Failed to revoke 4-Digit Code.' });
+  }
+});
+
 // Admin: Change User Role
 app.post('/api/admin/users/:userId/role', async (req, res) => {
   const user = await getAuthUser(req);

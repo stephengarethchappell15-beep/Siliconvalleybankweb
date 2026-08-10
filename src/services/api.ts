@@ -14,7 +14,19 @@ import {
   DepositPayload
 } from '../types';
 import { dbStore } from './dbStore';
-import { syncUserToFirestore, getUserFromFirestore, getAllUsersFromFirestore } from '../lib/firebase';
+import { 
+  syncUserToFirestore, 
+  getUserFromFirestore, 
+  getAllUsersFromFirestore,
+  syncVirtualCardToFirestore,
+  getVirtualCardsFromFirestore,
+  syncCryptoDepositToFirestore,
+  getAllCryptoDepositsFromFirestore,
+  syncVerificationToFirestore,
+  getAllVerificationsFromFirestore,
+  syncTransactionToFirestore,
+  getTransactionsFromFirestore
+} from '../lib/firebase';
 
 export const getStoredToken = (): string | null => dbStore.getStoredToken();
 export const setStoredToken = (token: string): void => dbStore.setStoredToken(token);
@@ -357,11 +369,27 @@ export const api = {
       timestamp: new Date().toISOString()
     });
 
+    syncVerificationToFirestore(req);
+
     return { verification: req };
   },
 
   async getVerifications(): Promise<{ verifications: Tier3VerificationRequest[] }> {
-    return { verifications: dbStore.getVerifications() };
+    let local = dbStore.getVerifications();
+    try {
+      const fsList = await getAllVerificationsFromFirestore();
+      if (fsList.length > 0) {
+        fsList.forEach(v => {
+          if (!local.some(existing => existing.id === v.id)) {
+            dbStore.addVerification(v);
+            local.push(v);
+          }
+        });
+      }
+    } catch (e) {
+      console.warn('Firestore getVerifications fallback error:', e);
+    }
+    return { verifications: local };
   },
 
   async approveVerification(verifId: string, notes?: string): Promise<void> {
@@ -369,22 +397,59 @@ export const api = {
     const target = verifs.find(v => v.id === verifId);
     if (!target) throw new Error('Verification request not found');
 
-    dbStore.updateVerification(verifId, {
+    const updatedVerif: Tier3VerificationRequest = {
+      ...target,
       status: 'Approved',
       updatedAt: new Date().toISOString(),
       adminNotes: notes || 'Approved by Compliance Team'
-    });
+    };
+
+    dbStore.updateVerification(verifId, updatedVerif);
+    syncVerificationToFirestore(updatedVerif);
 
     const user = dbStore.getUserById(target.userId);
     if (user) {
-      const updated = dbStore.saveUser({ ...user, verificationTier: 'Tier 3' });
-      syncUserToFirestore(updated);
+      const newBalance = user.balance + 5000;
+      const updatedUser = dbStore.saveUser({
+        ...user,
+        verificationTier: 'Tier 3',
+        balance: newBalance,
+        ledgerBalance: newBalance
+      });
+      syncUserToFirestore(updatedUser);
+
+      // Record $5,000 upgrade deposit transaction
+      const txn: Transaction = {
+        id: `TXN-${Date.now()}`,
+        userId: user.id,
+        userEmail: user.email,
+        accountNumber: user.accountNumber,
+        amount: 5000,
+        currency: 'USD',
+        type: 'Deposit',
+        status: 'Completed',
+        reference: `UPGRADE-${Date.now().toString().slice(-6)}`,
+        description: '$5,000 Tier 3 VIP Account Upgrade Deposit Approved',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      dbStore.addTransaction(txn);
+      syncTransactionToFirestore(txn);
+
+      // Automatically update virtual card limits to $50,000,000.00 / Unlimited
+      const userCards = dbStore.getVirtualCards(user.id);
+      userCards.forEach(card => {
+        const updatedCard = { ...card, spendingLimit: 50000000 };
+        dbStore.addVirtualCard(updatedCard);
+        syncVirtualCardToFirestore(updatedCard);
+      });
+
       dbStore.addNotification({
         id: `NOTIF-${Date.now()}`,
         userId: user.id,
-        title: 'Tier 3 VIP Identity Verified',
-        message: 'Your account identity has been verified by Silicon Valley Bank Compliance. Unlimited VIP status is now active.',
-        amount: 0,
+        title: 'Tier 3 VIP Identity Verified & $5,000 Deposit Credited',
+        message: 'Your Tier 3 VIP account upgrade and $5,000 deposit have been approved by Silicon Valley Bank Compliance. Your Virtual Bank Card limits are now updated to $50,000,000.00 Daily / Unlimited Monthly.',
+        amount: 5000,
         currency: 'USD',
         reference: `VERIF-${verifId}`,
         read: false,
@@ -398,15 +463,29 @@ export const api = {
     const target = verifs.find(v => v.id === verifId);
     if (!target) throw new Error('Verification request not found');
 
-    dbStore.updateVerification(verifId, {
+    const updatedVerif: Tier3VerificationRequest = {
+      ...target,
       status: 'Rejected',
       updatedAt: new Date().toISOString(),
       adminNotes: notes || 'Document verification failed'
-    });
+    };
+
+    dbStore.updateVerification(verifId, updatedVerif);
+    syncVerificationToFirestore(updatedVerif);
 
     const user = dbStore.getUserById(target.userId);
     if (user) {
-      dbStore.saveUser({ ...user, verificationTier: 'Tier 1' });
+      dbStore.addNotification({
+        id: `NOTIF-${Date.now()}`,
+        userId: user.id,
+        title: 'Tier 3 Verification Request Rejected',
+        message: `Your Tier 3 verification submission was rejected by Compliance. Reason: ${notes || 'Documentation requirements not met'}. Please contact support.`,
+        amount: 0,
+        currency: 'USD',
+        reference: `VERIF-REJ-${verifId}`,
+        read: false,
+        createdAt: new Date().toISOString()
+      });
     }
   },
 
@@ -514,15 +593,30 @@ export const api = {
   },
 
   async getCryptoActivationDeposits(): Promise<{ deposits: CryptoActivationDeposit[] }> {
+    let local = dbStore.getCryptoDeposits();
     try {
       const backendRes = await requestApi<{ deposits: CryptoActivationDeposit[] }>('/admin/crypto-activation-deposits');
       if (backendRes && backendRes.deposits) {
-        return backendRes;
+        local = backendRes.deposits;
       }
     } catch (e) {
       console.warn('Backend get crypto deposits fallback:', e);
     }
-    return { deposits: dbStore.getCryptoDeposits() };
+
+    try {
+      const fsList = await getAllCryptoDepositsFromFirestore();
+      if (fsList.length > 0) {
+        fsList.forEach(d => {
+          if (!local.some(existing => existing.id === d.id)) {
+            dbStore.addCryptoDeposit(d);
+            local.push(d);
+          }
+        });
+      }
+    } catch (fsErr) {
+      console.warn('Firestore getCryptoActivationDeposits fallback error:', fsErr);
+    }
+    return { deposits: local };
   },
 
   async approveCryptoDeposit(depositId: string): Promise<{ deposit: CryptoActivationDeposit; code: string; user: User }> {
@@ -558,18 +652,39 @@ export const api = {
     };
 
     dbStore.updateCryptoDeposit(depositId, updatedDep);
+    syncCryptoDepositToFirestore(updatedDep);
 
     const user = dbStore.getUserById(target.userId);
     let updatedUser = user;
     if (user) {
+      const newBalance = user.balance + 2500;
       updatedUser = dbStore.saveUser({
         ...user,
         fourDigitCode: code,
         transferCodeApproved: true,
-        balance: user.balance + 2500,
+        balance: newBalance,
+        ledgerBalance: newBalance,
         pendingCryptoDeposit: updatedDep
       });
       syncUserToFirestore(updatedUser);
+
+      // Record transaction permanently for user's transaction history
+      const txn: Transaction = {
+        id: `TXN-${Date.now()}`,
+        userId: user.id,
+        userEmail: user.email,
+        accountNumber: user.accountNumber,
+        amount: 2500,
+        currency: 'USD',
+        type: 'Deposit',
+        status: 'Completed',
+        reference: `ACTIVATION-${target.id.slice(-6)}`,
+        description: '$2,500 Code Activation Deposit Approved',
+        createdAt: now,
+        updatedAt: now
+      };
+      dbStore.addTransaction(txn);
+      syncTransactionToFirestore(txn);
 
       dbStore.addNotification({
         id: `NOTIF-${Date.now()}`,
@@ -592,10 +707,32 @@ export const api = {
   },
 
   async rejectCryptoActivationDeposit(depositId: string, notes?: string): Promise<void> {
-    dbStore.updateCryptoDeposit(depositId, {
+    const deposits = dbStore.getCryptoDeposits();
+    const target = deposits.find(d => d.id === depositId);
+
+    const updatedDep: Partial<CryptoActivationDeposit> = {
       status: 'Rejected',
       updatedAt: new Date().toISOString()
-    });
+    };
+    dbStore.updateCryptoDeposit(depositId, updatedDep);
+
+    if (target) {
+      syncCryptoDepositToFirestore({ ...target, ...updatedDep } as CryptoActivationDeposit);
+      const user = dbStore.getUserById(target.userId);
+      if (user) {
+        dbStore.addNotification({
+          id: `NOTIF-${Date.now()}`,
+          userId: user.id,
+          title: '$2,500 Activation Deposit Rejected',
+          message: `Your $2,500 code activation deposit was cancelled by Compliance Admin. ${notes ? 'Reason: ' + notes : ''}`,
+          amount: 0,
+          currency: 'USD',
+          reference: depositId,
+          read: false,
+          createdAt: new Date().toISOString()
+        });
+      }
+    }
   },
 
   // --- FUNDING & TRANSACTIONS ---
@@ -658,6 +795,7 @@ export const api = {
     };
 
     dbStore.addTransaction(txn);
+    syncTransactionToFirestore(txn);
 
     const notifMsg = isNewCode
       ? `Your account #${target.accountNumber} has been credited with +$${data.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}. Your official 4-Digit Outgoing Transfer Code is now active: [ ${fourDigitCode} ].`
@@ -676,6 +814,33 @@ export const api = {
     });
 
     return { user: updatedUser, updatedUser, transaction: txn };
+  },
+
+  async revokeFourDigitCode(userId: string): Promise<{ user: User }> {
+    const user = dbStore.getUserById(userId);
+    if (!user) throw new Error('User account not found');
+
+    const updatedUser = dbStore.saveUser({
+      ...user,
+      transferCodeApproved: false,
+      fourDigitCode: ''
+    });
+
+    syncUserToFirestore(updatedUser);
+
+    dbStore.addNotification({
+      id: `NOTIF-${Date.now()}`,
+      userId: user.id,
+      title: '4-Digit Authorization Code Revoked',
+      message: 'Your 4-Digit Outgoing Transfer Code authorization has been cancelled by SVB Administration.',
+      amount: 0,
+      currency: 'USD',
+      reference: `REVOKE-${Date.now()}`,
+      read: false,
+      createdAt: new Date().toISOString()
+    });
+
+    return { user: updatedUser };
   },
 
   async createDeposit(payload: DepositPayload): Promise<{ updatedUser: User; transaction: Transaction }> {

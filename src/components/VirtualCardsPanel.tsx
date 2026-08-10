@@ -326,20 +326,28 @@ export const VirtualCardsPanel: React.FC<VirtualCardsPanelProps> = ({ user, onRe
                   </div>
                 </div>
 
-                {/* Spending Progress */}
+                {/* Spending Progress & Card Limits */}
                 <div className="space-y-2 border-t border-slate-800/80 pt-4">
                   <div className="flex items-center justify-between text-xs">
-                    <span className="text-slate-400">Monthly Spending Limit:</span>
-                    <span className="font-mono font-bold text-white">${card.spendingLimit.toLocaleString()}</span>
+                    <span className="text-slate-400">Daily Spending Limit:</span>
+                    <span className="font-mono font-bold text-amber-400">
+                      {user.verificationTier === 'Tier 3' || card.spendingLimit >= 50000000 ? '$50,000,000.00' : '$50,000.00'}
+                    </span>
                   </div>
-                  <div className="flex items-center justify-between text-xs text-slate-400">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-400">Monthly Spending Limit:</span>
+                    <span className="font-mono font-bold text-emerald-400">
+                      {user.verificationTier === 'Tier 3' || card.spendingLimit >= 50000000 ? 'Unlimited' : `$${card.spendingLimit.toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-slate-400 pt-1">
                     <span>Spent this period:</span>
-                    <span className="font-mono font-semibold text-cyan-400">${card.spentAmount.toLocaleString()}</span>
+                    <span className="font-mono font-semibold text-cyan-400">${card.spentAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
                   </div>
                   <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
                     <div 
                       className="bg-cyan-400 h-full rounded-full" 
-                      style={{ width: `${Math.min(100, (card.spentAmount / card.spendingLimit) * 100)}%` }} 
+                      style={{ width: user.verificationTier === 'Tier 3' || card.spendingLimit >= 50000000 ? '1%' : `${Math.min(100, (card.spentAmount / card.spendingLimit) * 100)}%` }} 
                     />
                   </div>
                 </div>
