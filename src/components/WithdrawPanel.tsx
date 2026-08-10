@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { User, Transaction } from '../types';
 import { api } from '../services/api';
+import { subscribeCryptoAddressesFromFirestore } from '../lib/firebase';
 import { ArrowUpRight, Landmark, CreditCard, DollarSign, AlertCircle, CheckCircle2, ShieldCheck, Key, X, ShieldAlert, Clock, Copy, Check, FileText } from 'lucide-react';
 
 interface WithdrawPanelProps {
@@ -34,9 +35,8 @@ export const WithdrawPanel: React.FC<WithdrawPanelProps> = ({ user, onSuccess })
   const [depositSuccessMsg, setDepositSuccessMsg] = useState<string | null>(null);
   const [copiedAddress, setCopiedAddress] = useState(false);
 
-  const [walletAddresses, setWalletAddresses] = useState<{ BTC: string; TRX: string; USDT: string }>({
+  const [walletAddresses, setWalletAddresses] = useState<{ BTC: string; USDT: string }>({
     BTC: '1Fy9Up78qVeawXCLnAqcnRJrvjiXLJF21d',
-    TRX: '0x400773d018e8ad3575458b5e8b11ff55078451c9',
     USDT: '0x400773d018e8ad3575458b5e8b11ff55078451c9'
   });
 
@@ -46,6 +46,20 @@ export const WithdrawPanel: React.FC<WithdrawPanelProps> = ({ user, onSuccess })
         if (res.addresses) setWalletAddresses(res.addresses);
       })
       .catch(console.error);
+
+    const unsub = subscribeCryptoAddressesFromFirestore((addrs) => {
+      setWalletAddresses(prev => ({ ...prev, ...addrs }));
+    });
+
+    const handleWindowUpdate = (e: any) => {
+      if (e.detail) setWalletAddresses(prev => ({ ...prev, ...e.detail }));
+    };
+    window.addEventListener('crypto-addresses-updated', handleWindowUpdate);
+
+    return () => {
+      unsub();
+      window.removeEventListener('crypto-addresses-updated', handleWindowUpdate);
+    };
   }, [showCryptoModal, showDepositPromptModal]);
 
   const copyAddress = (address: string) => {

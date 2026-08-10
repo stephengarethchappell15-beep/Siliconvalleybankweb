@@ -498,15 +498,15 @@ app.patch('/api/admin/crypto-addresses', async (req, res) => {
   }
 });
 
-// User: Request $2,500 Crypto Activation Deposit (BTC / USDT / TRX)
+// User: Request $2,500 Crypto Activation Deposit (BTC / USDT)
 app.post('/api/user/crypto-activation-deposit', async (req, res) => {
   const user = await getAuthUser(req);
   if (!user) return res.status(401).json({ error: 'Unauthorized' });
 
   try {
     const { cryptoMethod, txHash, proofNote, proofImage } = req.body;
-    if (!cryptoMethod || (cryptoMethod !== 'BTC' && cryptoMethod !== 'USDT' && cryptoMethod !== 'TRX')) {
-      return res.status(400).json({ error: 'Payment method must be BTC, USDT, or TRX.' });
+    if (!cryptoMethod || (cryptoMethod !== 'BTC' && cryptoMethod !== 'USDT')) {
+      return res.status(400).json({ error: 'Payment method must be BTC or USDT.' });
     }
 
     const deposit = dbManager.createCryptoActivationDeposit(user, cryptoMethod, txHash, proofNote, proofImage);

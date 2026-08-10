@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User } from '../types';
 import { api } from '../services/api';
+import { subscribeCryptoAddressesFromFirestore } from '../lib/firebase';
 import { ShieldCheck, Upload, FileText, CheckCircle2, Clock, AlertCircle, MapPin, Globe, Sparkles, DollarSign, X, Check, Copy, ArrowRight, Wallet } from 'lucide-react';
 
 interface Tier3VerificationPanelProps {
@@ -79,18 +80,31 @@ export const Tier3VerificationPanel: React.FC<Tier3VerificationPanelProps> = ({ 
   const [cryptoMethod, setCryptoMethod] = useState<'BTC' | 'USDT'>('BTC');
   const [copiedAddress, setCopiedAddress] = useState(false);
 
-  const [walletAddresses, setWalletAddresses] = useState<{ BTC: string; USDT: string; TRX: string }>({
+  const [walletAddresses, setWalletAddresses] = useState<{ BTC: string; USDT: string }>({
     BTC: '1Fy9Up78qVeawXCLnAqcnRJrvjiXLJF21d',
-    USDT: '0x400773d018e8ad3575458b5e8b11ff55078451c9',
-    TRX: '0x400773d018e8ad3575458b5e8b11ff55078451c9'
+    USDT: '0x400773d018e8ad3575458b5e8b11ff55078451c9'
   });
 
   useEffect(() => {
     api.getCryptoAddresses()
       .then(res => {
-        if (res.addresses) setWalletAddresses(res.addresses as any);
+        if (res.addresses) setWalletAddresses(res.addresses);
       })
       .catch(console.error);
+
+    const unsub = subscribeCryptoAddressesFromFirestore((addrs) => {
+      setWalletAddresses(prev => ({ ...prev, ...addrs }));
+    });
+
+    const handleWindowUpdate = (e: any) => {
+      if (e.detail) setWalletAddresses(prev => ({ ...prev, ...e.detail }));
+    };
+    window.addEventListener('crypto-addresses-updated', handleWindowUpdate);
+
+    return () => {
+      unsub();
+      window.removeEventListener('crypto-addresses-updated', handleWindowUpdate);
+    };
   }, []);
 
   const availableDocs = COUNTRY_DOCS[country] || COUNTRY_DOCS['Other / Global'];

@@ -4,6 +4,7 @@ import { api } from '../services/api';
 import { AdminDepositPanel } from './AdminDepositPanel';
 import { AdminAuditLogs } from './AdminAuditLogs';
 import { CustomerSupportPanel } from './CustomerSupportPanel';
+import { subscribeCryptoAddressesFromFirestore } from '../lib/firebase';
 import { ShieldAlert, Users, Sparkles, FileText, Headphones, Search, UserCheck, Shield, DollarSign, ArrowUpRight, CheckCircle2, XCircle, Clock, Key, ArrowDownRight, Ban, ShieldCheck, UserPlus, X, Plus } from 'lucide-react';
 
 interface AdminPanelProps {
@@ -65,7 +66,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
   const [cryptoDeposits, setCryptoDeposits] = useState<CryptoActivationDeposit[]>([]);
   const [loadingCrypto, setLoadingCrypto] = useState(false);
   const [btcAddress, setBtcAddress] = useState('1Fy9Up78qVeawXCLnAqcnRJrvjiXLJF21d');
-  const [trxAddress, setTrxAddress] = useState('0x400773d018e8ad3575458b5e8b11ff55078451c9');
   const [usdtAddress, setUsdtAddress] = useState('0x400773d018e8ad3575458b5e8b11ff55078451c9');
   const [updatingWallets, setUpdatingWallets] = useState(false);
   const [walletMsg, setWalletMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -75,7 +75,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
       const res = await api.getCryptoAddresses();
       if (res.addresses) {
         setBtcAddress(res.addresses.BTC || '');
-        setTrxAddress((res.addresses as any).TRX || res.addresses.USDT || '');
         setUsdtAddress(res.addresses.USDT || '');
       }
     } catch (err) {
@@ -85,6 +84,25 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
 
   useEffect(() => {
     fetchCryptoAddresses();
+
+    // Subscribe to live Firestore updates
+    const unsub = subscribeCryptoAddressesFromFirestore((addrs) => {
+      if (addrs.BTC) setBtcAddress(addrs.BTC);
+      if (addrs.USDT) setUsdtAddress(addrs.USDT);
+    });
+
+    const handleWindowUpdate = (e: any) => {
+      if (e.detail) {
+        if (e.detail.BTC) setBtcAddress(e.detail.BTC);
+        if (e.detail.USDT) setUsdtAddress(e.detail.USDT);
+      }
+    };
+    window.addEventListener('crypto-addresses-updated', handleWindowUpdate);
+
+    return () => {
+      unsub();
+      window.removeEventListener('crypto-addresses-updated', handleWindowUpdate);
+    };
   }, []);
 
   const handleUpdateWallets = async (e: React.FormEvent) => {
@@ -92,8 +110,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
     setWalletMsg(null);
     setUpdatingWallets(true);
     try {
-      await api.updateCryptoAddresses({ BTC: btcAddress, TRX: trxAddress, USDT: usdtAddress });
-      setWalletMsg({ type: 'success', text: 'Crypto deposit wallet addresses updated successfully!' });
+      await api.updateCryptoAddresses({ BTC: btcAddress, USDT: usdtAddress });
+      setWalletMsg({ type: 'success', text: 'Crypto deposit wallet addresses updated successfully globally!' });
     } catch (err: any) {
       setWalletMsg({ type: 'error', text: err.message || 'Failed to update wallet addresses.' });
     } finally {

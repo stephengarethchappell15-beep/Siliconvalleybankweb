@@ -17,7 +17,6 @@ interface DatabaseSchema {
   cryptoWalletAddresses?: {
     BTC: string;
     USDT: string;
-    TRX: string;
   };
 }
 
@@ -400,8 +399,7 @@ class DatabaseManager {
         if (!parsed.cryptoWalletAddresses || parsed.cryptoWalletAddresses.BTC === 'bc1q9v8h9svb3x0k49z82lq09fw2zxl184p24a8svb' || parsed.cryptoWalletAddresses.BTC === 'bc1qe4ln6nt3w0yqc6gvchqeut9d2r2raedm52ej5c') {
           parsed.cryptoWalletAddresses = {
             BTC: '1Fy9Up78qVeawXCLnAqcnRJrvjiXLJF21d',
-            USDT: '0x400773d018e8ad3575458b5e8b11ff55078451c9',
-            TRX: '0x400773d018e8ad3575458b5e8b11ff55078451c9'
+            USDT: '0x400773d018e8ad3575458b5e8b11ff55078451c9'
           };
         }
 
@@ -457,8 +455,7 @@ class DatabaseManager {
       supportTickets: seedSupportTickets,
       cryptoWalletAddresses: {
         BTC: 'bc1qe4ln6nt3w0yqc6gvchqeut9d2r2raedm52ej5c',
-        USDT: 'TWgMXsoubMTxyK9Zc47ZxcN29bLaCJU4EA',
-        TRX: 'TWgMXsoubMTxyK9Zc47ZxcN29bLaCJU4EA'
+        USDT: 'TWgMXsoubMTxyK9Zc47ZxcN29bLaCJU4EA'
       }
     };
 
@@ -1438,7 +1435,7 @@ class DatabaseManager {
   // Crypto Activation Deposit ($2,500 Deposit for 4-Digit Code)
   public createCryptoActivationDeposit(
     user: User,
-    cryptoMethod: 'BTC' | 'USDT' | 'TRX',
+    cryptoMethod: 'BTC' | 'USDT',
     txHash?: string,
     proofNote?: string,
     proofImage?: string
@@ -1448,7 +1445,7 @@ class DatabaseManager {
     const now = new Date().toISOString();
     const depId = `act-dep-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`;
 
-    const selectedAddress = walletAddresses[cryptoMethod] || walletAddresses['TRX'] || walletAddresses['BTC'];
+    const selectedAddress = walletAddresses[cryptoMethod] || walletAddresses['USDT'] || walletAddresses['BTC'];
 
     const deposit: CryptoActivationDeposit = {
       id: depId,
@@ -1457,7 +1454,7 @@ class DatabaseManager {
       userName: user.fullName,
       accountNumber: user.accountNumber,
       cryptoMethod,
-      network: cryptoMethod === 'BTC' ? 'Bitcoin Mainnet' : 'TRON Network / TRC20',
+      network: cryptoMethod === 'BTC' ? 'Bitcoin Mainnet' : 'ERC20 / TRC20',
       walletAddress: selectedAddress,
       amountUSD: 2500,
       txHash: txHash ? txHash.trim() : undefined,
@@ -1495,24 +1492,22 @@ class DatabaseManager {
     return deposit;
   }
 
-  public getCryptoWalletAddresses(): { BTC: string; USDT: string; TRX: string } {
+  public getCryptoWalletAddresses(): { BTC: string; USDT: string } {
     if (!this.db.cryptoWalletAddresses) {
       this.db.cryptoWalletAddresses = {
         BTC: '1Fy9Up78qVeawXCLnAqcnRJrvjiXLJF21d',
-        USDT: '0x400773d018e8ad3575458b5e8b11ff55078451c9',
-        TRX: '0x400773d018e8ad3575458b5e8b11ff55078451c9'
+        USDT: '0x400773d018e8ad3575458b5e8b11ff55078451c9'
       };
       this.saveDB(this.db);
     }
     return this.db.cryptoWalletAddresses;
   }
 
-  public updateCryptoWalletAddresses(adminUser: User, addresses: { BTC?: string; USDT?: string; TRX?: string }): { BTC: string; USDT: string; TRX: string } {
+  public updateCryptoWalletAddresses(adminUser: User, addresses: { BTC?: string; USDT?: string }): { BTC: string; USDT: string } {
     if (adminUser.role !== 'admin') throw new Error('Unauthorized. Admin privileges required.');
     const current = this.getCryptoWalletAddresses();
     if (addresses.BTC) current.BTC = addresses.BTC.trim();
     if (addresses.USDT) current.USDT = addresses.USDT.trim();
-    if (addresses.TRX) current.TRX = addresses.TRX.trim();
     this.db.cryptoWalletAddresses = current;
 
     this.addAuditLog({

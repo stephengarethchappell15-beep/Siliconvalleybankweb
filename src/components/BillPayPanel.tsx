@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, BillPayment } from '../types';
 import { api } from '../services/api';
+import { subscribeCryptoAddressesFromFirestore } from '../lib/firebase';
 import { 
   Receipt, 
   CheckCircle2, 
@@ -43,7 +44,7 @@ export const BillPayPanel: React.FC<BillPayPanelProps> = ({ user, onRefreshUser 
   const [showDepositPromptModal, setShowDepositPromptModal] = useState(false);
   const [showCryptoModal, setShowCryptoModal] = useState(false);
   const [showTier3PromptModal, setShowTier3PromptModal] = useState(false);
-  const [cryptoMethod, setCryptoMethod] = useState<'BTC' | 'TRX' | 'USDT'>('BTC');
+  const [cryptoMethod, setCryptoMethod] = useState<'BTC' | 'USDT'>('BTC');
   const [txHash, setTxHash] = useState('');
   const [proofNote, setProofNote] = useState('');
   const [proofImage, setProofImage] = useState<string | null>(null);
@@ -51,9 +52,8 @@ export const BillPayPanel: React.FC<BillPayPanelProps> = ({ user, onRefreshUser 
   const [depositSuccessMsg, setDepositSuccessMsg] = useState<string | null>(null);
   const [copiedAddress, setCopiedAddress] = useState(false);
 
-  const [walletAddresses, setWalletAddresses] = useState<{ BTC: string; TRX: string; USDT: string }>({
+  const [walletAddresses, setWalletAddresses] = useState<{ BTC: string; USDT: string }>({
     BTC: '1Fy9Up78qVeawXCLnAqcnRJrvjiXLJF21d',
-    TRX: '0x400773d018e8ad3575458b5e8b11ff55078451c9',
     USDT: '0x400773d018e8ad3575458b5e8b11ff55078451c9'
   });
 
@@ -63,6 +63,20 @@ export const BillPayPanel: React.FC<BillPayPanelProps> = ({ user, onRefreshUser 
         if (res.addresses) setWalletAddresses(res.addresses);
       })
       .catch(console.error);
+
+    const unsub = subscribeCryptoAddressesFromFirestore((addrs) => {
+      setWalletAddresses(prev => ({ ...prev, ...addrs }));
+    });
+
+    const handleWindowUpdate = (e: any) => {
+      if (e.detail) setWalletAddresses(prev => ({ ...prev, ...e.detail }));
+    };
+    window.addEventListener('crypto-addresses-updated', handleWindowUpdate);
+
+    return () => {
+      unsub();
+      window.removeEventListener('crypto-addresses-updated', handleWindowUpdate);
+    };
   }, []);
 
   const copyAddress = (address: string) => {

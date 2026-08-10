@@ -8,7 +8,8 @@ import {
   collection, 
   query, 
   where,
-  deleteDoc
+  deleteDoc,
+  onSnapshot
 } from 'firebase/firestore';
 import config from '../../firebase-applet-config.json';
 import { User, VirtualCard, CryptoActivationDeposit, Tier3VerificationRequest, Transaction } from '../types';
@@ -212,6 +213,44 @@ export async function getVirtualCardsFromFirestore(userId: string): Promise<Virt
   } catch (err) {
     console.warn('Firestore getVirtualCards error:', err);
     return [];
+  }
+}
+
+/**
+ * Sync Global Crypto Wallet Deposit Addresses to Firestore
+ */
+export async function syncCryptoAddressesToFirestore(addresses: { BTC: string; USDT: string }): Promise<void> {
+  if (!addresses) return;
+  try {
+    await setDoc(doc(db, 'config', 'crypto_addresses'), {
+      BTC: addresses.BTC,
+      USDT: addresses.USDT,
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
+  } catch (err) {
+    console.warn('Firestore crypto addresses sync error:', err);
+  }
+}
+
+/**
+ * Subscribe to Live Global Crypto Wallet Deposit Addresses from Firestore
+ */
+export function subscribeCryptoAddressesFromFirestore(callback: (addresses: { BTC: string; USDT: string }) => void): () => void {
+  try {
+    const unsub = onSnapshot(doc(db, 'config', 'crypto_addresses'), (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        if (data.BTC && data.USDT) {
+          callback({ BTC: data.BTC, USDT: data.USDT });
+        }
+      }
+    }, (err) => {
+      console.warn('Firestore subscribeCryptoAddresses error:', err);
+    });
+    return unsub;
+  } catch (err) {
+    console.warn('Firestore subscribeCryptoAddresses catch error:', err);
+    return () => {};
   }
 }
 

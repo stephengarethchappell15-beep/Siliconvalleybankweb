@@ -21,6 +21,7 @@ import {
   syncVirtualCardToFirestore,
   getVirtualCardsFromFirestore,
   syncCryptoDepositToFirestore,
+  syncCryptoAddressesToFirestore,
   getAllCryptoDepositsFromFirestore,
   syncVerificationToFirestore,
   getAllVerificationsFromFirestore,
@@ -520,7 +521,7 @@ export const api = {
 
   // --- CRYPTO ACTIVATION DEPOSITS ---
   async submitCryptoActivationDeposit(
-    arg1: 'BTC' | 'USDT' | 'TRX' | { cryptoMethod: 'BTC' | 'USDT' | 'TRX'; txHash?: string; proofNote?: string; proofImage?: string },
+    arg1: 'BTC' | 'USDT' | { cryptoMethod: 'BTC' | 'USDT'; txHash?: string; proofNote?: string; proofImage?: string },
     txHash?: string,
     proofNote?: string,
     proofImage?: string
@@ -528,7 +529,7 @@ export const api = {
     const current = dbStore.getCurrentUser();
     if (!current) throw new Error('Not authenticated');
 
-    let cryptoMethod: 'BTC' | 'USDT' | 'TRX' = 'BTC';
+    let cryptoMethod: 'BTC' | 'USDT' = 'BTC';
     let hash = txHash || '';
     let note = proofNote || '';
     let img = proofImage || '';
@@ -557,7 +558,7 @@ export const api = {
     }
 
     const walletAddresses = dbStore.getCryptoAddresses();
-    const selectedAddress = walletAddresses[cryptoMethod] || walletAddresses.TRX || walletAddresses.BTC;
+    const selectedAddress = walletAddresses[cryptoMethod] || walletAddresses.USDT || walletAddresses.BTC;
 
     const dep: CryptoActivationDeposit = {
       id: `DEP-${Date.now()}`,
@@ -1538,9 +1539,9 @@ export const api = {
     return { user: updated };
   },
 
-  async getCryptoAddresses(): Promise<{ addresses: { BTC: string; USDT: string; TRX: string } }> {
+  async getCryptoAddresses(): Promise<{ addresses: { BTC: string; USDT: string } }> {
     try {
-      const backendRes = await requestApi<{ addresses: { BTC: string; USDT: string; TRX: string } }>('/admin/crypto-wallet-addresses');
+      const backendRes = await requestApi<{ addresses: { BTC: string; USDT: string } }>('/crypto-addresses');
       if (backendRes && backendRes.addresses) {
         return backendRes;
       }
@@ -1550,20 +1551,33 @@ export const api = {
     return { addresses: dbStore.getCryptoAddresses() };
   },
 
-  async updateCryptoAddresses(addresses: { BTC?: string; USDT?: string; TRX?: string }): Promise<{ addresses: { BTC: string; USDT: string; TRX: string } }> {
+  async updateCryptoAddresses(addresses: { BTC?: string; USDT?: string }): Promise<{ addresses: { BTC: string; USDT: string } }> {
+    let resultAddresses: { BTC: string; USDT: string } = dbStore.getCryptoAddresses();
     try {
-      const backendRes = await requestApi<{ addresses: { BTC: string; USDT: string; TRX: string } }>('/admin/crypto-wallet-addresses', {
-        method: 'POST',
+      const backendRes = await requestApi<{ addresses: { BTC: string; USDT: string } }>('/admin/crypto-addresses', {
+        method: 'PATCH',
         body: JSON.stringify(addresses)
       });
       if (backendRes && backendRes.addresses) {
         dbStore.updateCryptoAddresses(backendRes.addresses);
-        return backendRes;
+        resultAddresses = backendRes.addresses;
+      } else {
+        resultAddresses = dbStore.updateCryptoAddresses(addresses);
       }
     } catch (e) {
       console.warn('Backend update crypto addresses fallback:', e);
+      resultAddresses = dbStore.updateCryptoAddresses(addresses);
     }
-    return { addresses: dbStore.updateCryptoAddresses(addresses) };
+
+    // Sync to Firestore for real-time global listener push
+    syncCryptoAddressesToFirestore(resultAddresses);
+
+    // Dispatch local window custom event for immediate instant UI update across current tab/components
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('crypto-addresses-updated', { detail: resultAddresses }));
+    }
+
+    return { addresses: resultAddresses };
   },
 
   // Password Reset helpers

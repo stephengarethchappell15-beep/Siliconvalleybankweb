@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User } from '../types';
 import { api } from '../services/api';
+import { subscribeCryptoAddressesFromFirestore } from '../lib/firebase';
 import { ArrowDownLeft, Copy, Check, QrCode, Building2, ShieldCheck, Share2, Globe2, Wallet, Coins } from 'lucide-react';
 
 interface ReceivePanelProps {
@@ -24,6 +25,20 @@ export const ReceivePanel: React.FC<ReceivePanelProps> = ({ user }) => {
         }
       })
       .catch(console.error);
+
+    const unsub = subscribeCryptoAddressesFromFirestore((addrs) => {
+      setCryptoAddresses(prev => ({ ...prev, ...addrs }));
+    });
+
+    const handleWindowUpdate = (e: any) => {
+      if (e.detail) setCryptoAddresses(prev => ({ ...prev, ...e.detail }));
+    };
+    window.addEventListener('crypto-addresses-updated', handleWindowUpdate);
+
+    return () => {
+      unsub();
+      window.removeEventListener('crypto-addresses-updated', handleWindowUpdate);
+    };
   }, []);
 
   const copyToClipboard = (text: string, fieldName: string) => {
@@ -216,7 +231,7 @@ export const ReceivePanel: React.FC<ReceivePanelProps> = ({ user }) => {
                   </div>
                   <div>
                     <h4 className="text-xs font-bold text-white">Tether (USDT) Treasury Wallet</h4>
-                    <p className="text-[10px] text-slate-400">Network: TRON (TRC-20)</p>
+                    <p className="text-[10px] text-slate-400">Network: USDT (ERC-20 / TRC-20)</p>
                   </div>
                 </div>
                 <span className="text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-full uppercase">

@@ -54,8 +54,8 @@ export interface CryptoActivationDeposit {
   userEmail: string;
   userName: string;
   accountNumber: string;
-  cryptoMethod: 'BTC' | 'USDT' | 'TRX';
-  network?: string; // e.g., 'Bitcoin Mainnet', 'TRC20', 'TRON Network'
+  cryptoMethod: 'BTC' | 'USDT';
+  network?: string; // e.g., 'Bitcoin Mainnet', 'ERC20 / TRC20'
   walletAddress: string;
   amountUSD: number;
   txHash?: string;
