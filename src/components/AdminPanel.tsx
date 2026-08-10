@@ -13,7 +13,7 @@ interface AdminPanelProps {
 }
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSuccess }) => {
-  const [subTab, setSubTab] = useState<'users' | 'funding' | 'crypto' | 'withdraw' | 'audit' | 'support' | 'verifications'>('users');
+  const [subTab, setSubTab] = useState<'pending' | 'users' | 'funding' | 'crypto' | 'withdraw' | 'audit' | 'support' | 'verifications'>('pending');
   const [users, setUsers] = useState<User[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loadingUsers, setLoadingUsers] = useState(false);
@@ -180,11 +180,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
 
   useEffect(() => {
     fetchUsers(searchQuery);
+    fetchSysTxns();
+    fetchCryptoDeposits();
+    fetchVerifications();
   }, [searchQuery]);
 
   useEffect(() => {
+    if (subTab === 'pending' || subTab === 'withdraw') fetchSysTxns();
     if (subTab === 'crypto') fetchCryptoDeposits();
-    if (subTab === 'withdraw') fetchSysTxns();
     if (subTab === 'verifications') fetchVerifications();
   }, [subTab]);
 
@@ -363,6 +366,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
           {/* Admin Navigation Pills */}
           <div className="flex flex-wrap items-center gap-1.5 bg-slate-950 p-1.5 rounded-2xl border border-slate-800">
             <button
+              onClick={() => setSubTab('pending')}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all relative ${
+                subTab === 'pending' ? 'bg-amber-500 text-slate-950 shadow-md font-bold' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Clock className="w-3.5 h-3.5" />
+              <span>Pending Queue</span>
+              {sysTxns.filter(t => t.status === 'Pending').length > 0 && (
+                <span className="bg-rose-500 text-white font-extrabold text-[10px] px-1.5 py-0.2 rounded-full animate-pulse ml-0.5">
+                  {sysTxns.filter(t => t.status === 'Pending').length}
+                </span>
+              )}
+            </button>
+
+            <button
               onClick={() => setSubTab('users')}
               className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
                 subTab === 'users' ? 'bg-amber-500 text-slate-950 shadow-md font-bold' : 'text-slate-400 hover:text-white'
@@ -440,6 +458,130 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
           </div>
         </div>
       </div>
+
+      {/* Sub-Tab 0: Pending Transactions Review Queue */}
+      {subTab === 'pending' && (
+        <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-5">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <Clock className="w-5 h-5 text-amber-400" />
+                  Pending Transactions Administrative Review Queue
+                </h3>
+                <span className="bg-amber-500/20 text-amber-300 text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full border border-amber-500/30">
+                  {sysTxns.filter(t => t.status === 'Pending').length} Pending
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 mt-1">
+                Review and manage all pending user transfers, wire withdrawals, bill payments, and code authorizations requiring compliance clearance.
+              </p>
+            </div>
+
+            <button
+              onClick={fetchSysTxns}
+              disabled={loadingTxns}
+              className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
+            >
+              <Clock className={`w-3.5 h-3.5 ${loadingTxns ? 'animate-spin text-amber-400' : ''}`} />
+              <span>Refresh Queue</span>
+            </button>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="border-b border-slate-800 text-slate-400 font-semibold uppercase tracking-wider">
+                  <th className="py-3 px-3">Submission Date</th>
+                  <th className="py-3 px-3">Reference / ID</th>
+                  <th className="py-3 px-3">Client User</th>
+                  <th className="py-3 px-3">Type & Details</th>
+                  <th className="py-3 px-3">Amount</th>
+                  <th className="py-3 px-3">Status</th>
+                  <th className="py-3 px-3 text-right">Review Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/60 text-slate-200">
+                {loadingTxns ? (
+                  <tr>
+                    <td colSpan={7} className="text-center py-8 text-slate-500">
+                      Loading pending transactions queue...
+                    </td>
+                  </tr>
+                ) : sysTxns.filter(t => t.status === 'Pending').length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="text-center py-10 text-slate-400">
+                      <div className="flex flex-col items-center justify-center space-y-2">
+                        <CheckCircle2 className="w-8 h-8 text-emerald-400 opacity-60" />
+                        <p className="font-semibold text-slate-300">All caught up! No pending transactions in the queue.</p>
+                        <p className="text-[11px] text-slate-500">New user transfers and submissions will automatically appear here for approval.</p>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  sysTxns
+                    .filter(t => t.status === 'Pending')
+                    .map((t) => (
+                      <tr key={t.id} className="hover:bg-slate-950/50 transition-colors">
+                        <td className="py-3 px-3 text-slate-400 whitespace-nowrap">
+                          {new Date(t.createdAt).toLocaleDateString()} {new Date(t.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </td>
+
+                        <td className="py-3 px-3 font-mono text-amber-400 font-semibold whitespace-nowrap">
+                          {t.reference}
+                        </td>
+
+                        <td className="py-3 px-3 font-medium">
+                          <div className="font-semibold text-white">{t.senderName || t.userEmail}</div>
+                          <div className="text-[11px] text-slate-400">Acc #{t.accountNumber} ({t.userEmail})</div>
+                        </td>
+
+                        <td className="py-3 px-3">
+                          <div className="font-semibold text-white">{t.type}</div>
+                          <div className="text-[11px] text-slate-400">{t.description}</div>
+                          {t.recipientAccountNumber && (
+                            <div className="text-[10px] text-emerald-400 font-mono mt-0.5">Recipient Acc: {t.recipientAccountNumber} {t.recipientName ? `(${t.recipientName})` : ''}</div>
+                          )}
+                          {t.destinationBank && (
+                            <div className="text-[10px] text-cyan-400 mt-0.5">Bank: {t.destinationBank} ({t.destinationCountry || 'US'})</div>
+                          )}
+                        </td>
+
+                        <td className="py-3 px-3 font-mono font-bold text-emerald-400 text-sm whitespace-nowrap">
+                          ${t.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+
+                        <td className="py-3 px-3 whitespace-nowrap">
+                          <span className="bg-amber-500/10 text-amber-400 border border-amber-500/30 text-[10px] font-extrabold px-2.5 py-1 rounded-full uppercase flex items-center gap-1.5 w-fit">
+                            <Clock className="w-3 h-3 animate-spin text-amber-400" /> Pending Review
+                          </span>
+                        </td>
+
+                        <td className="py-3 px-3 text-right whitespace-nowrap space-x-2">
+                          <button
+                            onClick={() => handleApproveTxn(t.id, t.senderName)}
+                            className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 px-3 py-1.5 rounded-xl text-xs font-bold transition-all inline-flex items-center gap-1 shadow-md shadow-emerald-500/10 cursor-pointer"
+                            title="Approve transaction and credit recipient account"
+                          >
+                            <CheckCircle2 className="w-4 h-4" /> Approve & Credit
+                          </button>
+
+                          <button
+                            onClick={() => handleRejectTxn(t.id)}
+                            className="bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all inline-flex items-center gap-1 cursor-pointer"
+                            title="Reject transaction and refund user balance"
+                          >
+                            <XCircle className="w-4 h-4" /> Cancel / Reject & Refund
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Sub-Tab 1: User Directory & Search */}
       {subTab === 'users' && (

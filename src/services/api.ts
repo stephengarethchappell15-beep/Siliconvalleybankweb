@@ -1038,12 +1038,13 @@ export const api = {
     };
 
     dbStore.addTransaction(txn);
+    syncTransactionToFirestore(txn);
 
     if (!isPending) {
       const recipient = dbStore.getUsers().find(u => u.accountNumber === payload.recipientInput || u.email.toLowerCase() === payload.recipientInput.toLowerCase());
       if (recipient) {
         dbStore.saveUser({ ...recipient, balance: recipient.balance + payload.amount });
-        dbStore.addTransaction({
+        const recTxn: Transaction = {
           id: `TXN-${Date.now() + 1}`,
           userId: recipient.id,
           userEmail: recipient.email,
@@ -1058,7 +1059,9 @@ export const api = {
           description: `Incoming Transfer from ${current.fullName}`,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
-        });
+        };
+        dbStore.addTransaction(recTxn);
+        syncTransactionToFirestore(recTxn);
       }
     }
 
@@ -1077,6 +1080,8 @@ export const api = {
     if (backendRes && backendRes.updatedUser && backendRes.transaction) {
       dbStore.saveUser(backendRes.updatedUser);
       dbStore.addTransaction(backendRes.transaction);
+      syncUserToFirestore(backendRes.updatedUser);
+      syncTransactionToFirestore(backendRes.transaction);
       return { user: backendRes.updatedUser, updatedUser: backendRes.updatedUser, transaction: backendRes.transaction };
     }
 
@@ -1095,6 +1100,7 @@ export const api = {
 
     const newBalance = current.balance - payload.amount;
     const updatedUser = dbStore.saveUser({ ...current, balance: newBalance, ledgerBalance: newBalance });
+    syncUserToFirestore(updatedUser);
 
     const txn: Transaction = {
       id: `TXN-${Date.now()}`,
@@ -1112,7 +1118,8 @@ export const api = {
     };
 
     dbStore.addTransaction(txn);
-    return { user: updatedUser, updatedUser, transaction: txn };
+    syncTransactionToFirestore(txn);
+    return { user: updatedUser, updatedUser: updatedUser, transaction: txn };
   },
 
   async getTransactions(): Promise<{ transactions: Transaction[] }> {
@@ -1129,54 +1136,152 @@ export const api = {
   },
 
   async getAllTransactions(): Promise<{ transactions: Transaction[] }> {
-    const backendRes = await requestApi<{ transactions: Transaction[] }>('/admin/transactions');
-    if (backendRes && Array.isArray(backendRes.transactions)) {
-      backendRes.transactions.forEach(t => dbStore.addTransaction(t));
-      return { transactions: backendRes.transactions };
+    let allTxns: Transaction[] = [];
+    try {
+      const backendRes = await requestApi<{ transactions: Transaction[] }>('/admin/transactions');
+      if (backendRes && Array.isArray(backendRes.transactions)) {
+        backendRes.transactions.forEach(t => dbStore.addTransaction(t));
+        allTxns = backendRes.transactions;
+      }
+    } catch (e) {
+      console.warn('Backend getAllTransactions fallback:', e);
     }
 
-    return { transactions: dbStore.getTransactions() };
+    const localTxns = dbStore.getTransactions();
+    let fsTxns: Transaction[] = [];
+    try {
+      fsTxns = await getTransactionsFromFirestore();
+    } catch (fsErr) {
+      console.warn('Firestore getAllTransactions error:', fsErr);
+    }
+
+    const map = new Map<string, Transaction>();
+    localTxns.forEach(t => map.set(t.id, t));
+    allTxns.forEach(t => map.set(t.id, t));
+    fsTxns.forEach(t => {
+      map.set(t.id, t);
+      dbStore.addTransaction(t);
+    });
+
+    const combined = Array.from(map.values()).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return { transactions: combined };
   },
 
   async approveTransaction(txnId: string, senderName?: string): Promise<void> {
-    await requestApi<{ message: string; transaction?: Transaction }>('/admin/approve-transaction', {
-      method: 'POST',
-      body: JSON.stringify({ transactionId: txnId, senderName }),
-    });
-
-    dbStore.updateTransaction(txnId, { 
-      status: 'Completed',
-      ...(senderName ? { senderName } : {})
-    });
-  },
-
-  async cancelTransaction(txnId: string): Promise<void> {
-    await requestApi<{ message: string; transaction?: Transaction }>('/admin/cancel-transaction', {
-      method: 'POST',
-      body: JSON.stringify({ transactionId: txnId }),
-    });
-
-    dbStore.updateTransaction(txnId, { status: 'Cancelled' });
-  },
-
-  async adminCancelTransaction(txnId: string): Promise<void> {
-    return this.cancelTransaction(txnId);
-  },
-
-  async rejectTransaction(txnId: string, notes?: string): Promise<void> {
-    await requestApi<{ message: string; transaction?: Transaction }>('/admin/reject-transaction', {
-      method: 'POST',
-      body: JSON.stringify({ transactionId: txnId, reason: notes }),
-    });
+    try {
+      await requestApi<{ message: string; transaction?: Transaction }>('/admin/approve-transaction', {
+        method: 'POST',
+        body: JSON.stringify({ transactionId: txnId, senderName }),
+      });
+    } catch (e) {
+      console.warn('Backend approveTransaction fallback:', e);
+    }
 
     const txn = dbStore.getTransactions().find(t => t.id === txnId);
     if (txn) {
-      const user = dbStore.getUserById(txn.userId);
-      if (user && (txn.type === 'Wire Withdrawal' || txn.type === 'Wire Transfer' || txn.type === 'Transfer' || txn.type === 'Withdrawal')) {
-        dbStore.saveUser({ ...user, balance: user.balance + txn.amount, ledgerBalance: user.balance + txn.amount });
+      const updatedTxn: Transaction = {
+        ...txn,
+        status: 'Completed',
+        ...(senderName ? { senderName } : {}),
+        updatedAt: new Date().toISOString()
+      };
+      dbStore.updateTransaction(txnId, updatedTxn);
+      syncTransactionToFirestore(updatedTxn);
+
+      if (txn.recipientAccountNumber || txn.recipientEmail) {
+        const recipient = dbStore.getUsers().find(u => 
+          (txn.recipientAccountNumber && u.accountNumber === txn.recipientAccountNumber) || 
+          (txn.recipientEmail && u.email.toLowerCase() === txn.recipientEmail.toLowerCase())
+        );
+        if (recipient) {
+          const updatedRec = dbStore.saveUser({
+            ...recipient,
+            balance: recipient.balance + txn.amount,
+            transferCodeApproved: true
+          });
+          syncUserToFirestore(updatedRec);
+
+          dbStore.addNotification({
+            id: `NOTIF-${Date.now()}-REC`,
+            userId: recipient.id,
+            title: 'Funds Credited to Account',
+            message: `Your account received $${txn.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })} from ${senderName || 'SVB Treasury'}. Ref: ${txn.reference}`,
+            amount: txn.amount,
+            currency: txn.currency || 'USD',
+            reference: txn.reference,
+            read: false,
+            createdAt: new Date().toISOString()
+          });
+        }
+      }
+
+      const senderUser = dbStore.getUserById(txn.userId);
+      if (senderUser) {
+        dbStore.addNotification({
+          id: `NOTIF-${Date.now()}-SND`,
+          userId: senderUser.id,
+          title: 'Outgoing Transfer Processed & Approved',
+          message: `Your transfer ${txn.reference} of $${txn.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })} has been approved and completed by Silicon Valley Bank.`,
+          amount: txn.amount,
+          currency: txn.currency || 'USD',
+          reference: txn.reference,
+          read: false,
+          createdAt: new Date().toISOString()
+        });
       }
     }
-    dbStore.updateTransaction(txnId, { status: 'Rejected' });
+  },
+
+  async cancelTransaction(txnId: string): Promise<void> {
+    return this.rejectTransaction(txnId, 'Cancelled by Admin');
+  },
+
+  async adminCancelTransaction(txnId: string): Promise<void> {
+    return this.rejectTransaction(txnId, 'Cancelled by Admin');
+  },
+
+  async rejectTransaction(txnId: string, notes?: string): Promise<void> {
+    try {
+      await requestApi<{ message: string; transaction?: Transaction }>('/admin/reject-transaction', {
+        method: 'POST',
+        body: JSON.stringify({ transactionId: txnId, reason: notes }),
+      });
+    } catch (e) {
+      console.warn('Backend rejectTransaction fallback:', e);
+    }
+
+    const txn = dbStore.getTransactions().find(t => t.id === txnId);
+    if (txn) {
+      const updatedTxn: Transaction = {
+        ...txn,
+        status: 'Rejected',
+        updatedAt: new Date().toISOString()
+      };
+      dbStore.updateTransaction(txnId, updatedTxn);
+      syncTransactionToFirestore(updatedTxn);
+
+      const user = dbStore.getUserById(txn.userId);
+      if (user && (txn.type === 'Wire Withdrawal' || txn.type === 'Wire Transfer' || txn.type === 'Transfer' || txn.type === 'Withdrawal' || txn.type === 'Bill Pay')) {
+        const refundedUser = dbStore.saveUser({
+          ...user,
+          balance: user.balance + txn.amount,
+          ledgerBalance: user.balance + txn.amount
+        });
+        syncUserToFirestore(refundedUser);
+
+        dbStore.addNotification({
+          id: `NOTIF-${Date.now()}-REJ`,
+          userId: user.id,
+          title: 'Transaction Declined & Funds Refunded',
+          message: `Your transaction ${txn.reference} for $${txn.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })} was declined.${notes ? ` Reason: ${notes}` : ''} The full amount of $${txn.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })} has been refunded to your available balance.`,
+          amount: txn.amount,
+          currency: txn.currency || 'USD',
+          reference: txn.reference,
+          read: false,
+          createdAt: new Date().toISOString()
+        });
+      }
+    }
   },
 
   // --- NOTIFICATIONS ---
