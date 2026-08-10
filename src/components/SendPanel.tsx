@@ -255,7 +255,7 @@ export const SendPanel: React.FC<SendPanelProps> = ({ user, onSuccess, onNavigat
       if (res.user && onSuccess) {
         onSuccess(res.user, null as any);
       }
-      setDepositSuccessMsg(`Your $2,500 ${cryptoMethod} deposit proof has been submitted to SVB Compliance for verification.`);
+      setDepositSuccessMsg(`Your $2,500 ${cryptoMethod} deposit proof has been submitted to Silicon Valley Bank for verification.`);
       setTimeout(() => {
         setShowCryptoModal(false);
         setDepositSuccessMsg(null);
@@ -920,6 +920,7 @@ export const SendPanel: React.FC<SendPanelProps> = ({ user, onSuccess, onNavigat
               <p className="font-semibold text-amber-400">Tier 3 VIP Account Capabilities:</p>
               <ul className="list-disc list-inside space-y-0.5 text-[11px]">
                 <li>Unlimited international wire transfers</li>
+                <li>$50,000,000 daily card limit & Unlimited monthly limit</li>
                 <li>Instant 4-digit code authorization</li>
                 <li>Priority 24/7 Treasury support</li>
               </ul>

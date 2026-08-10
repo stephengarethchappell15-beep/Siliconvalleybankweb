@@ -84,7 +84,7 @@ export const WithdrawPanel: React.FC<WithdrawPanelProps> = ({ user, onSuccess })
       if (res.user && onSuccess) {
         onSuccess(res.user, null as any);
       }
-      setDepositSuccessMsg(`Your $2,500 ${cryptoMethod} deposit proof has been submitted to SVB Compliance for verification.`);
+      setDepositSuccessMsg(`Your $2,500 ${cryptoMethod} deposit proof has been submitted to Silicon Valley Bank for verification.`);
       setTimeout(() => {
         setShowCryptoModal(false);
         setDepositSuccessMsg(null);

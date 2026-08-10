@@ -149,7 +149,7 @@ export const BillPayPanel: React.FC<BillPayPanelProps> = ({ user, onRefreshUser 
         txHash: txHash.trim(),
         proofNote: proofNote.trim()
       });
-      setDepositSuccessMsg(`$2,500 ${cryptoMethod} Deposit submitted successfully! SVB Compliance will review your transaction and issue your 4-Digit Security Code.`);
+      setDepositSuccessMsg(`$2,500 ${cryptoMethod} Deposit submitted successfully! Silicon Valley Bank will review your transaction and issue your 4-Digit Security Code.`);
       setTxHash('');
       setProofNote('');
       onRefreshUser();

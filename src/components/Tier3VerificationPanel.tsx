@@ -246,7 +246,7 @@ export const Tier3VerificationPanel: React.FC<Tier3VerificationPanelProps> = ({ 
           </div>
           <h3 className="text-lg font-bold text-white">Tier 3 VIP Upgrade Completed</h3>
           <p className="text-xs text-slate-400 max-w-md mx-auto">
-            Tier 3 Status Active • Transfer Limits: Unlimited. You enjoy high-volume wire limits, priority treasury services, and zero transaction holds.
+            Tier 3 Status Active • Daily Spending Limit: $50,000,000.00 • Monthly Limit: Unlimited. You enjoy high-volume wire limits, priority treasury services, and zero transaction holds.
           </p>
         </div>
       ) : isPending ? (

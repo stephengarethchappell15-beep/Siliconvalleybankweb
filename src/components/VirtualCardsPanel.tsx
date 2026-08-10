@@ -33,7 +33,7 @@ export const VirtualCardsPanel: React.FC<VirtualCardsPanelProps> = ({ user, onRe
   // Form State for Issuing Card
   const [cardType, setCardType] = useState('Visa Corporate');
   const [category, setCategory] = useState<'Business' | 'Marketing' | 'Software Subscriptions' | 'Travel' | 'Personal'>('Business');
-  const [spendingLimit, setSpendingLimit] = useState(5000);
+  const [spendingLimit, setSpendingLimit] = useState(50000);
   const [issuing, setIssuing] = useState(false);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
@@ -337,7 +337,7 @@ export const VirtualCardsPanel: React.FC<VirtualCardsPanelProps> = ({ user, onRe
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-slate-400">Monthly Spending Limit:</span>
                     <span className="font-mono font-bold text-emerald-400">
-                      {user.verificationTier === 'Tier 3' || card.spendingLimit >= 50000000 ? 'Unlimited' : `$${card.spendingLimit.toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
+                      {user.verificationTier === 'Tier 3' || card.spendingLimit >= 50000000 ? 'Unlimited' : '$1,000,000.00'}
                     </span>
                   </div>
                   <div className="flex items-center justify-between text-xs text-slate-400 pt-1">
@@ -347,7 +347,7 @@ export const VirtualCardsPanel: React.FC<VirtualCardsPanelProps> = ({ user, onRe
                   <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
                     <div 
                       className="bg-cyan-400 h-full rounded-full" 
-                      style={{ width: user.verificationTier === 'Tier 3' || card.spendingLimit >= 50000000 ? '1%' : `${Math.min(100, (card.spentAmount / card.spendingLimit) * 100)}%` }} 
+                      style={{ width: user.verificationTier === 'Tier 3' || card.spendingLimit >= 50000000 ? '1%' : `${Math.min(100, (card.spentAmount / (card.spendingLimit || 50000)) * 100)}%` }} 
                     />
                   </div>
                 </div>

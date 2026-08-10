@@ -219,6 +219,14 @@ export const api = {
     // 1. Try Express backend API
     const backendRes = await requestApi<{ user: User }>('/auth/me');
     if (backendRes && backendRes.user) {
+      if (!backendRes.user.profilePicture) {
+        try {
+          const cachedAvatar = localStorage.getItem(`svb_avatar_${backendRes.user.id}`);
+          if (cachedAvatar) backendRes.user.profilePicture = cachedAvatar;
+        } catch (e) {}
+      } else {
+        try { localStorage.setItem(`svb_avatar_${backendRes.user.id}`, backendRes.user.profilePicture); } catch (e) {}
+      }
       dbStore.saveUser(backendRes.user);
       syncUserToFirestore(backendRes.user);
       return { user: backendRes.user };
@@ -243,6 +251,13 @@ export const api = {
       throw new Error('Not authenticated');
     }
 
+    if (!user.profilePicture) {
+      try {
+        const cachedAvatar = localStorage.getItem(`svb_avatar_${user.id}`);
+        if (cachedAvatar) user.profilePicture = cachedAvatar;
+      } catch (e) {}
+    }
+
     return { user };
   },
 
@@ -253,7 +268,13 @@ export const api = {
     });
 
     if (backendRes && backendRes.user) {
+      if (backendRes.user.profilePicture) {
+        try { localStorage.setItem(`svb_avatar_${backendRes.user.id}`, backendRes.user.profilePicture); } catch (e) {}
+      } else if (data.profilePicture === '') {
+        try { localStorage.removeItem(`svb_avatar_${backendRes.user.id}`); } catch (e) {}
+      }
       dbStore.saveUser(backendRes.user);
+      syncUserToFirestore(backendRes.user);
       return { user: backendRes.user };
     }
 
@@ -268,6 +289,14 @@ export const api = {
       ...(data.profilePicture !== undefined ? { profilePicture: data.profilePicture } : {}),
       ...(data.twoFactorEnabled !== undefined ? { twoFactorEnabled: data.twoFactorEnabled } : {})
     });
+
+    if (updated.profilePicture) {
+      try { localStorage.setItem(`svb_avatar_${updated.id}`, updated.profilePicture); } catch (e) {}
+    } else if (data.profilePicture === '') {
+      try { localStorage.removeItem(`svb_avatar_${updated.id}`); } catch (e) {}
+    }
+
+    syncUserToFirestore(updated);
 
     return { user: updated };
   },
@@ -479,7 +508,7 @@ export const api = {
         id: `NOTIF-${Date.now()}`,
         userId: user.id,
         title: 'Tier 3 Verification Request Rejected',
-        message: `Your Tier 3 verification submission was rejected by Compliance. Reason: ${notes || 'Documentation requirements not met'}. Please contact support.`,
+        message: `Your Tier 3 verification submission was rejected by Silicon Valley Bank. Reason: ${notes || 'Documentation requirements not met'}. Please contact support.`,
         amount: 0,
         currency: 'USD',
         reference: `VERIF-REJ-${verifId}`,
@@ -724,7 +753,7 @@ export const api = {
           id: `NOTIF-${Date.now()}`,
           userId: user.id,
           title: '$2,500 Activation Deposit Rejected',
-          message: `Your $2,500 code activation deposit was cancelled by Compliance Admin. ${notes ? 'Reason: ' + notes : ''}`,
+          message: `Your $2,500 code activation deposit was cancelled by Silicon Valley Bank. ${notes ? 'Reason: ' + notes : ''}`,
           amount: 0,
           currency: 'USD',
           reference: depositId,
@@ -832,7 +861,7 @@ export const api = {
       id: `NOTIF-${Date.now()}`,
       userId: user.id,
       title: '4-Digit Authorization Code Revoked',
-      message: 'Your 4-Digit Outgoing Transfer Code authorization has been cancelled by SVB Administration.',
+      message: 'Your 4-Digit Outgoing Transfer Code authorization has been cancelled by Silicon Valley Bank.',
       amount: 0,
       currency: 'USD',
       reference: `REVOKE-${Date.now()}`,
@@ -1184,7 +1213,7 @@ export const api = {
       cvv: `${Math.floor(100 + Math.random() * 900)}`,
       cardType: data.cardType || 'Visa Corporate',
       category: data.category || 'Business',
-      spendingLimit: data.spendingLimit || 10000,
+      spendingLimit: current.verificationTier === 'Tier 3' ? 50000000 : (data.spendingLimit || 50000),
       spentAmount: 0,
       status: 'Active',
       createdAt: new Date().toISOString()

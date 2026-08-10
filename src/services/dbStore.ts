@@ -250,7 +250,7 @@ function getInitialDB(): DBStructure {
         cvv: '849',
         cardType: 'Visa Corporate',
         category: 'Business',
-        spendingLimit: 25000,
+        spendingLimit: 50000,
         spentAmount: 1240,
         status: 'Active',
         createdAt: new Date().toISOString()
@@ -322,15 +322,21 @@ class LocalDBStore {
     const clean = id.trim().toLowerCase();
     const cleanNum = clean.replace(/[^0-9]/g, '');
 
-    return (
-      this.db.users.find(u => 
-        u.id === id || 
-        u.id.toLowerCase() === clean || 
-        u.email.toLowerCase() === clean ||
-        u.accountNumber === id ||
-        (cleanNum.length > 0 && u.accountNumber.replace(/[^0-9]/g, '') === cleanNum)
-      ) || null
-    );
+    const found = this.db.users.find(u => 
+      u.id === id || 
+      u.id.toLowerCase() === clean || 
+      u.email.toLowerCase() === clean ||
+      u.accountNumber === id ||
+      (cleanNum.length > 0 && u.accountNumber.replace(/[^0-9]/g, '') === cleanNum)
+    ) || null;
+
+    if (found && !found.profilePicture) {
+      try {
+        const cached = localStorage.getItem(`svb_avatar_${found.id}`);
+        if (cached) found.profilePicture = cached;
+      } catch (e) {}
+    }
+    return found;
   }
 
   getUserByEmail(email: string): User | null {
@@ -339,14 +345,20 @@ class LocalDBStore {
     const clean = email.trim().toLowerCase();
     const cleanNum = clean.replace(/[^0-9]/g, '');
 
-    return (
-      this.db.users.find(u => 
-        u.email.toLowerCase() === clean || 
-        u.accountNumber.toLowerCase() === clean ||
-        (cleanNum.length > 0 && u.accountNumber.replace(/[^0-9]/g, '') === cleanNum) ||
-        u.id.toLowerCase() === clean
-      ) || null
-    );
+    const found = this.db.users.find(u => 
+      u.email.toLowerCase() === clean || 
+      u.accountNumber.toLowerCase() === clean ||
+      (cleanNum.length > 0 && u.accountNumber.replace(/[^0-9]/g, '') === cleanNum) ||
+      u.id.toLowerCase() === clean
+    ) || null;
+
+    if (found && !found.profilePicture) {
+      try {
+        const cached = localStorage.getItem(`svb_avatar_${found.id}`);
+        if (cached) found.profilePicture = cached;
+      } catch (e) {}
+    }
+    return found;
   }
 
   getCurrentUser(): User | null {
@@ -362,6 +374,11 @@ class LocalDBStore {
       this.db.users[idx] = { ...this.db.users[idx], ...user };
     } else {
       this.db.users.push(user);
+    }
+    if (user.profilePicture) {
+      try { localStorage.setItem(`svb_avatar_${user.id}`, user.profilePicture); } catch (e) {}
+    } else if (user.profilePicture === '') {
+      try { localStorage.removeItem(`svb_avatar_${user.id}`); } catch (e) {}
     }
     this.persist();
     return user;
@@ -397,12 +414,49 @@ class LocalDBStore {
   // Notifications
   getNotifications(userId: string): UserNotification[] {
     this.refresh();
-    return this.db.notifications.filter(n => n.userId === userId);
+    const cleanStr = (s: string) => {
+      if (!s) return '';
+      return s
+        .replace(/Compliance Admin/gi, 'Silicon Valley Bank')
+        .replace(/Compliance team/gi, 'Silicon Valley Bank')
+        .replace(/Bank Compliance/gi, 'Silicon Valley Bank')
+        .replace(/SVB Compliance/gi, 'Silicon Valley Bank')
+        .replace(/SVB Administration/gi, 'Silicon Valley Bank')
+        .replace(/by Compliance/gi, 'by Silicon Valley Bank')
+        .replace(/by Admin/gi, 'by Silicon Valley Bank')
+        .replace(/\bAdmin\b/g, 'Silicon Valley Bank')
+        .replace(/\badmin\b/g, 'Silicon Valley Bank');
+    };
+    return this.db.notifications
+      .filter(n => n.userId === userId)
+      .map(n => ({
+        ...n,
+        title: cleanStr(n.title),
+        message: cleanStr(n.message)
+      }));
   }
 
   addNotification(notif: UserNotification): void {
     this.refresh();
-    this.db.notifications.unshift(notif);
+    const cleanStr = (s: string) => {
+      if (!s) return '';
+      return s
+        .replace(/Compliance Admin/gi, 'Silicon Valley Bank')
+        .replace(/Compliance team/gi, 'Silicon Valley Bank')
+        .replace(/Bank Compliance/gi, 'Silicon Valley Bank')
+        .replace(/SVB Compliance/gi, 'Silicon Valley Bank')
+        .replace(/SVB Administration/gi, 'Silicon Valley Bank')
+        .replace(/by Compliance/gi, 'by Silicon Valley Bank')
+        .replace(/by Admin/gi, 'by Silicon Valley Bank')
+        .replace(/\bAdmin\b/g, 'Silicon Valley Bank')
+        .replace(/\badmin\b/g, 'Silicon Valley Bank');
+    };
+    const cleaned = {
+      ...notif,
+      title: cleanStr(notif.title),
+      message: cleanStr(notif.message)
+    };
+    this.db.notifications.unshift(cleaned);
     this.persist();
   }
 

@@ -9,6 +9,20 @@ interface NotificationsDrawerProps {
   onMarkAllRead: () => void;
 }
 
+const cleanNotificationText = (str: string) => {
+  if (!str) return '';
+  return str
+    .replace(/Compliance Admin/gi, 'Silicon Valley Bank')
+    .replace(/Compliance team/gi, 'Silicon Valley Bank')
+    .replace(/Bank Compliance/gi, 'Silicon Valley Bank')
+    .replace(/SVB Compliance/gi, 'Silicon Valley Bank')
+    .replace(/SVB Administration/gi, 'Silicon Valley Bank')
+    .replace(/by Compliance/gi, 'by Silicon Valley Bank')
+    .replace(/by Admin/gi, 'by Silicon Valley Bank')
+    .replace(/\bAdmin\b/g, 'Silicon Valley Bank')
+    .replace(/\badmin\b/g, 'Silicon Valley Bank');
+};
+
 export const NotificationsDrawer: React.FC<NotificationsDrawerProps> = ({
   isOpen,
   notifications,
@@ -64,13 +78,13 @@ export const NotificationsDrawer: React.FC<NotificationsDrawerProps> = ({
                 <div className="flex items-center justify-between mb-1">
                   <span className="font-bold text-emerald-400 flex items-center gap-1">
                     <Sparkles className="w-3 h-3" />
-                    {n.title}
+                    {cleanNotificationText(n.title)}
                   </span>
                   <span className="text-[10px] text-slate-400 font-mono">
                     {new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </span>
                 </div>
-                <p className="text-slate-200 mt-1 leading-relaxed">{n.message}</p>
+                <p className="text-slate-200 mt-1 leading-relaxed">{cleanNotificationText(n.message)}</p>
                 <div className="mt-2 pt-2 border-t border-slate-800/80 flex items-center justify-between text-[10px] text-slate-400">
                   <span className="font-mono">Ref: {n.reference}</span>
                   <span className="font-bold text-emerald-400">+{n.currency} ${n.amount.toFixed(2)}</span>

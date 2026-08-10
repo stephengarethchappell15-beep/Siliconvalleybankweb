@@ -9,6 +9,48 @@ interface ProfilePanelProps {
   onUpdateUser: (updatedUser: User) => void;
 }
 
+function compressImage(file: File, maxWidth = 300, maxHeight = 300, quality = 0.85): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Failed to read image file'));
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('Failed to load image format'));
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > maxWidth) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          }
+        } else {
+          if (height > maxHeight) {
+            width = Math.round((width * maxHeight) / height);
+            height = maxHeight;
+          }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(event.target?.result as string);
+          return;
+        }
+
+        ctx.drawImage(img, 0, 0, width, height);
+        const compressedDataUrl = canvas.toDataURL('image/jpeg', quality);
+        resolve(compressedDataUrl);
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 export const ProfilePanel: React.FC<ProfilePanelProps> = ({ user, onUpdateUser }) => {
   const [fullName, setFullName] = useState(user.fullName);
   const [phone, setPhone] = useState(user.phone || '');
@@ -19,24 +61,34 @@ export const ProfilePanel: React.FC<ProfilePanelProps> = ({ user, onUpdateUser }
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 5 * 1024 * 1024) {
-      setMsg({ type: 'error', text: 'Image file size should be less than 5MB.' });
+    if (file.size > 10 * 1024 * 1024) {
+      setMsg({ type: 'error', text: 'Image file size should be less than 10MB.' });
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (reader.result) {
-        const base64 = reader.result.toString();
-        setProfilePicture(base64);
-        setMsg({ type: 'success', text: 'Profile picture selected. Click "Save Profile Changes" below to apply.' });
-      }
-    };
-    reader.readAsDataURL(file);
+    setMsg(null);
+    try {
+      setLoading(true);
+      const compressedBase64 = await compressImage(file, 300, 300, 0.85);
+      setProfilePicture(compressedBase64);
+
+      const res = await api.updateProfile({
+        fullName: fullName.trim(),
+        phone: phone.trim(),
+        address: address.trim(),
+        profilePicture: compressedBase64
+      });
+      onUpdateUser(res.user);
+      setMsg({ type: 'success', text: 'Profile picture uploaded and permanently saved!' });
+    } catch (err: any) {
+      setMsg({ type: 'error', text: err.message || 'Failed to process and save image.' });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleRemovePicture = async () => {
