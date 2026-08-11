@@ -186,27 +186,27 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
               <div className="pt-1">
                 <p className="text-[11px] text-slate-500 font-medium">Current Balance</p>
                 <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-                  52,543.00 <span className="text-xs font-semibold text-slate-500">USD</span>
+                  $0.00 <span className="text-xs font-semibold text-slate-500">USD</span>
                 </div>
-                <div className="h-0.5 w-full bg-slate-900 rounded mt-1 mb-2"></div>
+                <div className="h-0.5 w-full bg-slate-200 rounded mt-1 mb-2"></div>
                 <p className="text-xs text-slate-600">
-                  Available Credit <span className="font-bold text-slate-900">22,457.00 USD</span>
+                  Available Credit <span className="font-bold text-slate-900">$0.00 USD</span>
                 </p>
               </div>
 
               <div className="grid grid-cols-2 gap-2 pt-3 border-t border-slate-100 text-xs">
                 <div>
                   <p className="text-[10px] text-slate-500 uppercase font-semibold">Payment Due</p>
-                  <p className="font-bold text-slate-900 text-sm">20,000.00 <span className="text-[10px]">USD</span></p>
-                  <p className="text-[10px] text-emerald-600 font-semibold flex items-center gap-1 mt-0.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Apr 26
+                  <p className="font-bold text-slate-900 text-sm">$0.00 <span className="text-[10px]">USD</span></p>
+                  <p className="text-[10px] text-slate-400 font-medium flex items-center gap-1 mt-0.5">
+                    No active balance due
                   </p>
                 </div>
 
                 <div>
                   <p className="text-[10px] text-slate-500 uppercase font-semibold">Rewards</p>
                   <p className="font-bold text-[#002b49] text-sm flex items-center gap-1">
-                    🏆 21,500 <span className="text-[10px]">PTS</span>
+                    🏆 0 <span className="text-[10px]">PTS</span>
                   </p>
                 </div>
               </div>
@@ -219,7 +219,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
           </div>
         </div>
 
-        {/* Widget 3: Corporate Cards Preview Card */}
+        {/* Widget 2: Corporate Cards Preview Card */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4.5 flex flex-col justify-between hover:shadow-md transition-shadow">
           <div>
             <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-3">
@@ -230,7 +230,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
               </div>
             </div>
 
-            {/* Dark Teal Metallic Mastercard Card Graphic */}
+            {/* Dark Teal Metallic Card Graphic */}
             <div className="bg-gradient-to-br from-[#00384c] via-[#004e66] to-[#002738] rounded-xl p-4 text-white shadow-md relative overflow-hidden space-y-3">
               {/* Chevron Watermark */}
               <div className="absolute right-6 top-1/2 -translate-y-1/2 opacity-10 pointer-events-none text-white text-9xl font-black">
@@ -241,23 +241,23 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                 <div>
                   <p className="text-[10px] font-semibold text-slate-300">Total Spent</p>
                   <div className="text-xl sm:text-2xl font-black tracking-tight text-white">
-                    1,500.00 <span className="text-xs font-medium text-slate-300">USD</span>
+                    0.00 <span className="text-xs font-medium text-slate-300">USD</span>
                   </div>
                 </div>
                 <div className="text-right">
-                  <span className="text-[11px] font-mono text-slate-300">👁 ***1234</span>
+                  <span className="text-[11px] font-mono text-slate-300">👁 ***{user.accountNumber ? user.accountNumber.slice(-4) : '0000'}</span>
                   <p className="text-[9px] font-bold uppercase tracking-wider text-slate-300 mt-1">BUSINESS</p>
                 </div>
               </div>
 
               <div className="text-right">
                 <p className="text-[9px] text-slate-300">Remaining Spend Limit</p>
-                <p className="font-extrabold text-xs text-white">849.21 <span className="text-[9px]">USD</span></p>
+                <p className="font-extrabold text-xs text-white">0.00 <span className="text-[9px]">USD</span></p>
               </div>
 
               <div className="flex items-end justify-between pt-1">
                 <div>
-                  <p className="font-bold text-xs text-white">{user.fullName || 'Alice M. Smith'}</p>
+                  <p className="font-bold text-xs text-white">{user.fullName || 'Account Holder'}</p>
                   <p className="text-[9px] text-slate-300">Innovators Card Program</p>
                 </div>
 
@@ -273,7 +273,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                   onClick={() => setShowCardDetails(!showCardDetails)} 
                   className="text-[10px] font-bold text-cyan-300 hover:text-white flex items-center justify-center gap-1 mx-auto"
                 >
-                  <Eye className="w-3 h-3" /> {showCardDetails ? 'Hide Card Details' : 'View Card Number'}
+                  <Eye className="w-3 h-3" /> {showCardDetails ? 'Hide Card Details' : 'View Card Details'}
                 </button>
               </div>
             </div>
@@ -281,11 +281,11 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
 
           <div className="flex items-center justify-between border-t border-slate-100 pt-3 mt-4 text-xs font-bold text-[#00a3e0]">
             <button onClick={() => onNavigateTab('cards')} className="hover:underline">View Transactions</button>
-            <button onClick={() => onNavigateTab('cards')} className="hover:underline">View Card Details</button>
+            <button onClick={() => onNavigateTab('cards')} className="hover:underline">Manage Cards</button>
           </div>
         </div>
 
-        {/* Widget 4: Account Balances Card */}
+        {/* Widget 3: Account Balances Card */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4.5 flex flex-col justify-between hover:shadow-md transition-shadow">
           <div>
             <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-3">
@@ -297,47 +297,19 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
             </div>
 
             <div className="space-y-3.5 text-xs">
-              <div className="border-b border-slate-100 pb-2.5">
+              <div className="pb-2.5">
                 <div className="flex items-center justify-between font-bold text-[#002b49]">
                   <span className="underline decoration-dotted underline-offset-2">
-                    SVB Checking ***{user.accountNumber ? user.accountNumber.slice(-4) : '1234'}
+                    SVB Primary Checking ***{user.accountNumber ? user.accountNumber.slice(-4) : '0000'}
                   </span>
                 </div>
-                <div className="flex items-center justify-between text-slate-600 mt-1">
+                <div className="flex items-center justify-between text-slate-600 mt-1.5">
                   <span>Available Balance</span>
                   <span className="font-extrabold text-slate-900">{formattedBalance}</span>
                 </div>
-                <div className="flex items-center justify-between text-slate-500 text-[11px]">
+                <div className="flex items-center justify-between text-slate-500 text-[11px] mt-0.5">
                   <span>Prior Day Balance</span>
                   <span>{formattedBalance}</span>
-                </div>
-              </div>
-
-              <div className="border-b border-slate-100 pb-2.5">
-                <div className="flex items-center justify-between font-bold text-[#002b49]">
-                  <span className="underline decoration-dotted underline-offset-2">SVB Checking ***5678</span>
-                </div>
-                <div className="flex items-center justify-between text-slate-600 mt-1">
-                  <span>Available Balance</span>
-                  <span className="font-extrabold text-slate-900">$50,050.50 USD</span>
-                </div>
-                <div className="flex items-center justify-between text-slate-500 text-[11px]">
-                  <span>Prior Day Balance</span>
-                  <span>$50,050.50 USD</span>
-                </div>
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between font-bold text-[#002b49]">
-                  <span className="underline decoration-dotted underline-offset-2">SVB Checking ***9012</span>
-                </div>
-                <div className="flex items-center justify-between text-slate-600 mt-1">
-                  <span>Available Balance</span>
-                  <span className="font-extrabold text-slate-900">$50,050.50 USD</span>
-                </div>
-                <div className="flex items-center justify-between text-slate-500 text-[11px]">
-                  <span>Prior Day Balance</span>
-                  <span>$50,050.50 USD</span>
                 </div>
               </div>
             </div>
@@ -348,7 +320,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
           </div>
         </div>
 
-        {/* Widget 5: Cash Balance Card */}
+        {/* Widget 4: Cash Balance Card */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4.5 flex flex-col justify-between hover:shadow-md transition-shadow">
           <div>
             <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-2">
@@ -360,17 +332,17 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
             </div>
 
             <div>
-              <p className="text-[11px] text-slate-500">Total Available Balance <span className="text-slate-400">| Jan 4, 2025</span></p>
+              <p className="text-[11px] text-slate-500">Total Available Balance</p>
               <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight mt-0.5">
-                {user.balance >= 1000000 ? `${(user.balance / 1000000).toFixed(1)}M USD` : formattedBalance}
+                {formattedBalance}
               </div>
 
               <div className="grid grid-cols-2 gap-2 my-3 text-xs">
                 <div className="flex items-center gap-1.5 p-2 bg-slate-50 rounded-lg border border-slate-200/80">
                   <Flame className="w-4 h-4 text-orange-500 shrink-0" />
                   <div>
-                    <p className="text-[9px] text-slate-500 font-semibold">Burn Rate Last 90 Days</p>
-                    <p className="font-bold text-slate-900">20,000.00 USD</p>
+                    <p className="text-[9px] text-slate-500 font-semibold">Burn Rate (90 Days)</p>
+                    <p className="font-bold text-slate-900">$0.00 USD</p>
                   </div>
                 </div>
 
@@ -378,44 +350,39 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                   <Plane className="w-4 h-4 text-[#00a3e0] shrink-0" />
                   <div>
                     <p className="text-[9px] text-slate-500 font-semibold">Runway</p>
-                    <p className="font-bold text-slate-900">27 Months</p>
+                    <p className="font-bold text-slate-900">{user.balance > 0 ? 'N/A' : '0 Months'}</p>
                   </div>
                 </div>
               </div>
 
-              {/* Historical SVG Line Graph */}
-              <div className="relative h-24 w-full mt-2">
-                <svg className="w-full h-full" viewBox="0 0 300 90" preserveAspectRatio="none">
-                  <defs>
-                    <linearGradient id="cyanGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#00a3e0" stopOpacity="0.35" />
-                      <stop offset="100%" stopColor="#00a3e0" stopOpacity="0.0" />
-                    </linearGradient>
-                  </defs>
-                  <path
-                    d="M 0,75 Q 75,80 150,55 T 270,25 L 300,30 L 300,90 L 0,90 Z"
-                    fill="url(#cyanGradient)"
-                  />
-                  <path
-                    d="M 0,75 Q 75,80 150,55 T 270,25 L 300,30"
-                    fill="none"
-                    stroke="#00a3e0"
-                    strokeWidth="3.5"
-                    strokeLinecap="round"
-                  />
-                  <circle cx="270" cy="25" r="5" fill="#002b49" stroke="#00a3e0" strokeWidth="2" />
-                </svg>
+              {/* Historical Balance Baseline */}
+              <div className="relative h-20 w-full mt-2 flex flex-col justify-end">
+                {user.balance > 0 ? (
+                  <svg className="w-full h-16" viewBox="0 0 300 90" preserveAspectRatio="none">
+                    <defs>
+                      <linearGradient id="cyanGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#00a3e0" stopOpacity="0.35" />
+                        <stop offset="100%" stopColor="#00a3e0" stopOpacity="0.0" />
+                      </linearGradient>
+                    </defs>
+                    <path d="M 0,75 Q 75,80 150,55 T 270,25 L 300,30 L 300,90 L 0,90 Z" fill="url(#cyanGradient)" />
+                    <path d="M 0,75 Q 75,80 150,55 T 270,25 L 300,30" fill="none" stroke="#00a3e0" strokeWidth="3" />
+                  </svg>
+                ) : (
+                  <svg className="w-full h-12" viewBox="0 0 300 40" preserveAspectRatio="none">
+                    <line x1="0" y1="20" x2="300" y2="20" stroke="#cbd5e1" strokeWidth="2" strokeDasharray="4 4" />
+                  </svg>
+                )}
                 <div className="flex items-center justify-between text-[10px] text-slate-400 font-semibold mt-1">
-                  <span>Jan</span>
-                  <span>Apr</span>
-                  <span>Jun</span>
+                  <span>Start</span>
+                  <span>Current</span>
                 </div>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Widget 6: Transactions Feed Card */}
+        {/* Widget 5: Transactions Feed Card */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4.5 flex flex-col justify-between hover:shadow-md transition-shadow">
           <div>
             <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-3">
@@ -445,39 +412,10 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                   </div>
                 ))
               ) : (
-                <>
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                    <div>
-                      <p className="text-[10px] text-slate-400">Apr 11, 2025 <span className="text-slate-300">Analysis C... ***8529</span></p>
-                      <p className="font-bold text-[#002b49]">Uber</p>
-                    </div>
-                    <div className="font-extrabold text-slate-900">30.00 USD</div>
-                  </div>
-
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                    <div>
-                      <p className="text-[10px] text-slate-400">Apr 11, 2025 <span className="text-slate-300">Analysis C... ***8529</span></p>
-                      <p className="font-bold text-[#002b49]">Wire Transfer</p>
-                    </div>
-                    <div className="font-extrabold text-slate-900">30.00 USD</div>
-                  </div>
-
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                    <div>
-                      <p className="text-[10px] text-slate-400">Apr 11, 2025 <span className="text-slate-300">Analysis C... ***8529</span></p>
-                      <p className="font-bold text-[#002b49]">Zoom Enterprise</p>
-                    </div>
-                    <div className="font-extrabold text-slate-900">30.00 USD</div>
-                  </div>
-
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                    <div>
-                      <p className="text-[10px] text-slate-400">Apr 11, 2025 <span className="text-slate-300">Analysis C... ***8529</span></p>
-                      <p className="font-bold text-[#002b49]">Slack Enterprise</p>
-                    </div>
-                    <div className="font-extrabold text-slate-900">30.00 USD</div>
-                  </div>
-                </>
+                <div className="py-8 text-center text-slate-500">
+                  <p className="text-xs font-semibold">No recent transactions recorded</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">Transactions will appear here when posted to your account.</p>
+                </div>
               )}
             </div>
           </div>
