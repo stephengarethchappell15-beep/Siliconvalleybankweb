@@ -519,17 +519,17 @@ export const Homepage: React.FC<HomepageProps> = ({ onOpenAuth }) => {
               Enterprise Risk Control & Real-Time Monitoring
             </h2>
             <p className="text-slate-400 text-sm leading-relaxed">
-              Our banking infrastructure enforces multi-tier administrative supervision, zero-trust token authentication, transaction pin verification, and immutable log records.
+              Our banking infrastructure enforces multi-tier security supervision, zero-trust token authentication, transaction pin verification, and immutable log records.
             </p>
 
             <ul className="space-y-3 text-xs text-slate-300">
               <li className="flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span>Strict role-based access control (Admin vs User privileges)</span>
+                <span>Strict multi-factor authentication and token security controls</span>
               </li>
               <li className="flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span>Immutable audit logging for all deposit, wire, and administrative actions</span>
+                <span>Immutable audit logging for all deposit, wire, and transaction actions</span>
               </li>
               <li className="flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />

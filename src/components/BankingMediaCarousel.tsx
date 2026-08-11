@@ -36,7 +36,7 @@ const BANKING_SLIDES: BankingSlide[] = [
     id: 4,
     image: 'https://images.unsplash.com/photo-1601597111158-2fceff292cdc?w=1200&auto=format&fit=crop&q=80',
     title: 'Virtual Corporate Credit Lines & Bill Pay',
-    subtitle: 'Issue instant sub-account virtual cards with custom spend limits & approval workflows.',
+    subtitle: 'Issue instant sub-account virtual cards with custom spend limits & authorization controls.',
     badge: 'Smart Spend'
   }
 ];

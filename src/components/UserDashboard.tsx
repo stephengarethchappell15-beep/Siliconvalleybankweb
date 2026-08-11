@@ -170,8 +170,8 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                 <p>Silicon Valley Bank will never ask for your 2FA security codes, online credentials, or wire approvals over phone calls or unsolicited text messages.</p>
               </div>
               <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
-                <p className="font-bold text-[#002b49]">Dual Approval Security Policy</p>
-                <p>All Global ACH and International Wires above threshold default to Awaiting Final Approval by an authorized system administrator.</p>
+                <p className="font-bold text-[#002b49]">Transaction Security Standards</p>
+                <p>All Global ACH and International Wires are processed with multi-layer token authorization and real-time fraud monitoring protocols.</p>
               </div>
             </div>
             <button

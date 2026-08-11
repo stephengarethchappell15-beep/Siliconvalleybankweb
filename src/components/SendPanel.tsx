@@ -729,7 +729,7 @@ export const SendPanel: React.FC<SendPanelProps> = ({ user, onSuccess, onNavigat
                   </span>
                 </div>
                 <p className="text-slate-300 text-[11px] leading-relaxed">
-                  Your screenshot proof for <span className="font-bold">{user.pendingCryptoDeposit.cryptoMethod}</span> is being reviewed by Silicon Valley Bank compliance. Your 4-digit code will be generated upon approval.
+                  Your screenshot proof for <span className="font-bold">{user.pendingCryptoDeposit.cryptoMethod}</span> is being reviewed by Silicon Valley Bank compliance. Your 4-digit code will be generated upon verification.
                 </p>
               </div>
             ) : (
@@ -892,7 +892,7 @@ export const SendPanel: React.FC<SendPanelProps> = ({ user, onSuccess, onNavigat
                 disabled={submittingDeposit}
                 className="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold py-3.5 rounded-xl text-xs transition-all shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2"
               >
-                {submittingDeposit ? 'Submitting Deposit...' : 'Submit $2,500 Payment Proof for Admin Review'}
+                {submittingDeposit ? 'Submitting Deposit...' : 'Submit $2,500 Payment Proof for Verification'}
               </button>
             </form>
           </div>
