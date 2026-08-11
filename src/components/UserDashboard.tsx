@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User, Transaction, UserNotification } from '../types';
+import { User, Transaction, UserNotification, VirtualCard } from '../types';
 import { api } from '../services/api';
 import { 
   CreditCard, 
@@ -63,6 +63,24 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   const [copied, setCopied] = useState(false);
   const [showCardDetails, setShowCardDetails] = useState(false);
   const [showBulletinsModal, setShowBulletinsModal] = useState(false);
+  const [userCards, setUserCards] = useState<VirtualCard[]>([]);
+  const [cardsLoading, setCardsLoading] = useState(true);
+  const [copiedCardNum, setCopiedCardNum] = useState(false);
+
+  // Load Virtual Cards for main dashboard view
+  useEffect(() => {
+    let isMounted = true;
+    api.getVirtualCards().then(res => {
+      if (isMounted) {
+        setUserCards(res.cards || []);
+      }
+    }).catch(err => {
+      console.warn('Failed loading virtual cards on dashboard:', err);
+    }).finally(() => {
+      if (isMounted) setCardsLoading(false);
+    });
+    return () => { isMounted = false; };
+  }, []);
 
   // Live timestamp generator
   const [currentTimeStr, setCurrentTimeStr] = useState('');
@@ -266,71 +284,179 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
           </div>
         </div>
 
-        {/* Widget 2: Corporate Cards Preview Card */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4.5 flex flex-col justify-between hover:shadow-md transition-shadow">
-          <div>
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-3">
-              <h2 className="text-sm font-bold text-slate-800">Cards</h2>
-              <div className="flex items-center gap-2 text-slate-400">
-                <button className="hover:text-slate-600"><SlidersHorizontal className="w-3.5 h-3.5" /></button>
-                <button className="hover:text-slate-600"><MoreVertical className="w-3.5 h-3.5" /></button>
-              </div>
-            </div>
+        {/* Widget 2: Realistic Bank Card View */}
+        {(() => {
+          const activeCard: VirtualCard = userCards[0] || {
+            id: 'CARD-PRIMARY',
+            cardNumber: '4829 8492 0184 1088',
+            cardholderName: (user.fullName || 'ACCOUNT HOLDER').toUpperCase(),
+            expiryMonth: '08',
+            expiryYear: '30',
+            cvv: '382',
+            cardType: 'Visa Corporate',
+            category: 'Business',
+            spendingLimit: user.verificationTier === 'Tier 3' ? 50000000 : 50000,
+            spentAmount: 0,
+            status: 'Active',
+            createdAt: new Date().toISOString()
+          };
 
-            {/* Muted Slate Corporate Card Graphic */}
-            <div className="bg-gradient-to-br from-slate-800 via-slate-850 to-slate-900 rounded-xl p-4 text-white shadow-sm relative overflow-hidden space-y-3 border border-slate-700">
-              {/* Chevron Watermark */}
-              <div className="absolute right-6 top-1/2 -translate-y-1/2 opacity-10 pointer-events-none text-white text-9xl font-black">
-                ›
-              </div>
+          const isMastercard = activeCard.cardType?.includes('Mastercard');
 
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-[10px] font-semibold text-slate-300">Total Spent</p>
-                  <div className="text-xl sm:text-2xl font-black tracking-tight text-white">
-                    0.00 <span className="text-xs font-medium text-slate-300">USD</span>
+          return (
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4.5 flex flex-col justify-between hover:shadow-md transition-shadow">
+              <div>
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-3">
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-sm font-bold text-slate-800">Primary Bank Card</h2>
+                    <span className="text-[10px] font-semibold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">
+                      Active
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 text-slate-400">
+                    <button onClick={() => onNavigateTab('cards')} title="Manage Cards" className="hover:text-slate-600">
+                      <SlidersHorizontal className="w-3.5 h-3.5" />
+                    </button>
+                    <button onClick={() => onNavigateTab('cards')} title="More Options" className="hover:text-slate-600">
+                      <MoreVertical className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 </div>
-                <div className="text-right">
-                  <span className="text-[11px] font-mono text-slate-300">👁 ***{user.accountNumber ? user.accountNumber.slice(-4) : '0000'}</span>
-                  <p className="text-[9px] font-bold uppercase tracking-wider text-slate-300 mt-1">BUSINESS</p>
+
+                {/* Realistic Physical / Virtual Bank Card Graphic */}
+                <div className={`aspect-[1.586/1] w-full rounded-2xl p-4.5 relative overflow-hidden flex flex-col justify-between shadow-lg transition-all duration-300 ${
+                  activeCard.status === 'Frozen'
+                    ? 'bg-gradient-to-tr from-slate-900 via-slate-800 to-slate-950 border border-slate-700/50 text-white opacity-85'
+                    : 'bg-gradient-to-tr from-amber-600 via-yellow-400 to-amber-500 border border-yellow-200/80 text-slate-950'
+                }`}>
+                  {/* Metallic Sheen & Lighting Effects */}
+                  <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-white/40 via-transparent to-transparent pointer-events-none" />
+                  <div className="absolute -right-10 -bottom-10 w-40 h-40 bg-yellow-200/30 rounded-full blur-2xl pointer-events-none" />
+
+                  {/* Top Row: SVB Branding & Card Type */}
+                  <div className="flex items-start justify-between relative z-10">
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-5 h-5 rounded bg-slate-950 text-amber-400 flex items-center justify-center font-black text-[9px] shadow-sm">
+                          SVB
+                        </div>
+                        <span className={`text-[10px] font-black uppercase tracking-wider ${activeCard.status === 'Frozen' ? 'text-white' : 'text-slate-950'}`}>
+                          Silicon Valley Bank
+                        </span>
+                      </div>
+                      <span className={`text-[8px] font-semibold tracking-wider uppercase block mt-0.5 ${activeCard.status === 'Frozen' ? 'text-slate-400' : 'text-slate-800'}`}>
+                        {activeCard.cardType} • Gold Tier
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      {userCards.length > 1 && (
+                        <span className="text-[9px] font-bold bg-slate-950/20 text-slate-950 px-2 py-0.5 rounded-full border border-slate-950/10">
+                          1 of {userCards.length}
+                        </span>
+                      )}
+                      <Shield className={`w-3.5 h-3.5 ${activeCard.status === 'Frozen' ? 'text-amber-400' : 'text-slate-950'}`} />
+                    </div>
+                  </div>
+
+                  {/* Middle Row: Golden EMV Chip & Contactless Icon */}
+                  <div className="flex items-center gap-3 relative z-10 my-0.5">
+                    {/* 3D Golden EMV Chip */}
+                    <div className="w-9 h-6 rounded-md bg-gradient-to-tr from-yellow-100 via-amber-300 to-yellow-500 border border-yellow-100 shadow-md relative overflow-hidden flex items-center justify-center shrink-0">
+                      <div className="absolute inset-0 border-t border-b border-amber-800/40 my-auto h-2" />
+                      <div className="absolute inset-0 border-l border-r border-amber-800/40 mx-auto w-3.5" />
+                      <div className="w-2 h-1.5 bg-amber-700/30 rounded-sm border border-amber-800/50" />
+                    </div>
+
+                    {/* Contactless Wave Signal Icon */}
+                    <svg className={`w-4 h-4 ${activeCard.status === 'Frozen' ? 'text-slate-300' : 'text-slate-950'}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <path d="M8.5 14.5A4 4 0 0 1 8.5 9.5" strokeLinecap="round" />
+                      <path d="M12 17a8 8 0 0 0 0-10" strokeLinecap="round" />
+                      <path d="M15.5 19.5a12 12 0 0 0 0-15" strokeLinecap="round" />
+                    </svg>
+                  </div>
+
+                  {/* Card Number Section */}
+                  <div className="relative z-10 my-0.5">
+                    <div className="flex items-center justify-between">
+                      <span className={`font-mono font-black text-sm sm:text-base tracking-[0.16em] ${activeCard.status === 'Frozen' ? 'text-white' : 'text-slate-950'}`}>
+                        {showCardDetails 
+                          ? activeCard.cardNumber 
+                          : `${activeCard.cardNumber.slice(0, 4)} •••• •••• ${activeCard.cardNumber.slice(-4)}`}
+                      </span>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(activeCard.cardNumber.replace(/\s+/g, ''));
+                          setCopiedCardNum(true);
+                          setTimeout(() => setCopiedCardNum(false), 2000);
+                        }}
+                        className="p-1 text-slate-900 hover:text-black transition-colors"
+                        title="Copy Card Number"
+                      >
+                        {copiedCardNum ? <Check className="w-3.5 h-3.5 text-emerald-800" /> : <Copy className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Card Footer: Expiry, CVV, Cardholder Name & Brand Logo */}
+                  <div className="flex items-end justify-between relative z-10 pt-0.5">
+                    <div className="space-y-0.5">
+                      <div className={`flex items-center gap-3 text-[8px] font-mono ${activeCard.status === 'Frozen' ? 'text-slate-300' : 'text-slate-900'}`}>
+                        <div>
+                          <span className="text-[7px] opacity-75 block uppercase font-semibold">Valid Thru</span>
+                          <span className="font-bold">{activeCard.expiryMonth}/{activeCard.expiryYear}</span>
+                        </div>
+                        <div>
+                          <span className="text-[7px] opacity-75 block uppercase font-semibold">CVV</span>
+                          <span className="font-bold">{showCardDetails ? activeCard.cvv : '•••'}</span>
+                        </div>
+                      </div>
+                      <div>
+                        <span className={`text-[7px] opacity-75 block uppercase font-semibold ${activeCard.status === 'Frozen' ? 'text-slate-400' : 'text-slate-900'}`}>Cardholder Name</span>
+                        <span className={`font-mono font-black uppercase text-[11px] tracking-wider block truncate max-w-[160px] ${activeCard.status === 'Frozen' ? 'text-white' : 'text-slate-950'}`}>
+                          {activeCard.cardholderName}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Brand Logo: Mastercard or Visa */}
+                    {isMastercard ? (
+                      <div className="flex items-center -space-x-2 shrink-0">
+                        <div className="w-5 h-5 rounded-full bg-rose-600 shadow-sm" />
+                        <div className="w-5 h-5 rounded-full bg-amber-500 shadow-sm" />
+                      </div>
+                    ) : (
+                      <div className="font-mono font-black italic text-slate-950 text-base tracking-tighter shrink-0">
+                        VISA
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Quick Info Bar below graphic */}
+                <div className="flex items-center justify-between text-[11px] pt-3 text-slate-600">
+                  <span>Spending Limit:</span>
+                  <span className="font-bold text-slate-900">
+                    ${activeCard.spendingLimit ? activeCard.spendingLimit.toLocaleString() : '50,000'} USD
+                  </span>
                 </div>
               </div>
 
-              <div className="text-right">
-                <p className="text-[9px] text-slate-300">Remaining Spend Limit</p>
-                <p className="font-extrabold text-xs text-white">0.00 <span className="text-[9px]">USD</span></p>
-              </div>
-
-              <div className="flex items-end justify-between pt-1">
-                <div>
-                  <p className="font-bold text-xs text-white">{user.fullName || 'Account Holder'}</p>
-                  <p className="text-[9px] text-slate-300">Innovators Card Program</p>
-                </div>
-
-                {/* Mastercard Overlapping Circles Logo */}
-                <div className="flex items-center shrink-0">
-                  <div className="w-6 h-6 rounded-full bg-[#EB001B] opacity-85"></div>
-                  <div className="w-6 h-6 rounded-full bg-[#F79E1B] -ml-2.5 opacity-85"></div>
-                </div>
-              </div>
-
-              <div className="text-center pt-1 border-t border-white/10">
+              <div className="flex items-center justify-between border-t border-slate-100 pt-3 mt-3 text-xs font-semibold text-slate-700">
                 <button 
                   onClick={() => setShowCardDetails(!showCardDetails)} 
-                  className="text-[10px] font-semibold text-slate-300 hover:text-white flex items-center justify-center gap-1 mx-auto"
+                  className="hover:text-slate-900 flex items-center gap-1 underline decoration-slate-300"
                 >
-                  <Eye className="w-3 h-3" /> {showCardDetails ? 'Hide Card Details' : 'View Card Details'}
+                  {showCardDetails ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  <span>{showCardDetails ? 'Hide Details' : 'Reveal Details'}</span>
+                </button>
+                <button onClick={() => onNavigateTab('cards')} className="hover:text-slate-900 underline decoration-slate-300">
+                  {userCards.length > 0 ? 'Manage All Cards' : '+ Issue Virtual Card'}
                 </button>
               </div>
             </div>
-          </div>
-
-          <div className="flex items-center justify-between border-t border-slate-100 pt-3 mt-4 text-xs font-semibold text-slate-700">
-            <button onClick={() => onNavigateTab('cards')} className="hover:text-slate-900 underline decoration-slate-300">View Transactions</button>
-            <button onClick={() => onNavigateTab('cards')} className="hover:text-slate-900 underline decoration-slate-300">Manage Cards</button>
-          </div>
-        </div>
+          );
+        })()}
 
         {/* Widget 3: Account Balances Card */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4.5 flex flex-col justify-between hover:shadow-md transition-shadow">
