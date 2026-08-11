@@ -117,12 +117,12 @@ export const Navbar: React.FC<NavbarProps> = ({
               {/* Notification Bell */}
               <button
                 onClick={onOpenNotifications}
-                className="relative p-1.5 text-slate-600 hover:text-[#002b49] rounded-lg hover:bg-slate-100 transition-colors border border-slate-200"
+                className="relative p-1.5 text-slate-600 hover:text-[#0f2232] rounded-lg hover:bg-slate-100 transition-colors border border-slate-200"
                 title="Account Notifications"
               >
                 <Bell className="w-4 h-4" />
                 {unreadNotifsCount > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-[#00a3e0] text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center animate-pulse">
+                  <span className="absolute -top-1 -right-1 bg-[#0284c7] text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
                     {unreadNotifsCount}
                   </span>
                 )}

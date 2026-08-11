@@ -200,7 +200,7 @@ export default function App() {
   const unreadCount = notifications.filter(n => !n.read).length;
 
   return (
-    <div className={`min-h-screen bg-[#f4f6f8] text-slate-800 font-sans antialiased selection:bg-[#00a3e0] selection:text-white flex flex-col ${theme === 'light' ? 'light-mode' : ''}`}>
+    <div className={`min-h-screen font-sans antialiased selection:bg-[#0284c7] selection:text-white flex flex-col transition-colors duration-200 ${theme === 'light' ? 'light-mode bg-[#f1f3f5] text-slate-800' : 'dark-mode bg-[#0f172a] text-slate-100'}`}>
       
       {/* Top SVB Go Branding Header */}
       <Navbar
@@ -229,7 +229,7 @@ export default function App() {
         )}
 
         {/* Right Main Content Area */}
-        <main className="flex-1 bg-[#f4f6f8] px-3 sm:px-6 py-5 max-w-[1600px] w-full mx-auto overflow-x-hidden">
+        <main className="flex-1 bg-transparent px-3 sm:px-6 py-5 max-w-[1600px] w-full mx-auto overflow-x-hidden">
           
           {loading ? (
             <div className="flex flex-col items-center justify-center py-24 space-y-3 text-slate-500 animate-pulse">

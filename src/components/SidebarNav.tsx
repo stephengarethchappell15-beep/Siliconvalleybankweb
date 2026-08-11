@@ -102,7 +102,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
   ];
 
   return (
-    <aside className="bg-[#002b49] w-52 sm:w-56 shrink-0 min-h-[calc(100vh-64px)] hidden md:flex flex-col py-2 border-r border-[#001f35] text-white">
+    <aside className="bg-[#0f2232] w-52 sm:w-56 shrink-0 min-h-[calc(100vh-64px)] hidden md:flex flex-col py-2 border-r border-[#0b1723] text-white">
       <div className="space-y-1 px-1.5">
         {navItems.map((item) => {
           const Icon = item.icon;
@@ -116,11 +116,11 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
               onClick={item.action}
               className={`w-full py-2.5 px-3 rounded-lg flex flex-col items-center justify-center text-center transition-all group ${
                 isActive
-                  ? 'bg-[#00a3e0] text-white font-bold shadow-md'
-                  : 'text-slate-200 hover:bg-[#034a75] hover:text-white'
+                  ? 'bg-[#0284c7] text-white font-semibold shadow-sm'
+                  : 'text-slate-300 hover:bg-[#1a3347] hover:text-white'
               }`}
             >
-              <Icon className={`w-4 h-4 mb-1 ${isActive ? 'text-white' : 'text-slate-300 group-hover:text-white'}`} />
+              <Icon className={`w-4 h-4 mb-1 ${isActive ? 'text-white' : 'text-slate-400 group-hover:text-white'}`} />
               <span className="text-[11px] leading-tight font-medium tracking-tight">
                 {item.label}
               </span>
