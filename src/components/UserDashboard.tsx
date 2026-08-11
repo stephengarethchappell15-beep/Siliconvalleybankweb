@@ -166,88 +166,10 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
         </div>
       )}
 
-      {/* 3x2 Grid Layout of Dashboard Widget Cards */}
+      {/* Grid Layout of Dashboard Widget Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
 
-        {/* Widget 1: Task List Card */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4.5 flex flex-col justify-between hover:shadow-md transition-shadow">
-          <div>
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-3">
-              <div className="flex items-center gap-2">
-                <h2 className="text-sm font-bold text-[#002b49]">Task List</h2>
-                <span className="w-5 h-5 rounded-full bg-slate-600 text-white text-[10px] font-bold flex items-center justify-center">
-                  {taskCount}
-                </span>
-              </div>
-              <div className="flex items-center gap-2 text-slate-400">
-                <button className="hover:text-slate-600"><ListFilter className="w-3.5 h-3.5" /></button>
-                <button className="hover:text-slate-600"><SlidersHorizontal className="w-3.5 h-3.5" /></button>
-                <button className="hover:text-slate-600"><MoreVertical className="w-3.5 h-3.5" /></button>
-              </div>
-            </div>
-
-            {/* Task items list */}
-            <div className="space-y-3 text-xs">
-              {pendingTxns.length > 0 ? (
-                pendingTxns.map((t) => (
-                  <div key={t.id} className="p-2.5 rounded-lg bg-slate-50 border border-slate-200/80 space-y-1.5">
-                    <div className="flex items-center justify-between text-[11px] text-slate-500">
-                      <span className="flex items-center gap-1"><Calendar className="w-3 h-3 text-slate-400" /> {new Date(t.createdAt).toLocaleDateString()}</span>
-                      <span className="flex items-center gap-1 font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200/60">
-                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span> Awaiting Final Approval
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <p className="font-bold text-[#002b49] truncate max-w-[180px]">{t.description}</p>
-                      <button onClick={() => onNavigateTab('send')} className="text-slate-400 hover:text-slate-600"><MoreVertical className="w-3.5 h-3.5" /></button>
-                    </div>
-                    <div className="font-extrabold text-slate-900 text-sm">
-                      {t.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })} {t.currency || 'USD'}
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <>
-                  <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200/80 space-y-1.5">
-                    <div className="flex items-center justify-between text-[11px] text-slate-500">
-                      <span className="flex items-center gap-1"><Calendar className="w-3 h-3 text-slate-400" /> Apr 13, 2025</span>
-                      <span className="flex items-center gap-1 font-semibold text-slate-700 bg-slate-200/80 px-2 py-0.5 rounded">
-                        <span className="w-1.5 h-1.5 rounded-full bg-slate-600"></span> Awaiting Final Approval
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <p className="font-bold text-[#002b49] text-xs">Global ACH to Kaarthick Bath... ***9368</p>
-                      <MoreVertical className="w-3.5 h-3.5 text-slate-400" />
-                    </div>
-                    <div>
-                      <span className="font-extrabold text-slate-900 text-sm">3,000.00 USD</span>
-                      <p className="text-[10px] text-slate-500">1,000.00 GBP</p>
-                    </div>
-                  </div>
-
-                  <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200/80 space-y-1.5">
-                    <div className="flex items-center justify-between text-[11px] text-slate-500">
-                      <span className="flex items-center gap-1"><Calendar className="w-3 h-3 text-slate-400" /> Apr 12, 2025</span>
-                      <span className="flex items-center gap-1 font-semibold text-slate-700 bg-slate-200/80 px-2 py-0.5 rounded">
-                        <span className="w-1.5 h-1.5 rounded-full bg-slate-600"></span> Awaiting Final Approval
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <p className="font-bold text-[#002b49] text-xs">Global ACH to Kaarthick Bath... ***9368</p>
-                      <MoreVertical className="w-3.5 h-3.5 text-slate-400" />
-                    </div>
-                    <div>
-                      <span className="font-extrabold text-slate-900 text-sm">3,000.00 USD</span>
-                      <p className="text-[10px] text-slate-500">1,000.00 GBP</p>
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Widget 2: Card Program Card */}
+        {/* Widget 1: Card Program Card */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4.5 flex flex-col justify-between hover:shadow-md transition-shadow">
           <div>
             <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-3">
