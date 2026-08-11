@@ -1,81 +1,66 @@
 @import "tailwindcss";
 
-/* High-key light mode global styling overrides */
-.light-mode {
-  background-color: #f8fafc !important;
-  color: #0f172a !important;
+/* Clean SVB Go Light Mode Global Theme & Styling */
+:root {
+  --bg-main: #f4f6f8;
+  --bg-card: #ffffff;
+  --svb-navy: #002b49;
+  --svb-blue: #00a3e0;
+  --svb-dark-blue: #001f35;
+  --border-color: #e2e8f0;
+  --text-main: #0f172a;
+  --text-muted: #475569;
 }
 
-.light-mode header {
-  background-color: rgba(255, 255, 255, 0.95) !important;
-  border-color: #e2e8f0 !important;
+body {
+  background-color: var(--bg-main);
+  color: var(--text-main);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* Light Mode Card & Input Overrides */
+.light-mode {
+  background-color: #f4f6f8 !important;
   color: #0f172a !important;
 }
 
 .light-mode .bg-slate-950,
-.light-mode .bg-slate-900 {
-  background-color: #ffffff !important;
-  color: #0f172a !important;
-}
-
+.light-mode .bg-slate-900,
 .light-mode .bg-slate-900\/80,
-.light-mode .bg-slate-950\/80,
-.light-mode .bg-slate-950\/60,
-.light-mode .bg-slate-950\/50,
-.light-mode .bg-slate-950\/85,
-.light-mode .bg-slate-900\/95,
-.light-mode .bg-slate-950\/95 {
+.light-mode .bg-slate-950\/80 {
   background-color: #ffffff !important;
   color: #0f172a !important;
 }
 
 .light-mode .border-slate-800,
-.light-mode .border-slate-800\/80,
 .light-mode .border-slate-900,
 .light-mode .border-slate-700 {
   border-color: #e2e8f0 !important;
 }
 
-.light-mode .text-white,
-.light-mode .text-slate-100,
-.light-mode .text-slate-200 {
-  color: #0f172a !important;
-}
-
-.light-mode .text-slate-300,
-.light-mode .text-slate-400 {
-  color: #334155 !important;
-}
-
-.light-mode .text-slate-500 {
-  color: #64748b !important;
-}
-
-.light-mode .bg-slate-800 {
-  background-color: #f1f5f9 !important;
-  color: #0f172a !important;
-}
-
-.light-mode .hover\:bg-slate-800:hover,
-.light-mode .hover\:bg-slate-800\/80:hover,
-.light-mode .hover\:bg-slate-800\/60:hover,
-.light-mode .hover\:bg-slate-700:hover {
-  background-color: #e2e8f0 !important;
-}
-
 .light-mode input,
 .light-mode select,
 .light-mode textarea {
-  background-color: #f8fafc !important;
+  background-color: #ffffff !important;
   color: #0f172a !important;
   border-color: #cbd5e1 !important;
 }
 
-.light-mode input::placeholder {
-  color: #94a3b8 !important;
+/* Smooth Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
 }
 
-.light-mode footer {
-  background-color: #f8fafc !important;
-  border-color: #e2e8f0 !important;
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
 }

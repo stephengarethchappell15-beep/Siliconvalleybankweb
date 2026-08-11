@@ -20,7 +20,9 @@ import {
   Lock,
   Compass,
   Sun,
-  Moon
+  Moon,
+  HelpCircle,
+  PhoneCall
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -49,202 +51,105 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [showSwitchMenu, setShowSwitchMenu] = useState(false);
 
   return (
-    <header className="sticky top-0 z-40 bg-slate-950/95 backdrop-blur border-b border-slate-800 text-slate-100 shadow-xl">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+    <header className="sticky top-0 z-40 bg-white border-b border-slate-200 text-slate-800 shadow-sm">
+      <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
         
-        {/* Silicon Valley Bank Brand Logo */}
+        {/* Left: Official SVB Logo */}
         <button 
           onClick={() => setActiveTab(user ? 'dashboard' : 'home')}
-          className="flex items-center gap-3 group text-left transition-transform hover:opacity-95 focus:outline-none"
+          className="flex items-center gap-3 group text-left transition-transform hover:opacity-95 focus:outline-none shrink-0"
         >
           <img 
-            src="/svb-logo.svg" 
-            alt="Silicon Valley Bank Logo" 
-            className="h-8 sm:h-9 w-auto object-contain group-hover:scale-[1.02] transition-transform"
+            src="/svb-logo-light.svg" 
+            alt="Silicon Valley Bank - A Division of First Citizens Bank" 
+            className="h-9 sm:h-10 w-auto object-contain"
           />
         </button>
 
-        {/* Center Nav Links */}
-        <nav className="hidden lg:flex items-center gap-1 bg-slate-900/80 p-1 rounded-xl border border-slate-800/80">
-          {!user ? (
-            <>
-              <button
-                onClick={() => setActiveTab('home')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                  activeTab === 'home'
-                    ? 'bg-cyan-500 text-slate-950 shadow-sm'
-                    : 'text-slate-300 hover:text-white hover:bg-slate-800'
-                }`}
-              >
-                <Compass className="w-3.5 h-3.5" />
-                Home & Services
-              </button>
-              <button
-                onClick={onOpenAuth}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-300 hover:text-white hover:bg-slate-800 transition-all"
-              >
-                Online Banking Login
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                onClick={() => setActiveTab('dashboard')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                  activeTab === 'dashboard'
-                    ? 'bg-slate-800 text-cyan-400 shadow-sm border border-slate-700'
-                    : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
-                }`}
-              >
-                <CreditCard className="w-3.5 h-3.5" />
-                Accounts
-              </button>
+        {/* Center: FDIC Insurance Banner */}
+        <div className="hidden md:flex items-center gap-2 text-xs text-[#002b49] font-medium px-4 py-1 rounded-md bg-slate-50 border border-slate-200/80">
+          <span className="font-extrabold text-[#002b49] bg-[#002b49] text-white px-1.5 py-0.5 rounded text-[10px] tracking-wide">
+            FDIC
+          </span>
+          <span className="italic text-[11px] text-slate-600">
+            FDIC-Insured - Backed by the full faith and credit of the U.S. Government
+          </span>
+        </div>
 
-              <button
-                onClick={() => setActiveTab('cards')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                  activeTab === 'cards'
-                    ? 'bg-slate-800 text-cyan-400 shadow-sm border border-slate-700'
-                    : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
-                }`}
-              >
-                <Layers className="w-3.5 h-3.5" />
-                Virtual Cards
-              </button>
+        {/* Right Controls: Contact Us, Help, Notifications, User Profile */}
+        <div className="flex items-center gap-3 sm:gap-5 text-xs font-semibold text-[#002b49]">
+          
+          <button 
+            onClick={() => setActiveTab('support')}
+            className="hidden sm:flex items-center gap-1 hover:text-[#00a3e0] transition-colors"
+          >
+            Contact Us
+          </button>
 
-              <button
-                onClick={() => setActiveTab('send')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                  activeTab === 'send' || activeTab === 'withdraw'
-                    ? 'bg-slate-800 text-cyan-400 shadow-sm border border-slate-700'
-                    : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
-                }`}
-              >
-                <Send className="w-3.5 h-3.5" />
-                Transfers & Wires
-              </button>
+          <button 
+            onClick={() => setActiveTab('support')}
+            className="hidden sm:flex items-center gap-1 hover:text-[#00a3e0] transition-colors"
+          >
+            Help
+          </button>
 
-              <button
-                onClick={() => setActiveTab('bills')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                  activeTab === 'bills'
-                    ? 'bg-slate-800 text-cyan-400 shadow-sm border border-slate-700'
-                    : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
-                }`}
-              >
-                <Receipt className="w-3.5 h-3.5" />
-                Bill Pay
-              </button>
-
-              <button
-                onClick={() => setActiveTab('history')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                  activeTab === 'history'
-                    ? 'bg-slate-800 text-cyan-400 shadow-sm border border-slate-700'
-                    : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
-                }`}
-              >
-                <History className="w-3.5 h-3.5" />
-                Statements
-              </button>
-
-              <button
-                onClick={() => setActiveTab('support')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                  activeTab === 'support'
-                    ? 'bg-slate-800 text-cyan-400 shadow-sm border border-slate-700'
-                    : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
-                }`}
-              >
-                <Headphones className="w-3.5 h-3.5" />
-                Support Desk
-              </button>
-
-              {user.role === 'admin' && (
-                <button
-                  onClick={() => setActiveTab('admin')}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                    activeTab === 'admin'
-                      ? 'bg-amber-500 text-slate-950 shadow-md'
-                      : 'text-amber-400 hover:text-amber-300 hover:bg-amber-950/40 border border-amber-500/30'
-                  }`}
-                >
-                  <Sparkles className="w-3.5 h-3.5" />
-                  Admin Console
-                </button>
-              )}
-            </>
-          )}
-        </nav>
-
-        {/* Right Actions */}
-        <div className="flex items-center gap-2 sm:gap-3">
-          {/* Theme Toggle Button */}
+          {/* Theme Switcher Toggle */}
           <button
             onClick={onToggleTheme}
-            className="p-2 text-slate-300 hover:text-white rounded-xl hover:bg-slate-800 transition-all border border-slate-800 hover:border-slate-700 flex items-center justify-center gap-1.5 text-xs font-semibold"
-            title={theme === 'dark' ? 'Switch to High-Key Light Mode' : 'Switch to High-Contrast Dark Theme'}
+            className="p-1.5 text-slate-600 hover:text-[#002b49] rounded-lg hover:bg-slate-100 transition-all border border-slate-200 flex items-center gap-1 text-[11px]"
+            title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
           >
             {theme === 'dark' ? (
               <>
-                <Sun className="w-4 h-4 text-amber-400" />
-                <span className="hidden sm:inline text-slate-300 text-[11px]">Light</span>
+                <Sun className="w-3.5 h-3.5 text-amber-500" />
+                <span className="hidden xl:inline text-slate-700">Light</span>
               </>
             ) : (
               <>
-                <Moon className="w-4 h-4 text-cyan-400" />
-                <span className="hidden sm:inline text-slate-300 text-[11px]">Dark</span>
+                <Moon className="w-3.5 h-3.5 text-[#00a3e0]" />
+                <span className="hidden xl:inline text-slate-700">Dark</span>
               </>
             )}
           </button>
 
           {user ? (
             <>
-              {/* Notification Button */}
+              {/* Notification Bell */}
               <button
                 onClick={onOpenNotifications}
-                className="relative p-2 text-slate-300 hover:text-white rounded-xl hover:bg-slate-800 transition-colors border border-transparent hover:border-slate-700"
+                className="relative p-1.5 text-slate-600 hover:text-[#002b49] rounded-lg hover:bg-slate-100 transition-colors border border-slate-200"
                 title="Account Notifications"
               >
                 <Bell className="w-4 h-4" />
                 {unreadNotifsCount > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-cyan-400 text-slate-950 text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center animate-pulse">
+                  <span className="absolute -top-1 -right-1 bg-[#00a3e0] text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center animate-pulse">
                     {unreadNotifsCount}
                   </span>
                 )}
               </button>
 
-              {/* User Dropdown */}
+              {/* User Avatar & Dropdown */}
               <div className="relative">
                 <button
                   onClick={() => setShowSwitchMenu(!showSwitchMenu)}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 transition-all text-left"
+                  className="flex items-center gap-2 p-1 rounded-xl hover:bg-slate-100 transition-all text-left border border-transparent hover:border-slate-200"
                 >
-                  <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white font-bold text-xs shadow-sm overflow-hidden shrink-0">
+                  <div className="w-8 h-8 rounded-full bg-[#002b49] flex items-center justify-center text-white font-bold text-xs shadow-sm overflow-hidden shrink-0">
                     {user.profilePicture ? (
                       <img src={user.profilePicture} alt={user.fullName} className="w-full h-full object-cover" />
                     ) : (
-                      user.fullName.charAt(0)
+                      <UserIcon className="w-4 h-4 text-white" />
                     )}
                   </div>
-                  <div className="hidden sm:block text-xs">
-                    <p className="font-semibold text-slate-100 leading-tight">{user.fullName}</p>
-                    <div className="flex items-center gap-1 text-[10px] text-slate-400">
-                      <span>Acc #{user.accountNumber}</span>
-                      {user.role === 'admin' && (
-                        <span className="bg-amber-500/20 text-amber-400 text-[9px] px-1 rounded font-bold border border-amber-500/30">ADMIN</span>
-                      )}
-                    </div>
-                  </div>
-                  <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                  <ChevronDown className="w-3.5 h-3.5 text-slate-500" />
                 </button>
 
                 {showSwitchMenu && (
-                  <div className="absolute right-0 mt-2 w-64 bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-2 z-50 text-xs">
-                    <div className="px-3 py-2 border-b border-slate-800 mb-1 bg-slate-950/50 rounded-xl">
-                      <p className="font-semibold text-white">{user.fullName}</p>
-                      <p className="text-slate-400 text-[11px] truncate">{user.email}</p>
-                      <p className="text-cyan-400 text-[10px] font-mono mt-0.5">Primary Acc #{user.accountNumber}</p>
+                  <div className="absolute right-0 mt-2 w-64 bg-white border border-slate-200 rounded-2xl shadow-xl p-2 z-50 text-xs">
+                    <div className="px-3 py-2 border-b border-slate-100 mb-1 bg-slate-50 rounded-xl">
+                      <p className="font-bold text-[#002b49]">{user.fullName}</p>
+                      <p className="text-slate-500 text-[11px] truncate">{user.email}</p>
+                      <p className="text-[#00a3e0] text-[10px] font-mono mt-0.5">Acc #{user.accountNumber}</p>
                     </div>
 
                     <div className="py-1 space-y-1">
@@ -253,10 +158,10 @@ export const Navbar: React.FC<NavbarProps> = ({
                           setShowSwitchMenu(false);
                           setActiveTab('profile');
                         }}
-                        className="w-full text-left px-3 py-1.5 text-slate-300 hover:bg-slate-800 rounded-xl flex items-center gap-2 transition-colors"
+                        className="w-full text-left px-3 py-1.5 text-slate-700 hover:bg-slate-100 rounded-xl flex items-center gap-2 transition-colors font-medium"
                       >
-                        <UserIcon className="w-3.5 h-3.5" />
-                        User Profile & 2FA
+                        <UserIcon className="w-3.5 h-3.5 text-slate-500" />
+                        User Profile & Security
                       </button>
 
                       {user.role === 'admin' && (
@@ -265,10 +170,10 @@ export const Navbar: React.FC<NavbarProps> = ({
                             setShowSwitchMenu(false);
                             setActiveTab('admin');
                           }}
-                          className="w-full text-left px-3 py-1.5 text-amber-400 hover:bg-amber-500/10 rounded-xl flex items-center gap-2 transition-colors font-semibold"
+                          className="w-full text-left px-3 py-1.5 text-amber-600 hover:bg-amber-50 rounded-xl flex items-center gap-2 transition-colors font-bold"
                         >
-                          <Sparkles className="w-3.5 h-3.5" />
-                          Admin Console
+                          <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                          Admin Portal
                         </button>
                       )}
 
@@ -277,7 +182,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                           setShowSwitchMenu(false);
                           onLogout();
                         }}
-                        className="w-full text-left px-3 py-2 text-rose-400 hover:bg-rose-500/10 rounded-xl flex items-center gap-2 transition-colors font-semibold"
+                        className="w-full text-left px-3 py-2 text-rose-600 hover:bg-rose-50 rounded-xl flex items-center gap-2 transition-colors font-bold"
                       >
                         <LogOut className="w-3.5 h-3.5" />
                         Sign Out
@@ -288,86 +193,16 @@ export const Navbar: React.FC<NavbarProps> = ({
               </div>
             </>
           ) : (
-            <div className="flex items-center gap-2">
-              <button
-                onClick={onOpenAuth}
-                className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold px-4 py-2 rounded-xl text-xs transition-all shadow-md shadow-cyan-500/20 flex items-center gap-1.5"
-              >
-                <Lock className="w-3.5 h-3.5" />
-                Sign In / Register
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Mobile Sub-Nav */}
-      {user && (
-        <div className="lg:hidden flex items-center justify-around bg-slate-950 border-t border-slate-800/80 px-2 py-2 text-xs overflow-x-auto">
-          <button
-            onClick={() => setActiveTab('dashboard')}
-            className={`flex flex-col items-center gap-0.5 py-1 px-2 rounded-lg ${
-              activeTab === 'dashboard' ? 'text-cyan-400 font-bold' : 'text-slate-400'
-            }`}
-          >
-            <CreditCard className="w-4 h-4" />
-            <span>Accounts</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('cards')}
-            className={`flex flex-col items-center gap-0.5 py-1 px-2 rounded-lg ${
-              activeTab === 'cards' ? 'text-cyan-400 font-bold' : 'text-slate-400'
-            }`}
-          >
-            <Layers className="w-4 h-4" />
-            <span>Cards</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('send')}
-            className={`flex flex-col items-center gap-0.5 py-1 px-2 rounded-lg ${
-              activeTab === 'send' ? 'text-cyan-400 font-bold' : 'text-slate-400'
-            }`}
-          >
-            <Send className="w-4 h-4" />
-            <span>Transfer</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('bills')}
-            className={`flex flex-col items-center gap-0.5 py-1 px-2 rounded-lg ${
-              activeTab === 'bills' ? 'text-cyan-400 font-bold' : 'text-slate-400'
-            }`}
-          >
-            <Receipt className="w-4 h-4" />
-            <span>Bills</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('history')}
-            className={`flex flex-col items-center gap-0.5 py-1 px-2 rounded-lg ${
-              activeTab === 'history' ? 'text-cyan-400 font-bold' : 'text-slate-400'
-            }`}
-          >
-            <History className="w-4 h-4" />
-            <span>Statements</span>
-          </button>
-
-          {user.role === 'admin' && (
             <button
-              onClick={() => setActiveTab('admin')}
-              className={`flex flex-col items-center gap-0.5 py-1 px-2 rounded-lg ${
-                activeTab === 'admin' ? 'text-amber-400 font-bold' : 'text-slate-400'
-              }`}
+              onClick={onOpenAuth}
+              className="bg-[#002b49] hover:bg-[#001f35] text-white font-bold px-4 py-2 rounded-lg text-xs transition-all shadow-sm flex items-center gap-1.5"
             >
-              <Sparkles className="w-4 h-4" />
-              <span>Admin</span>
+              <Lock className="w-3.5 h-3.5" />
+              Sign In
             </button>
           )}
         </div>
-      )}
+      </div>
     </header>
   );
 };
-

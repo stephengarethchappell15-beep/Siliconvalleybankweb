@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Navbar } from './components/Navbar';
+import { SidebarNav } from './components/SidebarNav';
 import { AuthModal } from './components/AuthModal';
 import { UserDashboard } from './components/UserDashboard';
 import { SendPanel } from './components/SendPanel';
@@ -24,7 +25,7 @@ import { User, Transaction, UserNotification } from './types';
 import { ShieldCheck, Building2, ShieldAlert } from 'lucide-react';
 
 export default function App() {
-  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  const [theme, setTheme] = useState<'dark' | 'light'>('light');
   const [user, setUser] = useState<User | null>(null);
   const [activeTab, setActiveTab] = useState<
     'home' | 'dashboard' | 'cards' | 'bills' | 'deposit' | 'withdraw' | 'send' | 'receive' | 'history' | 'profile' | 'settings' | 'support' | 'admin'
@@ -199,9 +200,9 @@ export default function App() {
   const unreadCount = notifications.filter(n => !n.read).length;
 
   return (
-    <div className={`min-h-screen bg-slate-950 text-slate-100 font-sans antialiased selection:bg-cyan-500 selection:text-slate-950 flex flex-col ${theme === 'light' ? 'light-mode' : ''}`}>
+    <div className={`min-h-screen bg-[#f4f6f8] text-slate-800 font-sans antialiased selection:bg-[#00a3e0] selection:text-white flex flex-col ${theme === 'light' ? 'light-mode' : ''}`}>
       
-      {/* Top Navbar */}
+      {/* Top SVB Go Branding Header */}
       <Navbar
         user={user}
         activeTab={activeTab}
@@ -214,124 +215,138 @@ export default function App() {
         onToggleTheme={() => setTheme(prev => prev === 'dark' ? 'light' : 'dark')}
       />
 
-      {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {/* Main Layout Container with Sidebar */}
+      <div className="flex-1 flex w-full min-h-[calc(100vh-64px)]">
         
-        {loading ? (
-          <div className="flex flex-col items-center justify-center py-24 space-y-3 text-slate-400 animate-pulse">
-            <Building2 className="w-10 h-10 text-cyan-400" />
-            <p className="text-xs font-semibold">Connecting to Silicon Valley Bank Core Ledger...</p>
-          </div>
-        ) : activeTab === 'home' || !user ? (
-          <Homepage
-            onOpenAuth={() => setShowAuthModal(true)}
+        {/* Left Vertical Navigation Sidebar */}
+        {user && activeTab !== 'home' && (
+          <SidebarNav
+            user={user}
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+            onOpenFraudControl={() => openLegalDoc('privacy')}
           />
-        ) : (
-          <>
-            {activeTab === 'dashboard' && (
-              <UserDashboard
-                user={user}
-                transactions={transactions}
-                notifications={notifications}
-                onOpenReceipt={(txn) => setReceiptTxn(txn)}
-                onNavigateTab={(tab) => setActiveTab(tab)}
-                onNavigateToAdmin={() => setActiveTab('admin')}
-                onUserUpdated={(updated) => setUser(updated)}
-              />
-            )}
-
-            {activeTab === 'cards' && (
-              <VirtualCardsPanel
-                user={user}
-                onRefreshUser={refreshUser}
-              />
-            )}
-
-            {activeTab === 'bills' && (
-              <BillPayPanel
-                user={user}
-                onRefreshUser={refreshUser}
-              />
-            )}
-
-            {activeTab === 'send' && (
-              <SendPanel
-                user={user}
-                onSuccess={(updatedUser, txn) => {
-                  setUser(updatedUser);
-                  setReceiptTxn(txn);
-                  fetchData();
-                }}
-              />
-            )}
-
-            {activeTab === 'withdraw' && (
-              <WithdrawPanel
-                user={user}
-                onSuccess={(updatedUser, txn) => {
-                  setUser(updatedUser);
-                  setReceiptTxn(txn);
-                  fetchData();
-                }}
-              />
-            )}
-
-            {activeTab === 'receive' && (
-              <ReceivePanel user={user} />
-            )}
-
-            {activeTab === 'history' && (
-              <TransactionHistory
-                transactions={transactions}
-                onOpenReceipt={(txn) => setReceiptTxn(txn)}
-                isAdmin={user.role === 'admin'}
-              />
-            )}
-
-            {activeTab === 'profile' && (
-              <ProfilePanel
-                user={user}
-                onUpdateUser={(updated) => setUser(updated)}
-              />
-            )}
-
-            {activeTab === 'settings' && (
-              <SettingsPanel
-                user={user}
-                onUpdateUser={(updated) => setUser(updated)}
-              />
-            )}
-
-            {activeTab === 'support' && (
-              <CustomerSupportPanel user={user} />
-            )}
-
-            {(activeTab === 'admin' || activeTab === 'deposit') && user.role === 'admin' && (
-              <AdminPanel
-                adminUser={user}
-                onDepositSuccess={handleDepositSuccess}
-              />
-            )}
-
-            {(activeTab === 'admin' || activeTab === 'deposit') && user.role !== 'admin' && (
-              <div className="bg-slate-900 border border-slate-800 rounded-3xl p-8 text-center max-w-md mx-auto space-y-4">
-                <ShieldAlert className="w-12 h-12 text-rose-500 mx-auto" />
-                <h3 className="text-lg font-bold text-white">Access Denied: Admin Privilege Required</h3>
-                <p className="text-xs text-slate-400">
-                  The Administration Operation Portal is strictly restricted to verified system administrators. Standard client accounts do not have permission to view or execute administrative actions.
-                </p>
-                <button
-                  onClick={() => setActiveTab('dashboard')}
-                  className="bg-slate-800 hover:bg-slate-700 text-white font-semibold px-4 py-2 rounded-xl text-xs transition-colors border border-slate-700"
-                >
-                  Return to Dashboard
-                </button>
-              </div>
-            )}
-          </>
         )}
 
-      </main>
+        {/* Right Main Content Area */}
+        <main className="flex-1 bg-[#f4f6f8] px-3 sm:px-6 py-5 max-w-[1600px] w-full mx-auto overflow-x-hidden">
+          
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-24 space-y-3 text-slate-500 animate-pulse">
+              <Building2 className="w-10 h-10 text-[#00a3e0]" />
+              <p className="text-xs font-semibold">Connecting to Silicon Valley Bank Core Ledger...</p>
+            </div>
+          ) : activeTab === 'home' || !user ? (
+            <Homepage
+              onOpenAuth={() => setShowAuthModal(true)}
+            />
+          ) : (
+            <>
+              {activeTab === 'dashboard' && (
+                <UserDashboard
+                  user={user}
+                  transactions={transactions}
+                  notifications={notifications}
+                  onOpenReceipt={(txn) => setReceiptTxn(txn)}
+                  onNavigateTab={(tab) => setActiveTab(tab)}
+                  onNavigateToAdmin={() => setActiveTab('admin')}
+                  onUserUpdated={(updated) => setUser(updated)}
+                />
+              )}
+
+              {activeTab === 'cards' && (
+                <VirtualCardsPanel
+                  user={user}
+                  onRefreshUser={refreshUser}
+                />
+              )}
+
+              {activeTab === 'bills' && (
+                <BillPayPanel
+                  user={user}
+                  onRefreshUser={refreshUser}
+                />
+              )}
+
+              {activeTab === 'send' && (
+                <SendPanel
+                  user={user}
+                  onSuccess={(updatedUser, txn) => {
+                    setUser(updatedUser);
+                    setReceiptTxn(txn);
+                    fetchData();
+                  }}
+                />
+              )}
+
+              {activeTab === 'withdraw' && (
+                <WithdrawPanel
+                  user={user}
+                  onSuccess={(updatedUser, txn) => {
+                    setUser(updatedUser);
+                    setReceiptTxn(txn);
+                    fetchData();
+                  }}
+                />
+              )}
+
+              {activeTab === 'receive' && (
+                <ReceivePanel user={user} />
+              )}
+
+              {activeTab === 'history' && (
+                <TransactionHistory
+                  transactions={transactions}
+                  onOpenReceipt={(txn) => setReceiptTxn(txn)}
+                  isAdmin={user.role === 'admin'}
+                />
+              )}
+
+              {activeTab === 'profile' && (
+                <ProfilePanel
+                  user={user}
+                  onUpdateUser={(updated) => setUser(updated)}
+                />
+              )}
+
+              {activeTab === 'settings' && (
+                <SettingsPanel
+                  user={user}
+                  onUpdateUser={(updated) => setUser(updated)}
+                />
+              )}
+
+              {activeTab === 'support' && (
+                <CustomerSupportPanel user={user} />
+              )}
+
+              {(activeTab === 'admin' || activeTab === 'deposit') && user.role === 'admin' && (
+                <AdminPanel
+                  adminUser={user}
+                  onDepositSuccess={handleDepositSuccess}
+                />
+              )}
+
+              {(activeTab === 'admin' || activeTab === 'deposit') && user.role !== 'admin' && (
+                <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center max-w-md mx-auto space-y-4 shadow-sm">
+                  <ShieldAlert className="w-12 h-12 text-rose-500 mx-auto" />
+                  <h3 className="text-lg font-bold text-[#002b49]">Access Denied: Admin Privilege Required</h3>
+                  <p className="text-xs text-slate-500">
+                    The Administration Operation Portal is strictly restricted to verified system administrators. Standard client accounts do not have permission to view or execute administrative actions.
+                  </p>
+                  <button
+                    onClick={() => setActiveTab('dashboard')}
+                    className="bg-[#002b49] hover:bg-[#001f35] text-white font-semibold px-4 py-2 rounded-xl text-xs transition-colors"
+                  >
+                    Return to Dashboard
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+
+        </main>
+      </div>
 
       {/* Footer */}
       <footer className="border-t border-slate-900 bg-slate-950 py-6 text-center text-[11px] text-slate-500">
