@@ -19,6 +19,7 @@ import { LegalModal, LegalDocType } from './components/LegalModal';
 import { SupportChatWidget } from './components/SupportChatWidget';
 import { api, getStoredToken, removeStoredToken } from './services/api';
 import { dbStore } from './services/dbStore';
+import { subscribeUserFromFirestore, subscribeTransactionsFromFirestore } from './lib/firebase';
 import { User, Transaction, UserNotification } from './types';
 import { ShieldCheck, Building2, ShieldAlert } from 'lucide-react';
 
@@ -127,9 +128,36 @@ export default function App() {
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, 5000); // 5s auto-refresh for real-time deposit updates
+    const interval = setInterval(fetchData, 4000); // 4s auto-refresh fallback
     return () => clearInterval(interval);
-  }, [user, activeTab]);
+  }, [user?.id, activeTab]);
+
+  // Real-time Firestore snapshot listeners (instantly sync balance & transactions across sessions without logging out)
+  useEffect(() => {
+    if (!user) return;
+
+    const unsubUser = subscribeUserFromFirestore(user.id, user.email, (updatedUser) => {
+      setUser(prev => {
+        if (!prev) return updatedUser;
+        const merged = { ...prev, ...updatedUser };
+        dbStore.saveUser(merged);
+        return merged;
+      });
+    });
+
+    const unsubTxns = subscribeTransactionsFromFirestore(
+      user.role === 'admin' ? null : user.id,
+      (fsTxns) => {
+        setTransactions(fsTxns);
+        fsTxns.forEach(t => dbStore.addTransaction(t));
+      }
+    );
+
+    return () => {
+      unsubUser();
+      unsubTxns();
+    };
+  }, [user?.id, user?.email, user?.role]);
 
   const handleLogout = async () => {
     await api.logout();

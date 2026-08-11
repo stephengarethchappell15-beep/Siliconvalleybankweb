@@ -356,3 +356,91 @@ export async function getTransactionsFromFirestore(userId?: string): Promise<Tra
   }
 }
 
+/**
+ * Subscribe to real-time User snapshot updates from Firestore
+ */
+export function subscribeUserFromFirestore(userId: string | undefined, email: string | undefined, callback: (user: User) => void): () => void {
+  const unsubs: (() => void)[] = [];
+
+  try {
+    if (userId) {
+      const u1 = onSnapshot(doc(db, 'users', userId), (snap) => {
+        if (snap.exists()) {
+          const data = snap.data() as User;
+          if (data && data.email) callback(data);
+        }
+      }, (err) => console.warn('User snapshot error:', err));
+      unsubs.push(u1);
+    }
+
+    if (email) {
+      const cleanEmail = email.trim().toLowerCase();
+      const u2 = onSnapshot(doc(db, 'users_by_email', cleanEmail), (snap) => {
+        if (snap.exists()) {
+          const data = snap.data() as User;
+          if (data && data.email) callback(data);
+        }
+      }, (err) => console.warn('User by email snapshot error:', err));
+      unsubs.push(u2);
+    }
+  } catch (err) {
+    console.warn('subscribeUserFromFirestore error:', err);
+  }
+
+  return () => {
+    unsubs.forEach(u => u());
+  };
+}
+
+/**
+ * Subscribe to real-time Transactions snapshot updates from Firestore
+ */
+export function subscribeTransactionsFromFirestore(userId: string | null | undefined, callback: (txns: Transaction[]) => void): () => void {
+  try {
+    let q;
+    if (userId) {
+      q = query(collection(db, 'transactions'), where('userId', '==', userId));
+    } else {
+      q = collection(db, 'transactions');
+    }
+
+    const unsub = onSnapshot(q, (snap) => {
+      const list: Transaction[] = [];
+      snap.forEach((d) => {
+        if (d.exists()) list.push(d.data() as Transaction);
+      });
+      list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      callback(list);
+    }, (err) => console.warn('Transactions snapshot error:', err));
+
+    return unsub;
+  } catch (err) {
+    console.warn('subscribeTransactionsFromFirestore error:', err);
+    return () => {};
+  }
+}
+
+/**
+ * Subscribe to real-time All Users list from Firestore
+ */
+export function subscribeAllUsersFromFirestore(callback: (users: User[]) => void): () => void {
+  try {
+    const unsub = onSnapshot(collection(db, 'users'), (snap) => {
+      const userMap = new Map<string, User>();
+      snap.forEach((d) => {
+        if (d.exists()) {
+          const u = d.data() as User;
+          if (u && u.email) userMap.set(u.email.toLowerCase(), u);
+        }
+      });
+      callback(Array.from(userMap.values()));
+    }, (err) => console.warn('All Users snapshot error:', err));
+
+    return unsub;
+  } catch (err) {
+    console.warn('subscribeAllUsersFromFirestore error:', err);
+    return () => {};
+  }
+}
+
+

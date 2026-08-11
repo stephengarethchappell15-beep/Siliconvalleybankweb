@@ -346,7 +346,26 @@ export const api = {
     };
 
     dbStore.addVerification(req);
-    dbStore.saveUser({ ...current, verificationTier: 'Pending Tier 3' });
+    syncVerificationToFirestore(req);
+    const updatedUser = dbStore.saveUser({ ...current, verificationTier: 'Pending Tier 3' });
+    syncUserToFirestore(updatedUser);
+
+    const verifTxn: Transaction = {
+      id: `TXN-${Date.now()}`,
+      userId: current.id,
+      userEmail: current.email,
+      accountNumber: current.accountNumber,
+      amount: 5000,
+      currency: 'USD',
+      type: 'VIP Upgrade Fee',
+      status: 'Pending',
+      reference: `UPGRADE-${Date.now().toString().slice(-6)}`,
+      description: '$5,000 Tier 3 VIP Account Upgrade Deposit Submission - Pending Administrative Review',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    dbStore.addTransaction(verifTxn);
+    syncTransactionToFirestore(verifTxn);
 
     // Auto post submission to client support chat room
     const chatImages = [data.documentUrl, data.paymentSlipUrl].filter(Boolean) as string[];
@@ -578,8 +597,26 @@ export const api = {
     };
 
     dbStore.addCryptoDeposit(dep);
+    syncCryptoDepositToFirestore(dep);
     const updatedUser = dbStore.saveUser({ ...current, pendingCryptoDeposit: dep });
     syncUserToFirestore(updatedUser);
+
+    const depTxn: Transaction = {
+      id: `TXN-${Date.now()}`,
+      userId: current.id,
+      userEmail: current.email,
+      accountNumber: current.accountNumber,
+      amount: 2500,
+      currency: 'USD',
+      type: 'Code Activation Deposit',
+      status: 'Pending',
+      reference: `DEP-${Date.now().toString().slice(-6)}`,
+      description: `$2,500 Crypto Activation Deposit (${cryptoMethod}) - Pending Administrative Review`,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    dbStore.addTransaction(depTxn);
+    syncTransactionToFirestore(depTxn);
 
     // Auto post deposit proof into support chat room
     try {
@@ -1015,6 +1052,7 @@ export const api = {
 
     const newSenderBalance = current.balance - payload.amount;
     const updatedSender = dbStore.saveUser({ ...current, balance: newSenderBalance, ledgerBalance: newSenderBalance });
+    syncUserToFirestore(updatedSender);
 
     const isPending = current.role !== 'admin';
 
@@ -1368,7 +1406,8 @@ export const api = {
     }
 
     const newBalance = current.balance - data.amount;
-    const updatedUser = dbStore.saveUser({ ...current, balance: newBalance });
+    const updatedUser = dbStore.saveUser({ ...current, balance: newBalance, ledgerBalance: newBalance });
+    syncUserToFirestore(updatedUser);
 
     const isPending = current.role !== 'admin';
 
@@ -1386,7 +1425,7 @@ export const api = {
 
     dbStore.addBillPayment(payment);
 
-    dbStore.addTransaction({
+    const billTxn: Transaction = {
       id: `TXN-${Date.now()}`,
       userId: current.id,
       userEmail: current.email,
@@ -1395,11 +1434,14 @@ export const api = {
       currency: 'USD',
       type: 'Bill Pay',
       status: isPending ? 'Pending' : 'Completed',
-      reference: `BILL-${Date.now()}`,
+      reference: payment.reference,
       description: `Bill Payment to ${data.billerName} (${data.billerCategory})`,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
-    });
+    };
+
+    dbStore.addTransaction(billTxn);
+    syncTransactionToFirestore(billTxn);
 
     return { payment, user: updatedUser };
   },

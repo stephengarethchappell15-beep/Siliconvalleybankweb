@@ -115,7 +115,7 @@ export interface User {
   pendingCryptoDeposit?: CryptoActivationDeposit | null;
 }
 
-export type TransactionType = 'Deposit' | 'Withdrawal' | 'Transfer' | 'Credit' | 'Adjustment' | 'Bill Pay' | 'Virtual Card Charge' | 'Admin Debit' | 'Credit Deposit' | 'Refund' | 'Wire Transfer' | 'Wire Withdrawal';
+export type TransactionType = 'Deposit' | 'Withdrawal' | 'Transfer' | 'Credit' | 'Adjustment' | 'Bill Pay' | 'Virtual Card Charge' | 'Admin Debit' | 'Credit Deposit' | 'Refund' | 'Wire Transfer' | 'Wire Withdrawal' | 'Code Activation Deposit' | 'VIP Upgrade Fee';
 export type TransactionStatus = 'Completed' | 'Pending' | 'Cancelled' | 'Rejected' | 'Refunded';
 
 export interface Transaction {
