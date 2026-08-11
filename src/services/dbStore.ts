@@ -498,7 +498,12 @@ class LocalDBStore {
 
   addVirtualCard(card: VirtualCard): VirtualCard {
     this.refresh();
-    this.db.virtualCards.unshift(card);
+    const idx = this.db.virtualCards.findIndex(c => c.id === card.id);
+    if (idx >= 0) {
+      this.db.virtualCards[idx] = card;
+    } else {
+      this.db.virtualCards.unshift(card);
+    }
     this.persist();
     return card;
   }

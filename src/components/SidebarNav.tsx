@@ -10,8 +10,9 @@ import {
   Sparkles, 
   ClipboardList, 
   Grid,
-  Lock,
-  Headphones
+  Receipt,
+  Send,
+  ArrowUpRight
 } from 'lucide-react';
 import { User } from '../types';
 
@@ -42,16 +43,28 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
       action: () => setActiveTab('dashboard')
     },
     {
+      id: 'send',
+      label: 'Transfer Funds',
+      icon: ArrowLeftRight,
+      action: () => setActiveTab('send')
+    },
+    {
+      id: 'bills',
+      label: 'Pay Bills',
+      icon: Receipt,
+      action: () => setActiveTab('bills')
+    },
+    {
       id: 'cards',
       label: 'Card Program',
       icon: CreditCard,
       action: () => setActiveTab('cards')
     },
     {
-      id: 'send',
-      label: 'Payments & Transfers',
-      icon: ArrowLeftRight,
-      action: () => setActiveTab('send')
+      id: 'withdraw',
+      label: 'Wire Withdrawal',
+      icon: ArrowUpRight,
+      action: () => setActiveTab('withdraw')
     },
     {
       id: 'fraud',
@@ -68,15 +81,9 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
       icon: FileText,
       action: () => setActiveTab('history')
     },
-    {
-      id: 'travel',
-      label: 'Travel & Expense',
-      icon: Briefcase,
-      action: () => setActiveTab('cards')
-    },
     ...(user?.role === 'admin' ? [{
       id: 'admin',
-      label: 'Admin',
+      label: 'Admin Portal',
       icon: Sparkles,
       action: () => setActiveTab('admin')
     }] : []),
@@ -101,20 +108,19 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
           const Icon = item.icon;
           const isActive = 
             activeTab === item.id || 
-            (item.id === 'accounts' && activeTab === 'dashboard') ||
-            (item.id === 'travel' && activeTab === 'cards');
+            (item.id === 'accounts' && activeTab === 'dashboard');
 
           return (
             <button
               key={item.id}
               onClick={item.action}
-              className={`w-full py-3 px-3 rounded-lg flex flex-col items-center justify-center text-center transition-all group ${
+              className={`w-full py-2.5 px-3 rounded-lg flex flex-col items-center justify-center text-center transition-all group ${
                 isActive
                   ? 'bg-[#00a3e0] text-white font-bold shadow-md'
                   : 'text-slate-200 hover:bg-[#034a75] hover:text-white'
               }`}
             >
-              <Icon className={`w-5 h-5 mb-1 ${isActive ? 'text-white' : 'text-slate-300 group-hover:text-white'}`} />
+              <Icon className={`w-4 h-4 mb-1 ${isActive ? 'text-white' : 'text-slate-300 group-hover:text-white'}`} />
               <span className="text-[11px] leading-tight font-medium tracking-tight">
                 {item.label}
               </span>

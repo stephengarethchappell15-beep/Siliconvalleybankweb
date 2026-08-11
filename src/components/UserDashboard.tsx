@@ -166,6 +166,53 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
         </div>
       )}
 
+      {/* Quick Banking Operations Actions Bar */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-bold uppercase tracking-wider text-[#002b49] bg-slate-100 px-2.5 py-1 rounded-md border border-slate-200">
+            Quick Actions
+          </span>
+          <span className="text-slate-300 hidden sm:inline">|</span>
+          <span className="text-xs text-slate-500 font-medium hidden md:inline">
+            Fast access for outgoing transfers, vendor bill pay, and card management
+          </span>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
+          <button
+            onClick={() => onNavigateTab('send')}
+            className="flex-1 sm:flex-none bg-[#002b49] hover:bg-[#001f35] text-white px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-sm"
+          >
+            <Send className="w-3.5 h-3.5 text-[#00a3e0]" />
+            <span>Transfer Funds</span>
+          </button>
+
+          <button
+            onClick={() => onNavigateTab('bills')}
+            className="flex-1 sm:flex-none bg-[#002b49] hover:bg-[#001f35] text-white px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-sm"
+          >
+            <Receipt className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Pay Bills</span>
+          </button>
+
+          <button
+            onClick={() => onNavigateTab('withdraw')}
+            className="flex-1 sm:flex-none bg-slate-100 hover:bg-slate-200 text-[#002b49] border border-slate-200 px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2"
+          >
+            <ArrowUpRight className="w-3.5 h-3.5 text-[#002b49]" />
+            <span>Wire</span>
+          </button>
+
+          <button
+            onClick={() => onNavigateTab('cards')}
+            className="flex-1 sm:flex-none bg-slate-100 hover:bg-slate-200 text-[#002b49] border border-slate-200 px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2"
+          >
+            <CreditCard className="w-3.5 h-3.5 text-[#00a3e0]" />
+            <span>Issue Card</span>
+          </button>
+        </div>
+      </div>
+
       {/* Grid Layout of Dashboard Widget Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
 

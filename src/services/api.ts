@@ -1340,23 +1340,39 @@ export const api = {
   async getVirtualCards(): Promise<{ cards: VirtualCard[] }> {
     const current = dbStore.getCurrentUser();
     if (!current) return { cards: [] };
-    return { cards: dbStore.getVirtualCards(current.id) };
+
+    let localCards = dbStore.getVirtualCards(current.id);
+    try {
+      const fsCards = await getVirtualCardsFromFirestore(current.id);
+      if (fsCards.length > 0) {
+        fsCards.forEach(card => {
+          dbStore.addVirtualCard(card);
+        });
+        localCards = dbStore.getVirtualCards(current.id);
+      }
+    } catch (e) {
+      console.warn('Firestore getVirtualCards fallback:', e);
+    }
+    return { cards: localCards };
   },
 
-  async createVirtualCard(data: { cardType?: 'Visa Corporate' | 'Visa Business Debit' | 'Mastercard Personal Virtual'; category?: 'Personal' | 'Business' | 'SaaS Subscriptions' | 'Corporate Travel'; spendingLimit?: number }): Promise<{ card: VirtualCard }> {
+  async createVirtualCard(data: { cardType?: string; category?: string; spendingLimit?: number }): Promise<{ card: VirtualCard }> {
     const current = dbStore.getCurrentUser();
     if (!current) throw new Error('Not authenticated');
+
+    const isMastercard = data.cardType?.includes('Mastercard');
+    const prefix = isMastercard ? '5328' : '4829';
 
     const card: VirtualCard = {
       id: `CARD-${Date.now()}`,
       userId: current.id,
-      cardNumber: `4${Math.floor(1000 + Math.random() * 9000)} ${Math.floor(1000 + Math.random() * 9000)} ${Math.floor(1000 + Math.random() * 9000)} ${Math.floor(1000 + Math.random() * 9000)}`,
+      cardNumber: `${prefix} ${Math.floor(1000 + Math.random() * 9000)} ${Math.floor(1000 + Math.random() * 9000)} ${Math.floor(1000 + Math.random() * 9000)}`,
       cardholderName: current.fullName.toUpperCase(),
-      expiryMonth: '12',
-      expiryYear: '28',
+      expiryMonth: '08',
+      expiryYear: '30',
       cvv: `${Math.floor(100 + Math.random() * 900)}`,
-      cardType: data.cardType || 'Visa Corporate',
-      category: data.category || 'Business',
+      cardType: (data.cardType as any) || 'Visa Corporate',
+      category: (data.category as any) || 'Business',
       spendingLimit: current.verificationTier === 'Tier 3' ? 50000000 : (data.spendingLimit || 50000),
       spentAmount: 0,
       status: 'Active',
@@ -1364,11 +1380,26 @@ export const api = {
     };
 
     dbStore.addVirtualCard(card);
+    syncVirtualCardToFirestore(card);
+
+    dbStore.addNotification({
+      id: `NOTIF-${Date.now()}`,
+      userId: current.id,
+      title: 'New Virtual Card Issued',
+      message: `Your new ${card.cardType} (${card.category}) with limit $${card.spendingLimit.toLocaleString()} USD has been generated and activated.`,
+      amount: 0,
+      currency: 'USD',
+      reference: card.id,
+      read: false,
+      createdAt: new Date().toISOString()
+    });
+
     return { card };
   },
 
   async toggleVirtualCard(cardId: string): Promise<{ card: VirtualCard }> {
-    const cards = dbStore.getVirtualCards('');
+    const current = dbStore.getCurrentUser();
+    const cards = current ? dbStore.getVirtualCards(current.id) : [];
     const card = cards.find(c => c.id === cardId);
     if (!card) throw new Error('Card not found');
 
@@ -1377,6 +1408,8 @@ export const api = {
       status: card.status === 'Active' ? 'Frozen' : 'Active'
     };
     dbStore.addVirtualCard(updated);
+    syncVirtualCardToFirestore(updated);
+
     return { card: updated };
   },
 
