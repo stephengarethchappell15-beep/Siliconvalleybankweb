@@ -130,7 +130,7 @@ export const LegalModal: React.FC<LegalModalProps> = ({ isOpen, initialTab = 'pr
                 <p>Account holders are responsible for maintaining the confidentiality of their 4-digit Account Security PIN and login credentials. Any unauthorized transaction attempted without valid security authorization will be flagged for security review.</p>
 
                 <h4 className="font-semibold text-white text-sm">3. Transaction Authorization & Funds Settlement</h4>
-                <p>Wire transfers, ACH settlements, and deposits are subject to verification rules. Outgoing funds require verified transaction security authorization. Administrative review may be required for high-value or cross-border wire requests.</p>
+                <p>Wire transfers, ACH settlements, and deposits are subject to verification rules. Outgoing funds require verified transaction security authorization. SVB Review may be required for high-value or cross-border wire requests.</p>
 
                 <h4 className="font-semibold text-white text-sm">4. Account Termination</h4>
                 <p>SVB reserves the right to suspend or close accounts involved in fraudulent activity, unauthorized access attempts, or violation of regulatory banking requirements.</p>

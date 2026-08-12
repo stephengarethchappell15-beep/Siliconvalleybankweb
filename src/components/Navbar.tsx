@@ -173,7 +173,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                           className="w-full text-left px-3 py-1.5 text-amber-600 hover:bg-amber-50 rounded-xl flex items-center gap-2 transition-colors font-bold"
                         >
                           <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                          Admin Portal
+                          SVB Review Portal
                         </button>
                       )}
 

