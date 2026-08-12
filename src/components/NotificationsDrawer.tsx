@@ -12,22 +12,21 @@ interface NotificationsDrawerProps {
 const cleanNotificationText = (str: string) => {
   if (!str) return '';
   return str
-    .replace(/Compliance Admin/gi, 'Silicon Valley Bank')
-    .replace(/Compliance team/gi, 'Silicon Valley Bank')
-    .replace(/Bank Compliance/gi, 'Silicon Valley Bank')
-    .replace(/SVB Compliance/gi, 'Silicon Valley Bank')
-    .replace(/SVB Administration/gi, 'Silicon Valley Bank')
-    .replace(/system administrator/gi, 'Silicon Valley Bank system')
-    .replace(/administrator queue/gi, 'processing queue')
-    .replace(/admin queue/gi, 'processing queue')
-    .replace(/approval queue/gi, 'processing queue')
-    .replace(/dual approval/gi, 'security verification')
-    .replace(/admin review/gi, 'bank verification')
-    .replace(/administrator/gi, 'Silicon Valley Bank')
-    .replace(/by Compliance/gi, 'by Silicon Valley Bank')
-    .replace(/by Admin/gi, 'by Silicon Valley Bank')
-    .replace(/\bAdmin\b/g, 'Silicon Valley Bank')
-    .replace(/\badmin\b/g, 'Silicon Valley Bank');
+    .replace(/Compliance Admin/gi, 'SVB Review')
+    .replace(/Compliance team/gi, 'SVB Review team')
+    .replace(/Bank Compliance/gi, 'SVB Review')
+    .replace(/SVB Compliance/gi, 'SVB Review')
+    .replace(/SVB Administration/gi, 'SVB Review')
+    .replace(/system administrator/gi, 'SVB Review team')
+    .replace(/administrator queue/gi, 'SVB Review queue')
+    .replace(/admin queue/gi, 'SVB Review queue')
+    .replace(/approval queue/gi, 'SVB Review queue')
+    .replace(/admin review/gi, 'SVB Review')
+    .replace(/administrator/gi, 'SVB Review')
+    .replace(/by Compliance/gi, 'by SVB Review')
+    .replace(/by Admin/gi, 'by SVB Review')
+    .replace(/\bAdmin\b/g, 'SVB Review')
+    .replace(/\badmin\b/g, 'SVB Review');
 };
 
 export const NotificationsDrawer: React.FC<NotificationsDrawerProps> = ({

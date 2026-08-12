@@ -43,7 +43,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
   const exportToCSV = () => {
     if (filtered.length === 0) return;
 
-    const headers = ['Date', 'Reference', 'User Email', 'Account Number', 'Amount', 'Currency', 'Type', 'Status', 'Description', 'Processed By Admin'];
+    const headers = ['Date', 'Reference', 'User Email', 'Account Number', 'Amount', 'Currency', 'Type', 'Status', 'Description', 'Processed By SVB Review'];
     const rows = filtered.map(t => [
       `"${new Date(t.createdAt).toLocaleString()}"`,
       `"${t.reference}"`,

@@ -257,12 +257,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
 
     try {
       const res = await api.adminWithdraw({
-        bankName: 'Silicon Valley Bank Admin Direct',
+        bankName: 'Silicon Valley Bank SVB Review Direct',
         routingNumber: '121000358',
         accountNumber: withdrawTarget.trim(),
-        accountHolderName: 'Admin Withdrawal',
+        accountHolderName: 'SVB Review Withdrawal',
         amount: Number(withdrawAmount),
-        note: withdrawNote.trim() || 'Admin initiated debit'
+        note: withdrawNote.trim() || 'SVB Review initiated debit'
       });
       setWithdrawMsg({ type: 'success', text: `Successfully debited $${Number(withdrawAmount).toFixed(2)} from user ${res.updatedUser.fullName}.` });
       setWithdrawAmount('');
@@ -352,7 +352,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-xl font-bold text-white tracking-tight">System Admin Operation Portal</h2>
+                <h2 className="text-xl font-bold text-white tracking-tight">System SVB Review Operation Portal</h2>
                 <span className="bg-amber-500/20 text-amber-300 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border border-amber-500/30">
                   Restricted Access
                 </span>
@@ -397,7 +397,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
               }`}
             >
               <Sparkles className="w-3.5 h-3.5" />
-              <span>Admin Deposit</span>
+              <span>SVB Review Deposit</span>
             </button>
 
             <button
@@ -467,7 +467,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
               <div className="flex items-center gap-2">
                 <h3 className="text-base font-bold text-white flex items-center gap-2">
                   <Clock className="w-5 h-5 text-amber-400" />
-                  Pending Transactions Administrative Review Queue
+                  Pending Transactions SVB Review Queue
                 </h3>
                 <span className="bg-amber-500/20 text-amber-300 text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full border border-amber-500/30">
                   {sysTxns.filter(t => t.status === 'Pending').length} Pending
@@ -674,7 +674,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
                       <td className="py-3 px-3">
                         {u.role === 'admin' ? (
                           <span className="bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
-                            Admin
+                            SVB Review
                           </span>
                         ) : (
                           <span className="bg-slate-800 text-slate-300 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
@@ -754,7 +754,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
               <div>
                 <h3 className="text-base font-bold text-white flex items-center gap-2">
                   <Shield className="w-5 h-5 text-amber-400" />
-                  Manage Official Crypto Deposit Wallet Addresses (Admin Only)
+                  Manage Official Crypto Deposit Wallet Addresses (SVB Review Only)
                 </h3>
                 <p className="text-xs text-slate-400 mt-0.5">
                   Update the Bitcoin (BTC) and Tether (USDT) treasury wallet addresses displayed to clients during deposit.
@@ -828,7 +828,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
                   <th className="py-3 px-3">Amount</th>
                   <th className="py-3 px-3">Proof Screenshot & Tx Hash</th>
                   <th className="py-3 px-3">Status</th>
-                  <th className="py-3 px-3 text-right">Admin Actions</th>
+                  <th className="py-3 px-3 text-right">SVB Review Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60 text-slate-200">
@@ -926,10 +926,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
           <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-4 max-w-2xl">
             <h3 className="text-base font-bold text-white flex items-center gap-2 border-b border-slate-800 pb-3">
               <ArrowDownRight className="w-5 h-5 text-rose-400" />
-              Admin Account Debit / Withdrawal Tool
+              SVB Review Account Debit / Withdrawal Tool
             </h3>
             <p className="text-xs text-slate-400">
-              Only administrators are authorized to execute manual debit/withdrawals from client bank accounts.
+              Only SVB Review team members are authorized to execute manual debit/withdrawals from client bank accounts.
             </p>
 
             {withdrawMsg && (
@@ -984,7 +984,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
                 disabled={withdrawLoading}
                 className="w-full bg-rose-500 hover:bg-rose-400 text-slate-950 font-bold py-3 rounded-xl text-xs transition-all flex items-center justify-center gap-2 shadow-lg shadow-rose-500/20"
               >
-                {withdrawLoading ? 'Processing Account Debit...' : 'Execute Admin Account Debit'}
+                {withdrawLoading ? 'Processing Account Debit...' : 'Execute SVB Review Account Debit'}
               </button>
             </form>
           </div>
@@ -996,7 +996,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
               Cancel Outgoing Transfers & Transactions
             </h3>
             <p className="text-xs text-slate-400">
-              Only administrators can cancel executed or pending transfers across the bank network.
+              Only SVB Review team members can cancel executed or pending transfers across the bank network.
             </p>
 
             <div className="overflow-x-auto">

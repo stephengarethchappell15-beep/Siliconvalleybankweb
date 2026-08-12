@@ -154,9 +154,9 @@ export const AdminDepositPanel: React.FC<AdminDepositPanelProps> = ({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-lg font-bold text-white">Admin Deposit Management</h1>
+                <h1 className="text-lg font-bold text-white">SVB Review Deposit Management</h1>
                 <span className="px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 text-[10px] font-bold border border-amber-500/20">
-                  AUTHORIZED ADMIN
+                  AUTHORIZED SVB REVIEW
                 </span>
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
@@ -167,7 +167,7 @@ export const AdminDepositPanel: React.FC<AdminDepositPanelProps> = ({
 
           <div className="hidden sm:flex items-center gap-2 text-xs text-slate-400 bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800">
             <ShieldCheck className="w-4 h-4 text-emerald-400" />
-            <span>Admin: {currentUser.email}</span>
+            <span>SVB Review: {currentUser.email}</span>
           </div>
         </div>
       </div>
@@ -393,7 +393,7 @@ export const AdminDepositPanel: React.FC<AdminDepositPanelProps> = ({
                 disabled={loading}
                 className="w-full mt-4 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold py-3 rounded-xl text-xs transition-all shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2"
               >
-                {loading ? 'Processing Deposit & Updating Balance...' : 'Execute Admin Deposit Entry'}
+                {loading ? 'Processing Deposit & Updating Balance...' : 'Execute SVB Review Deposit Entry'}
                 {!loading && <ArrowRight className="w-4 h-4" />}
               </button>
             </form>

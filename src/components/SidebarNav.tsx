@@ -83,7 +83,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
     },
     ...(user?.role === 'admin' ? [{
       id: 'admin',
-      label: 'Admin Portal',
+      label: 'SVB Review Portal',
       icon: Sparkles,
       action: () => setActiveTab('admin')
     }] : []),

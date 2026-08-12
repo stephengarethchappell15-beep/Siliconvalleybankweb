@@ -184,6 +184,87 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
         </div>
       )}
 
+      {/* Account Details Display Banner */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4.5 sm:p-5 hover:shadow-md transition-shadow">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          
+          {/* Account Title & Account Holder Name */}
+          <div className="flex items-center gap-3.5">
+            <div className="w-11 h-11 rounded-xl bg-[#0f2232] text-amber-400 flex items-center justify-center font-black text-sm shrink-0 shadow-sm border border-slate-800">
+              SVB
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-700 px-2 py-0.5 rounded border border-slate-200">
+                  Account Name
+                </span>
+                <span className="text-xs text-emerald-600 font-semibold flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  Active Account
+                </span>
+              </div>
+              <h2 className="text-lg sm:text-xl font-extrabold text-slate-900 tracking-tight mt-0.5">
+                {user.fullName}
+              </h2>
+            </div>
+          </div>
+
+          {/* Account Number, Routing Number, and Balance Grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-3 lg:pt-0 border-t lg:border-t-0 border-slate-100">
+            
+            {/* Account Number */}
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80">
+              <span className="text-[10px] font-bold uppercase text-slate-500 block tracking-wider">
+                Account Number
+              </span>
+              <div className="flex items-center gap-2 mt-1">
+                <span className="font-mono font-black text-sm text-slate-900 tracking-wider">
+                  {user.accountNumber}
+                </span>
+                <button
+                  onClick={copyAccountNumber}
+                  className="p-1 text-slate-500 hover:text-slate-900 transition-colors"
+                  title="Copy Account Number"
+                >
+                  {copied ? (
+                    <Check className="w-3.5 h-3.5 text-emerald-600" />
+                  ) : (
+                    <Copy className="w-3.5 h-3.5" />
+                  )}
+                </button>
+              </div>
+              {copied && (
+                <span className="text-[10px] text-emerald-600 font-bold block mt-0.5">Copied to clipboard!</span>
+              )}
+            </div>
+
+            {/* Routing Number */}
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80">
+              <span className="text-[10px] font-bold uppercase text-slate-500 block tracking-wider">
+                Routing / Wire ABA
+              </span>
+              <span className="font-mono font-bold text-sm text-slate-900 tracking-wider block mt-1">
+                121141822
+              </span>
+              <span className="text-[10px] text-slate-400 block mt-0.5">Silicon Valley Bank</span>
+            </div>
+
+            {/* Available Balance */}
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 col-span-2 sm:col-span-1">
+              <span className="text-[10px] font-bold uppercase text-slate-500 block tracking-wider">
+                Available Balance
+              </span>
+              <span className="font-extrabold text-sm sm:text-base text-slate-900 block mt-1">
+                {formattedBalance}
+              </span>
+              <span className="text-[10px] text-slate-500 block mt-0.5">Primary Checking</span>
+            </div>
+
+          </div>
+
+        </div>
+      </div>
+
       {/* Quick Banking Operations Actions Bar */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div className="flex items-center gap-2">
@@ -472,11 +553,17 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
             <div className="space-y-3.5 text-xs">
               <div className="pb-2.5">
                 <div className="flex items-center justify-between font-bold text-slate-800">
-                  <span className="underline decoration-dotted underline-offset-2">
-                    SVB Primary Checking ***{user.accountNumber ? user.accountNumber.slice(-4) : '0000'}
+                  <div>
+                    <p className="font-extrabold text-slate-900 text-sm">{user.fullName}</p>
+                    <p className="text-xs text-slate-600 font-mono mt-0.5">
+                      Account #{user.accountNumber}
+                    </p>
+                  </div>
+                  <span className="text-[10px] font-bold bg-slate-100 text-slate-700 px-2 py-0.5 rounded border border-slate-200">
+                    SVB Primary Checking
                   </span>
                 </div>
-                <div className="flex items-center justify-between text-slate-600 mt-1.5">
+                <div className="flex items-center justify-between text-slate-600 mt-2.5">
                   <span>Available Balance</span>
                   <span className="font-extrabold text-slate-900">{formattedBalance}</span>
                 </div>
@@ -570,15 +657,26 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
             <div className="space-y-2.5 text-xs">
               {transactions.length > 0 ? (
                 transactions.slice(0, 4).map((t) => (
-                  <div key={t.id} className="flex items-center justify-between border-b border-slate-100 pb-2">
+                  <div key={t.id} className="flex items-center justify-between border-b border-slate-100 pb-2.5">
                     <div>
-                      <p className="text-[10px] text-slate-400">
-                        {new Date(t.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                      </p>
-                      <p className="font-semibold text-slate-800">{t.description}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-[10px] text-slate-400">
+                          {new Date(t.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </p>
+                        <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded-md ${
+                          t.status === 'Completed' 
+                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                            : t.status === 'Pending'
+                            ? 'bg-amber-100 text-amber-800 border border-amber-200 animate-pulse'
+                            : 'bg-rose-100 text-rose-800 border border-rose-200'
+                        }`}>
+                          {t.status}
+                        </span>
+                      </div>
+                      <p className="font-semibold text-slate-800 mt-0.5">{t.description}</p>
                     </div>
                     <div className="text-right">
-                      <span className="font-bold text-slate-900">
+                      <span className="font-bold text-slate-900 block">
                         {t.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })} USD
                       </span>
                     </div>

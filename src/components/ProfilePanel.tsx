@@ -175,7 +175,7 @@ export const ProfilePanel: React.FC<ProfilePanelProps> = ({ user, onUpdateUser }
               <h2 className="text-2xl font-bold text-white tracking-tight">{user.fullName}</h2>
               {user.role === 'admin' ? (
                 <span className="bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] font-bold uppercase px-2 py-0.5 rounded-full">
-                  System Admin
+                  SVB Review
                 </span>
               ) : (
                 <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-bold uppercase px-2 py-0.5 rounded-full">

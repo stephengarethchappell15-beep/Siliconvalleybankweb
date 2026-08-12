@@ -32,7 +32,7 @@ export const AdminAuditLogs: React.FC<AdminAuditLogsProps> = ({ logs }) => {
   const exportAuditCSV = () => {
     if (filtered.length === 0) return;
 
-    const headers = ['Timestamp', 'Admin Email', 'Action', 'Target Email', 'Target Acc #', 'Description'];
+    const headers = ['Timestamp', 'SVB Review Email', 'Action', 'Target Email', 'Target Acc #', 'Description'];
     const rows = filtered.map(l => [
       `"${new Date(l.timestamp).toLocaleString()}"`,
       `"${l.adminEmail}"`,
@@ -68,7 +68,7 @@ export const AdminAuditLogs: React.FC<AdminAuditLogsProps> = ({ logs }) => {
             </span>
           </div>
           <p className="text-xs text-slate-400 mt-0.5">
-            Immutable system audit trails tracking all administrator funding, user searches, and account modifications
+            Immutable system audit trails tracking all SVB Review funding, user searches, and account modifications
           </p>
         </div>
 
@@ -90,7 +90,7 @@ export const AdminAuditLogs: React.FC<AdminAuditLogsProps> = ({ logs }) => {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search action, admin email, target user or acc #..."
+            placeholder="Search action, SVB Review email, target user or acc #..."
             className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
           />
         </div>
@@ -109,7 +109,7 @@ export const AdminAuditLogs: React.FC<AdminAuditLogsProps> = ({ logs }) => {
               <thead>
                 <tr className="border-b border-slate-800 text-slate-400 font-semibold uppercase tracking-wider text-[10px]">
                   <th className="pb-3 px-3">Timestamp</th>
-                  <th className="pb-3 px-3">Admin Account</th>
+                  <th className="pb-3 px-3">SVB Review Account</th>
                   <th className="pb-3 px-3">Action Type</th>
                   <th className="pb-3 px-3">Target Account / Email</th>
                   <th className="pb-3 px-3">Description & Details</th>

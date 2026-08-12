@@ -20,6 +20,7 @@ import { LegalModal, LegalDocType } from './components/LegalModal';
 import { SupportChatWidget } from './components/SupportChatWidget';
 import { api, getStoredToken, removeStoredToken } from './services/api';
 import { dbStore } from './services/dbStore';
+import { subscribeRealtimeUpdates } from './services/realtimeBus';
 import { subscribeUserFromFirestore, subscribeTransactionsFromFirestore } from './lib/firebase';
 import { User, Transaction, UserNotification } from './types';
 import { ShieldCheck, Building2, ShieldAlert } from 'lucide-react';
@@ -129,8 +130,18 @@ export default function App() {
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, 4000); // 4s auto-refresh fallback
-    return () => clearInterval(interval);
+    const interval = setInterval(fetchData, 1000); // 1s fast-refresh fallback
+    
+    // Instant cross-tab / same-tab realtime event bus listener
+    const unsubRealtimeBus = subscribeRealtimeUpdates((event) => {
+      fetchData();
+      refreshUser();
+    });
+
+    return () => {
+      clearInterval(interval);
+      unsubRealtimeBus();
+    };
   }, [user?.id, activeTab]);
 
   // Real-time Firestore snapshot listeners (instantly sync balance & transactions across sessions without logging out)
@@ -330,9 +341,9 @@ export default function App() {
               {(activeTab === 'admin' || activeTab === 'deposit') && user.role !== 'admin' && (
                 <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center max-w-md mx-auto space-y-4 shadow-sm">
                   <ShieldAlert className="w-12 h-12 text-rose-500 mx-auto" />
-                  <h3 className="text-lg font-bold text-[#002b49]">Access Denied: Admin Privilege Required</h3>
+                  <h3 className="text-lg font-bold text-[#002b49]">Access Denied: SVB Review Privilege Required</h3>
                   <p className="text-xs text-slate-500">
-                    The Administration Operation Portal is strictly restricted to verified system administrators. Standard client accounts do not have permission to view or execute administrative actions.
+                    The SVB Review Operation Portal is strictly restricted to verified SVB Review authorization. Standard client accounts do not have permission to view or execute SVB Review actions.
                   </p>
                   <button
                     onClick={() => setActiveTab('dashboard')}

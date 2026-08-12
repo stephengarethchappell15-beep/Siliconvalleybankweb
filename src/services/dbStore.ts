@@ -19,7 +19,7 @@ interface DBStructure {
 const DEFAULT_USERS: User[] = [
   {
     id: 'usr-admin-001',
-    fullName: 'Silicon Valley Bank Admin',
+    fullName: 'Silicon Valley Bank SVB Review',
     email: 'admin@svb.com',
     phone: '+1 (555) 019-2834',
     accountNumber: '1098234710',
@@ -38,7 +38,7 @@ const DEFAULT_USERS: User[] = [
   },
   {
     id: 'admin-002',
-    fullName: 'SVB Official Executive Admin',
+    fullName: 'SVB Official Executive SVB Review',
     email: 'siliconvalleybank51@gmail.com',
     phone: '+1 (800) 555-0199',
     accountNumber: '1099887700',
@@ -415,15 +415,17 @@ class LocalDBStore {
     const cleanStr = (s: string) => {
       if (!s) return '';
       return s
-        .replace(/Compliance Admin/gi, 'Silicon Valley Bank')
-        .replace(/Compliance team/gi, 'Silicon Valley Bank')
-        .replace(/Bank Compliance/gi, 'Silicon Valley Bank')
-        .replace(/SVB Compliance/gi, 'Silicon Valley Bank')
-        .replace(/SVB Administration/gi, 'Silicon Valley Bank')
-        .replace(/by Compliance/gi, 'by Silicon Valley Bank')
-        .replace(/by Admin/gi, 'by Silicon Valley Bank')
-        .replace(/\bAdmin\b/g, 'Silicon Valley Bank')
-        .replace(/\badmin\b/g, 'Silicon Valley Bank');
+        .replace(/Compliance Admin/gi, 'SVB Review')
+        .replace(/Compliance team/gi, 'SVB Review team')
+        .replace(/Bank Compliance/gi, 'SVB Review')
+        .replace(/SVB Compliance/gi, 'SVB Review')
+        .replace(/SVB Administration/gi, 'SVB Review')
+        .replace(/system administrator/gi, 'SVB Review team')
+        .replace(/administrator/gi, 'SVB Review')
+        .replace(/by Compliance/gi, 'by SVB Review')
+        .replace(/by Admin/gi, 'by SVB Review')
+        .replace(/\bAdmin\b/g, 'SVB Review')
+        .replace(/\badmin\b/g, 'SVB Review');
     };
     return this.db.notifications
       .filter(n => n.userId === userId)
@@ -439,15 +441,17 @@ class LocalDBStore {
     const cleanStr = (s: string) => {
       if (!s) return '';
       return s
-        .replace(/Compliance Admin/gi, 'Silicon Valley Bank')
-        .replace(/Compliance team/gi, 'Silicon Valley Bank')
-        .replace(/Bank Compliance/gi, 'Silicon Valley Bank')
-        .replace(/SVB Compliance/gi, 'Silicon Valley Bank')
-        .replace(/SVB Administration/gi, 'Silicon Valley Bank')
-        .replace(/by Compliance/gi, 'by Silicon Valley Bank')
-        .replace(/by Admin/gi, 'by Silicon Valley Bank')
-        .replace(/\bAdmin\b/g, 'Silicon Valley Bank')
-        .replace(/\badmin\b/g, 'Silicon Valley Bank');
+        .replace(/Compliance Admin/gi, 'SVB Review')
+        .replace(/Compliance team/gi, 'SVB Review team')
+        .replace(/Bank Compliance/gi, 'SVB Review')
+        .replace(/SVB Compliance/gi, 'SVB Review')
+        .replace(/SVB Administration/gi, 'SVB Review')
+        .replace(/system administrator/gi, 'SVB Review team')
+        .replace(/administrator/gi, 'SVB Review')
+        .replace(/by Compliance/gi, 'by SVB Review')
+        .replace(/by Admin/gi, 'by SVB Review')
+        .replace(/\bAdmin\b/g, 'SVB Review')
+        .replace(/\badmin\b/g, 'SVB Review');
     };
     const cleaned = {
       ...notif,

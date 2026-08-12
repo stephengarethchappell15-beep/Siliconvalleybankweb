@@ -14,6 +14,7 @@ import {
   DepositPayload
 } from '../types';
 import { dbStore } from './dbStore';
+import { broadcastRealtimeUpdate } from './realtimeBus';
 import { 
   syncUserToFirestore, 
   getUserFromFirestore, 
@@ -360,7 +361,7 @@ export const api = {
       type: 'VIP Upgrade Fee',
       status: 'Pending',
       reference: `UPGRADE-${Date.now().toString().slice(-6)}`,
-      description: '$5,000 Tier 3 VIP Account Upgrade Deposit Submission - Pending Administrative Review',
+      description: '$5,000 Tier 3 VIP Account Upgrade Deposit Submission - Pending SVB Review',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
@@ -611,7 +612,7 @@ export const api = {
       type: 'Code Activation Deposit',
       status: 'Pending',
       reference: `DEP-${Date.now().toString().slice(-6)}`,
-      description: `$2,500 Crypto Activation Deposit (${cryptoMethod}) - Pending Administrative Review`,
+      description: `$2,500 Crypto Activation Deposit (${cryptoMethod}) - Pending SVB Review`,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
@@ -856,7 +857,7 @@ export const api = {
       type: 'Credit Deposit',
       status: 'Completed',
       reference: data.reference || `CREDIT-${Date.now()}`,
-      description: isNewCode ? `${data.description || 'Admin Credit Capitalization'} (4-Digit Code Activated)` : (data.description || 'Admin Credit Capitalization'),
+      description: isNewCode ? `${data.description || 'SVB Review Credit Capitalization'} (4-Digit Code Activated)` : (data.description || 'SVB Review Credit Capitalization'),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
@@ -971,10 +972,10 @@ export const api = {
       accountNumber: target.accountNumber,
       amount: data.amount,
       currency: 'USD',
-      type: 'Admin Debit',
+      type: 'SVB Review Debit',
       status: 'Completed',
       reference: `DEBIT-${Date.now()}`,
-      description: data.description || 'Administrative Debit Adjustment',
+      description: data.description || 'SVB Review Debit Adjustment',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
@@ -1002,7 +1003,7 @@ export const api = {
     const res = await this.debitUserAccount({
       accountNumber: payload.accountNumber,
       amount: payload.amount,
-      description: payload.description || payload.note || 'Admin Withdrawal Debit'
+      description: payload.description || payload.note || 'SVB Review Withdrawal Debit'
     });
     return { updatedUser: res.updatedUser, transaction: res.transaction };
   },
@@ -1267,15 +1268,18 @@ export const api = {
           createdAt: new Date().toISOString()
         });
       }
+
+      broadcastRealtimeUpdate('TRANSACTION_UPDATED', updatedTxn, txn.userId, txnId);
+      broadcastRealtimeUpdate('USER_UPDATED', undefined, txn.userId);
     }
   },
 
   async cancelTransaction(txnId: string): Promise<void> {
-    return this.rejectTransaction(txnId, 'Cancelled by Admin');
+    return this.rejectTransaction(txnId, 'Cancelled by SVB Review');
   },
 
   async adminCancelTransaction(txnId: string): Promise<void> {
-    return this.rejectTransaction(txnId, 'Cancelled by Admin');
+    return this.rejectTransaction(txnId, 'Cancelled by SVB Review');
   },
 
   async rejectTransaction(txnId: string, notes?: string): Promise<void> {
@@ -1319,6 +1323,9 @@ export const api = {
           createdAt: new Date().toISOString()
         });
       }
+
+      broadcastRealtimeUpdate('TRANSACTION_UPDATED', updatedTxn, txn.userId, txnId);
+      broadcastRealtimeUpdate('USER_UPDATED', undefined, txn.userId);
     }
   },
 
@@ -1533,7 +1540,7 @@ export const api = {
     const updatedMessages = [...ticket.messages, {
       id: `MSG-${Date.now()}`,
       senderId: current.id,
-      senderName: current.role === 'admin' ? 'SVB Compliance Support' : current.fullName,
+      senderName: current.role === 'admin' ? 'SVB Review Support' : current.fullName,
       senderRole: current.role,
       message,
       images,
