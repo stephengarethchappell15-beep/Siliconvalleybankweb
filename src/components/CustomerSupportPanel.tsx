@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { User, SupportTicket } from '../types';
 import { api } from '../services/api';
+import { subscribeSupportTicketsFromFirestore } from '../lib/firebase';
+import { dbStore } from '../services/dbStore';
 import { Headphones, MessageSquare, Plus, Send, Clock, CheckCircle, AlertCircle, ShieldAlert, User as UserIcon, LifeBuoy } from 'lucide-react';
 
 interface CustomerSupportPanelProps {
@@ -45,7 +47,25 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({ user
 
   useEffect(() => {
     fetchTickets();
-  }, []);
+
+    const unsub = subscribeSupportTicketsFromFirestore(
+      user.role === 'admin' ? undefined : user.id,
+      user.role === 'admin',
+      (fsTickets) => {
+        if (fsTickets && fsTickets.length > 0) {
+          fsTickets.forEach(t => dbStore.addSupportTicket(t));
+          setTickets(fsTickets);
+          setSelectedTicket(prev => {
+            if (!prev) return fsTickets[0];
+            const updated = fsTickets.find(t => t.id === prev.id);
+            return updated || prev;
+          });
+        }
+      }
+    );
+
+    return () => unsub();
+  }, [user.id, user.role]);
 
   const handleCreateTicket = async (e: React.FormEvent) => {
     e.preventDefault();

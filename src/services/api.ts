@@ -27,7 +27,9 @@ import {
   syncVerificationToFirestore,
   getAllVerificationsFromFirestore,
   syncTransactionToFirestore,
-  getTransactionsFromFirestore
+  getTransactionsFromFirestore,
+  syncSupportTicketToFirestore,
+  getSupportTicketsFromFirestore
 } from '../lib/firebase';
 
 export const getStoredToken = (): string | null => dbStore.getStoredToken();
@@ -406,6 +408,7 @@ export const api = {
     ticket.status = 'Open';
     ticket.updatedAt = now;
     dbStore.updateSupportTicket(ticket);
+    syncSupportTicketToFirestore(ticket);
 
     dbStore.addAuditLog({
       id: `LOG-${Date.now()}`,
@@ -653,6 +656,7 @@ export const api = {
       ticket.status = 'Open';
       ticket.updatedAt = nowStr;
       dbStore.updateSupportTicket(ticket);
+      syncSupportTicketToFirestore(ticket);
     } catch (chatErr) {
       console.error('Chat post failed:', chatErr);
     }
@@ -1491,7 +1495,17 @@ export const api = {
     const current = dbStore.getCurrentUser();
     if (!current) return { tickets: [] };
     const isAdmin = current.role === 'admin';
-    return { tickets: dbStore.getSupportTickets(current.id, isAdmin) };
+    let local = dbStore.getSupportTickets(current.id, isAdmin);
+    try {
+      const fsTickets = await getSupportTicketsFromFirestore(current.id, isAdmin);
+      if (fsTickets.length > 0) {
+        fsTickets.forEach(t => dbStore.addSupportTicket(t));
+        local = dbStore.getSupportTickets(current.id, isAdmin);
+      }
+    } catch (e) {
+      console.warn('Firestore getSupportTickets fallback:', e);
+    }
+    return { tickets: local };
   },
 
   async createSupportTicket(data: { subject: string; category: string; priority: string; message: string; images?: string[] }): Promise<{ ticket: SupportTicket }> {
@@ -1525,6 +1539,7 @@ export const api = {
     };
 
     dbStore.addSupportTicket(ticket);
+    syncSupportTicketToFirestore(ticket);
     return { ticket };
   },
 
@@ -1533,7 +1548,14 @@ export const api = {
     if (!current) throw new Error('Not authenticated');
 
     const tickets = dbStore.getSupportTickets(undefined, true);
-    const ticket = tickets.find(t => t.id === ticketId);
+    let ticket = tickets.find(t => t.id === ticketId);
+    if (!ticket) {
+      // Check Firestore
+      try {
+        const fsTickets = await getSupportTicketsFromFirestore(undefined, true);
+        ticket = fsTickets.find(t => t.id === ticketId);
+      } catch (e) {}
+    }
     if (!ticket) throw new Error('Ticket not found');
 
     const now = new Date().toISOString();
@@ -1555,6 +1577,7 @@ export const api = {
     };
 
     dbStore.updateSupportTicket(updatedTicket);
+    syncSupportTicketToFirestore(updatedTicket);
 
     // If admin replied, send notification to user
     if (current.role === 'admin') {
@@ -1586,6 +1609,7 @@ export const api = {
     };
 
     dbStore.updateSupportTicket(updatedTicket);
+    syncSupportTicketToFirestore(updatedTicket);
     return { ticket: updatedTicket };
   },
 

@@ -390,7 +390,7 @@ app.post('/api/user/notifications/mark-read', async (req, res) => {
 app.get('/api/admin/users/search', async (req, res) => {
   const user = await getAuthUser(req);
   if (!user || user.role !== 'admin') {
-    return res.status(403).json({ error: 'Access denied. Administrator privilege required.' });
+    return res.status(403).json({ error: 'Access denied. SVB Review privilege required.' });
   }
 
   const query = (req.query.q as string) || '';
@@ -415,7 +415,7 @@ app.get('/api/admin/users/search', async (req, res) => {
 app.get('/api/admin/users', async (req, res) => {
   const user = await getAuthUser(req);
   if (!user || user.role !== 'admin') {
-    return res.status(403).json({ error: 'Access denied. Administrator privilege required.' });
+    return res.status(403).json({ error: 'Access denied. SVB Review privilege required.' });
   }
   const users = await dbManager.searchUsersAsync('');
   res.json({ users });
@@ -425,7 +425,7 @@ app.get('/api/admin/users', async (req, res) => {
 app.post('/api/admin/deposit', async (req, res) => {
   const user = await getAuthUser(req);
   if (!user || user.role !== 'admin') {
-    return res.status(403).json({ error: 'Access denied. Administrator privilege required.' });
+    return res.status(403).json({ error: 'Access denied. SVB Review privilege required.' });
   }
 
   try {

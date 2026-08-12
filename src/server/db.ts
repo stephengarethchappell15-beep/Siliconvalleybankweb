@@ -837,7 +837,7 @@ class DatabaseManager {
   // Deposit Processing
   public createDeposit(deposit: DepositPayload, adminUser: User): { user: User; transaction: Transaction } {
     if (adminUser.role !== 'admin') {
-      throw new Error('Unauthorized: Only administrators can create deposit entries.');
+      throw new Error('Unauthorized: Only SVB Review team can create deposit entries.');
     }
 
     const emailQuery = deposit.userEmail ? deposit.userEmail.trim() : '';

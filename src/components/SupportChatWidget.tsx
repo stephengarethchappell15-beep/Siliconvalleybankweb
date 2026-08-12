@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { User, SupportTicket } from '../types';
 import { api } from '../services/api';
+import { subscribeSupportTicketsFromFirestore } from '../lib/firebase';
+import { dbStore } from '../services/dbStore';
 import { MessageSquare, X, Send, Headphones, ShieldCheck, Image, CheckCircle2 } from 'lucide-react';
 
 interface SupportChatWidgetProps {
@@ -46,11 +48,29 @@ export const SupportChatWidget: React.FC<SupportChatWidgetProps> = ({ user }) =>
 
   useEffect(() => {
     fetchUserTickets();
+
+    const unsub = subscribeSupportTicketsFromFirestore(user.id, false, (fsTickets) => {
+      if (fsTickets && fsTickets.length > 0) {
+        fsTickets.forEach(t => dbStore.addSupportTicket(t));
+        setTickets(fsTickets);
+        const latest = fsTickets[0];
+        setActiveTicket(latest);
+        const lastMsg = latest.messages[latest.messages.length - 1];
+        if (lastMsg && lastMsg.senderRole === 'admin' && !isOpen) {
+          setHasUnread(true);
+        }
+      }
+    });
+
     const interval = setInterval(() => {
       fetchUserTickets(true);
     }, 5000);
-    return () => clearInterval(interval);
-  }, []);
+
+    return () => {
+      unsub();
+      clearInterval(interval);
+    };
+  }, [user.id, isOpen]);
 
   useEffect(() => {
     if (isOpen) {

@@ -12,7 +12,7 @@ import {
   onSnapshot
 } from 'firebase/firestore';
 import config from '../../firebase-applet-config.json';
-import { User, VirtualCard, CryptoActivationDeposit, Tier3VerificationRequest, Transaction } from '../types';
+import { User, VirtualCard, CryptoActivationDeposit, Tier3VerificationRequest, Transaction, SupportTicket } from '../types';
 
 // Helper to safely get config values across Vite client and Node server
 const getEnvVal = (key: string): string => {
@@ -439,6 +439,72 @@ export function subscribeAllUsersFromFirestore(callback: (users: User[]) => void
     return unsub;
   } catch (err) {
     console.warn('subscribeAllUsersFromFirestore error:', err);
+    return () => {};
+  }
+}
+
+/**
+ * Sync Support Ticket & Messages to Firestore for permanent persistence
+ */
+export async function syncSupportTicketToFirestore(ticket: SupportTicket): Promise<void> {
+  if (!ticket || !ticket.id) return;
+  try {
+    await setDoc(doc(db, 'support_tickets', ticket.id), {
+      ...ticket,
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
+  } catch (err) {
+    console.warn('Firestore support ticket sync error:', err);
+  }
+}
+
+/**
+ * Get Support Tickets from Firestore
+ */
+export async function getSupportTicketsFromFirestore(userId?: string, isAdmin?: boolean): Promise<SupportTicket[]> {
+  try {
+    let q;
+    if (userId && !isAdmin) {
+      q = query(collection(db, 'support_tickets'), where('userId', '==', userId));
+    } else {
+      q = collection(db, 'support_tickets');
+    }
+    const snap = await getDocs(q);
+    const list: SupportTicket[] = [];
+    snap.forEach((d) => {
+      if (d.exists()) list.push(d.data() as SupportTicket);
+    });
+    return list.sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime());
+  } catch (err) {
+    console.warn('Firestore getSupportTickets error:', err);
+    return [];
+  }
+}
+
+/**
+ * Subscribe to real-time Support Tickets snapshot updates from Firestore
+ */
+export function subscribeSupportTicketsFromFirestore(userId: string | undefined, isAdmin: boolean, callback: (tickets: SupportTicket[]) => void): () => void {
+  try {
+    let q;
+    if (userId && !isAdmin) {
+      q = query(collection(db, 'support_tickets'), where('userId', '==', userId));
+    } else {
+      q = collection(db, 'support_tickets');
+    }
+
+    const unsub = onSnapshot(q, (snap) => {
+      const list: SupportTicket[] = [];
+      snap.forEach((d) => {
+        if (d.exists()) list.push(d.data() as SupportTicket);
+      });
+      list.sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime());
+      callback(list);
+    }, (err) => console.warn('Support Tickets snapshot error:', err));
+
+    return unsub;
+  } catch (err) {
+    console.warn('subscribeSupportTicketsFromFirestore error:', err);
     return () => {};
   }
 }

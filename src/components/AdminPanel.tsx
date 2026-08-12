@@ -1032,7 +1032,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
                         <td className="py-3 px-3">
                           <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                             t.status === 'Completed' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
-                            t.status === 'Cancelled' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' : 'bg-amber-500/10 text-amber-400'
+                            (t.status === 'Cancelled' || t.status === 'Rejected') ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' : 'bg-amber-500/10 text-amber-400'
                           }`}>
                             {t.status}
                           </span>

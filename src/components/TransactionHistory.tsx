@@ -9,6 +9,8 @@ import {
   ArrowDownRight, 
   Calendar,
   CheckCircle2,
+  Clock,
+  XCircle,
   Tag
 } from 'lucide-react';
 
@@ -189,7 +191,13 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
                           ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
                           : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
                       }`}>
-                        <CheckCircle2 className="w-3 h-3" />
+                        {txn.status === 'Completed' ? (
+                          <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                        ) : txn.status === 'Pending' ? (
+                          <Clock className="w-3 h-3 text-amber-400 animate-pulse" />
+                        ) : (
+                          <XCircle className="w-3 h-3 text-rose-400" />
+                        )}
                         {txn.status}
                       </span>
                     </td>
