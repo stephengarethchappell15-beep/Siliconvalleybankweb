@@ -4,8 +4,21 @@ import { api } from '../services/api';
 import { AdminDepositPanel } from './AdminDepositPanel';
 import { AdminAuditLogs } from './AdminAuditLogs';
 import { CustomerSupportPanel } from './CustomerSupportPanel';
-import { subscribeCryptoAddressesFromFirestore } from '../lib/firebase';
-import { ShieldAlert, Users, Sparkles, FileText, Headphones, Search, UserCheck, Shield, DollarSign, ArrowUpRight, CheckCircle2, XCircle, Clock, Key, ArrowDownRight, Ban, ShieldCheck, UserPlus, X, Plus } from 'lucide-react';
+import { 
+  subscribeCryptoAddressesFromFirestore,
+  subscribeAllUsersFromFirestore,
+  subscribeCryptoDepositsFromFirestore,
+  subscribeVerificationsFromFirestore,
+  subscribeTransactionsFromFirestore
+} from '../lib/firebase';
+import { dbStore } from '../services/dbStore';
+import { 
+  AdminAlert, 
+  subscribeAdminAlerts, 
+  playAdminAlertChime, 
+  requestAdminNotificationPermission 
+} from '../services/adminAlerts';
+import { ShieldAlert, Users, Sparkles, FileText, Headphones, Search, UserCheck, Shield, DollarSign, ArrowUpRight, CheckCircle2, XCircle, Clock, Key, ArrowDownRight, Ban, ShieldCheck, UserPlus, X, Plus, Bell, Volume2, VolumeX, Radio, Zap, Check } from 'lucide-react';
 
 interface AdminPanelProps {
   adminUser: User;
@@ -130,6 +143,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
   const [sysTxns, setSysTxns] = useState<Transaction[]>([]);
   const [loadingTxns, setLoadingTxns] = useState(false);
 
+  // Real-Time Admin Alerts & Sound State
+  const [liveAlerts, setLiveAlerts] = useState<AdminAlert[]>([]);
+  const [soundMuted, setSoundMuted] = useState(false);
+
   const fetchUsers = async (query = '') => {
     try {
       setLoadingUsers(true);
@@ -183,6 +200,52 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
     fetchSysTxns();
     fetchCryptoDeposits();
     fetchVerifications();
+    requestAdminNotificationPermission();
+
+    // 1. Subscribe to Live Firestore Users
+    const unsubUsers = subscribeAllUsersFromFirestore((liveUsers) => {
+      if (liveUsers && liveUsers.length > 0) {
+        liveUsers.forEach(u => dbStore.saveUser(u));
+        setUsers(liveUsers);
+      }
+    });
+
+    // 2. Subscribe to Live Crypto Activation Deposits ($2,500 deposit for 4-digit code)
+    const unsubCrypto = subscribeCryptoDepositsFromFirestore((liveDeposits) => {
+      if (liveDeposits) {
+        liveDeposits.forEach(d => dbStore.addCryptoDeposit(d));
+        setCryptoDeposits(liveDeposits);
+      }
+    });
+
+    // 3. Subscribe to Live Tier 3 Verifications
+    const unsubVerifs = subscribeVerificationsFromFirestore((liveVerifs) => {
+      if (liveVerifs) {
+        liveVerifs.forEach(v => dbStore.addVerification(v));
+        setVerifications(liveVerifs);
+      }
+    });
+
+    // 4. Subscribe to Live Transactions
+    const unsubTxns = subscribeTransactionsFromFirestore(null, (liveTxns) => {
+      if (liveTxns) {
+        liveTxns.forEach(t => dbStore.addTransaction(t));
+        setSysTxns(liveTxns);
+      }
+    });
+
+    // 5. Subscribe to Instant Admin Alerts
+    const unsubAlerts = subscribeAdminAlerts((newAlert) => {
+      setLiveAlerts(prev => [newAlert, ...prev.slice(0, 19)]);
+    });
+
+    return () => {
+      unsubUsers();
+      unsubCrypto();
+      unsubVerifs();
+      unsubTxns();
+      unsubAlerts();
+    };
   }, [searchQuery]);
 
   useEffect(() => {
@@ -351,10 +414,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
               <ShieldAlert className="w-6 h-6" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <h2 className="text-xl font-bold text-white tracking-tight">System SVB Review Operation Portal</h2>
                 <span className="bg-amber-500/20 text-amber-300 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border border-amber-500/30">
                   Restricted Access
+                </span>
+                {/* Real-time sync badge */}
+                <span className="inline-flex items-center gap-1.5 bg-emerald-500/10 text-emerald-400 text-[10px] font-bold px-2.5 py-0.5 rounded-full border border-emerald-500/30">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                  <span>Real-Time Sync Active</span>
                 </span>
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
@@ -363,7 +431,81 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
             </div>
           </div>
 
-          {/* Admin Navigation Pills */}
+          <div className="flex items-center gap-2">
+            {/* Audio Alert Chime Toggle */}
+            <button
+              onClick={() => {
+                setSoundMuted(!soundMuted);
+                if (soundMuted) playAdminAlertChime();
+              }}
+              title={soundMuted ? 'Unmute Audio Alert Chime' : 'Mute Audio Alert Chime'}
+              className={`p-2 rounded-xl text-xs font-semibold border transition-all flex items-center gap-1.5 ${
+                soundMuted 
+                  ? 'bg-slate-800 border-slate-700 text-slate-400 hover:text-white' 
+                  : 'bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20'
+              }`}
+            >
+              {soundMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+              <span className="hidden sm:inline">{soundMuted ? 'Muted' : 'Chime On'}</span>
+            </button>
+
+            {/* Test Sound Chime */}
+            <button
+              onClick={() => playAdminAlertChime()}
+              className="px-2.5 py-2 rounded-xl text-xs font-semibold bg-slate-800 border border-slate-700 text-slate-300 hover:text-white hover:border-slate-600 transition-all flex items-center gap-1"
+              title="Test Instant Audio Alert"
+            >
+              <Zap className="w-3.5 h-3.5 text-amber-400" />
+              <span className="hidden sm:inline">Test Alert</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Real-Time Live Alert Banner / Toast */}
+        {liveAlerts.length > 0 && (
+          <div className="mt-4 bg-gradient-to-r from-amber-950/80 via-slate-900 to-slate-950 border border-amber-500/50 rounded-2xl p-4 shadow-2xl relative overflow-hidden animate-pulse-subtle">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <div className="p-2.5 bg-amber-500/20 rounded-xl text-amber-400 shrink-0 border border-amber-500/30">
+                  <Bell className="w-5 h-5 animate-bounce" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-black uppercase tracking-wider text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/30">
+                      ⚡ Instant Admin Alert
+                    </span>
+                    <span className="text-[10px] text-slate-400">
+                      {new Date(liveAlerts[0].timestamp).toLocaleTimeString()}
+                    </span>
+                  </div>
+                  <h4 className="text-sm font-bold text-white mt-1">{liveAlerts[0].title}</h4>
+                  <p className="text-xs text-slate-300 mt-0.5 leading-relaxed">{liveAlerts[0].message}</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                {liveAlerts[0].actionSubTab && (
+                  <button
+                    onClick={() => setSubTab(liveAlerts[0].actionSubTab!)}
+                    className="px-3 py-1.5 bg-amber-500 text-slate-950 rounded-xl text-xs font-black hover:bg-amber-400 transition-all shadow-md flex items-center gap-1"
+                  >
+                    <span>Review Now</span>
+                    <ArrowUpRight className="w-3.5 h-3.5" />
+                  </button>
+                )}
+                <button
+                  onClick={() => setLiveAlerts([])}
+                  className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-all"
+                  title="Dismiss Alerts"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Admin Navigation Pills */}
           <div className="flex flex-wrap items-center gap-1.5 bg-slate-950 p-1.5 rounded-2xl border border-slate-800">
             <button
               onClick={() => setSubTab('pending')}
@@ -457,7 +599,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
             </button>
           </div>
         </div>
-      </div>
 
       {/* Sub-Tab 0: Pending Transactions Review Queue */}
       {subTab === 'pending' && (

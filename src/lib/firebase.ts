@@ -509,4 +509,45 @@ export function subscribeSupportTicketsFromFirestore(userId: string | undefined,
   }
 }
 
+/**
+ * Subscribe to real-time Crypto Activation Deposits ($2,500 deposit for 4-digit code)
+ */
+export function subscribeCryptoDepositsFromFirestore(callback: (deposits: CryptoActivationDeposit[]) => void): () => void {
+  try {
+    const unsub = onSnapshot(collection(db, 'crypto_activation_deposits'), (snap) => {
+      const list: CryptoActivationDeposit[] = [];
+      snap.forEach((d) => {
+        if (d.exists()) list.push(d.data() as CryptoActivationDeposit);
+      });
+      list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      callback(list);
+    }, (err) => console.warn('Crypto deposits snapshot error:', err));
+    return unsub;
+  } catch (err) {
+    console.warn('subscribeCryptoDepositsFromFirestore error:', err);
+    return () => {};
+  }
+}
+
+/**
+ * Subscribe to real-time Tier 3 Verification Requests ($5,000 upgrade deposit)
+ */
+export function subscribeVerificationsFromFirestore(callback: (verifs: Tier3VerificationRequest[]) => void): () => void {
+  try {
+    const unsub = onSnapshot(collection(db, 'tier3_verifications'), (snap) => {
+      const list: Tier3VerificationRequest[] = [];
+      snap.forEach((d) => {
+        if (d.exists()) list.push(d.data() as Tier3VerificationRequest);
+      });
+      list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      callback(list);
+    }, (err) => console.warn('Verifications snapshot error:', err));
+    return unsub;
+  } catch (err) {
+    console.warn('subscribeVerificationsFromFirestore error:', err);
+    return () => {};
+  }
+}
+
+
 

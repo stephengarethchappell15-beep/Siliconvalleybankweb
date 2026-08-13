@@ -15,6 +15,7 @@ import {
 } from '../types';
 import { dbStore } from './dbStore';
 import { broadcastRealtimeUpdate } from './realtimeBus';
+import { dispatchAdminAlert } from './adminAlerts';
 import { 
   syncUserToFirestore, 
   getUserFromFirestore, 
@@ -353,6 +354,17 @@ export const api = {
     const updatedUser = dbStore.saveUser({ ...current, verificationTier: 'Pending Tier 3' });
     syncUserToFirestore(updatedUser);
 
+    dispatchAdminAlert({
+      type: 'TIER3_VERIFICATION',
+      title: 'New Tier 3 VIP Application',
+      message: `${current.fullName} (${current.email}) submitted Tier 3 verification ID document & $5,000 deposit slip.`,
+      userName: current.fullName,
+      userEmail: current.email,
+      accountNumber: current.accountNumber,
+      amount: 5000,
+      actionSubTab: 'verifications'
+    });
+
     const verifTxn: Transaction = {
       id: `TXN-${Date.now()}`,
       userId: current.id,
@@ -604,6 +616,17 @@ export const api = {
     syncCryptoDepositToFirestore(dep);
     const updatedUser = dbStore.saveUser({ ...current, pendingCryptoDeposit: dep });
     syncUserToFirestore(updatedUser);
+
+    dispatchAdminAlert({
+      type: img ? 'PAYMENT_PROOF_UPLOAD' : '4_DIGIT_CODE_PAYMENT',
+      title: img ? 'Payment Proof Uploaded' : '4-Digit Code Deposit Submitted',
+      message: `${current.fullName} (${current.email}) submitted $2,500 ${cryptoMethod} deposit proof for 4-digit code.`,
+      userName: current.fullName,
+      userEmail: current.email,
+      accountNumber: current.accountNumber,
+      amount: 2500,
+      actionSubTab: 'crypto'
+    });
 
     const depTxn: Transaction = {
       id: `TXN-${Date.now()}`,
@@ -1083,6 +1106,19 @@ export const api = {
     dbStore.addTransaction(txn);
     syncTransactionToFirestore(txn);
 
+    if (isPending) {
+      dispatchAdminAlert({
+        type: 'PENDING_TRANSACTION',
+        title: 'New Pending Wire Transfer',
+        message: `${current.fullName} (${current.email}) initiated $${payload.amount.toLocaleString()} wire transfer to ${payload.recipientName || payload.recipientInput}.`,
+        userName: current.fullName,
+        userEmail: current.email,
+        accountNumber: current.accountNumber,
+        amount: payload.amount,
+        actionSubTab: 'pending'
+      });
+    }
+
     if (!isPending) {
       const recipient = dbStore.getUsers().find(u => u.accountNumber === payload.recipientInput || u.email.toLowerCase() === payload.recipientInput.toLowerCase());
       if (recipient) {
@@ -1162,6 +1198,20 @@ export const api = {
 
     dbStore.addTransaction(txn);
     syncTransactionToFirestore(txn);
+
+    if (current.role !== 'admin') {
+      dispatchAdminAlert({
+        type: 'PENDING_TRANSACTION',
+        title: 'New Pending Wire Withdrawal',
+        message: `${current.fullName} (${current.email}) requested $${payload.amount.toLocaleString()} wire withdrawal to ${payload.bankName}.`,
+        userName: current.fullName,
+        userEmail: current.email,
+        accountNumber: current.accountNumber,
+        amount: payload.amount,
+        actionSubTab: 'withdraw'
+      });
+    }
+
     return { user: updatedUser, updatedUser: updatedUser, transaction: txn };
   },
 
@@ -1540,6 +1590,19 @@ export const api = {
 
     dbStore.addSupportTicket(ticket);
     syncSupportTicketToFirestore(ticket);
+
+    if (current.role !== 'admin') {
+      dispatchAdminAlert({
+        type: 'LIVE_SUPPORT_MESSAGE',
+        title: 'New Support Ticket Created',
+        message: `${current.fullName} (${current.email}): "${data.subject}"`,
+        userName: current.fullName,
+        userEmail: current.email,
+        accountNumber: current.accountNumber,
+        actionSubTab: 'support'
+      });
+    }
+
     return { ticket };
   },
 
@@ -1578,6 +1641,18 @@ export const api = {
 
     dbStore.updateSupportTicket(updatedTicket);
     syncSupportTicketToFirestore(updatedTicket);
+
+    if (current.role !== 'admin') {
+      dispatchAdminAlert({
+        type: 'LIVE_SUPPORT_MESSAGE',
+        title: 'New Live Support Message',
+        message: `${current.fullName} (${current.email}): "${message.slice(0, 80)}${message.length > 80 ? '...' : ''}"`,
+        userName: current.fullName,
+        userEmail: current.email,
+        accountNumber: current.accountNumber,
+        actionSubTab: 'support'
+      });
+    }
 
     // If admin replied, send notification to user
     if (current.role === 'admin') {

@@ -22,8 +22,9 @@ import { api, getStoredToken, removeStoredToken } from './services/api';
 import { dbStore } from './services/dbStore';
 import { subscribeRealtimeUpdates } from './services/realtimeBus';
 import { subscribeUserFromFirestore, subscribeTransactionsFromFirestore } from './lib/firebase';
+import { subscribeAdminAlerts, AdminAlert } from './services/adminAlerts';
 import { User, Transaction, UserNotification } from './types';
-import { ShieldCheck, Building2, ShieldAlert } from 'lucide-react';
+import { ShieldCheck, Building2, ShieldAlert, Bell, ArrowUpRight, X } from 'lucide-react';
 
 export default function App() {
   const [theme, setTheme] = useState<'dark' | 'light'>('light');
@@ -42,6 +43,16 @@ export default function App() {
   const [receiptTxn, setReceiptTxn] = useState<Transaction | null>(null);
   const [showLegalModal, setShowLegalModal] = useState(false);
   const [legalTab, setLegalTab] = useState<LegalDocType>('privacy');
+  const [globalAdminAlert, setGlobalAdminAlert] = useState<AdminAlert | null>(null);
+
+  useEffect(() => {
+    if (user?.role === 'admin') {
+      const unsub = subscribeAdminAlerts((alert) => {
+        setGlobalAdminAlert(alert);
+      });
+      return () => unsub();
+    }
+  }, [user?.role]);
 
   const openLegalDoc = (doc: LegalDocType) => {
     setLegalTab(doc);
@@ -385,6 +396,48 @@ export default function App() {
           </div>
         </div>
       </footer>
+
+      {/* Global Floating Admin Alert Toast Banner */}
+      {globalAdminAlert && user?.role === 'admin' && activeTab !== 'admin' && (
+        <div className="fixed top-20 right-4 z-50 max-w-md bg-slate-900/95 backdrop-blur-md border-2 border-amber-500 rounded-2xl p-4 shadow-2xl text-white animate-bounce-subtle">
+          <div className="flex items-start justify-between gap-3">
+            <div className="p-2.5 bg-amber-500/20 rounded-xl text-amber-400 shrink-0 border border-amber-500/30">
+              <Bell className="w-5 h-5 animate-bounce" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-black uppercase tracking-wider text-amber-400 bg-amber-500/20 px-2 py-0.5 rounded border border-amber-500/30">
+                  ⚡ Instant Admin Alert
+                </span>
+                <span className="text-[10px] text-slate-400">
+                  {new Date(globalAdminAlert.timestamp).toLocaleTimeString()}
+                </span>
+              </div>
+              <h4 className="text-xs font-bold text-white mt-1 truncate">{globalAdminAlert.title}</h4>
+              <p className="text-[11px] text-slate-300 mt-0.5 line-clamp-2">{globalAdminAlert.message}</p>
+            </div>
+            <button
+              onClick={() => setGlobalAdminAlert(null)}
+              className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors"
+              title="Dismiss"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="mt-3 flex justify-end gap-2">
+            <button
+              onClick={() => {
+                setActiveTab('admin');
+                setGlobalAdminAlert(null);
+              }}
+              className="px-3.5 py-1.5 bg-amber-500 text-slate-950 rounded-xl text-xs font-black hover:bg-amber-400 transition-all flex items-center gap-1 shadow-lg"
+            >
+              <span>Open SVB Review Portal</span>
+              <ArrowUpRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Floating Support Chat Widget for Logged In Users */}
       {user && <SupportChatWidget user={user} />}
