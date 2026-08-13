@@ -1545,17 +1545,16 @@ export const api = {
     const current = dbStore.getCurrentUser();
     if (!current) return { tickets: [] };
     const isAdmin = current.role === 'admin';
-    let local = dbStore.getSupportTickets(current.id, isAdmin);
     try {
-      const fsTickets = await getSupportTicketsFromFirestore(current.id, isAdmin);
-      if (fsTickets.length > 0) {
+      const fsTickets = await getSupportTicketsFromFirestore(isAdmin ? undefined : current.id, isAdmin);
+      if (fsTickets && fsTickets.length > 0) {
         fsTickets.forEach(t => dbStore.addSupportTicket(t));
-        local = dbStore.getSupportTickets(current.id, isAdmin);
       }
     } catch (e) {
       console.warn('Firestore getSupportTickets fallback:', e);
     }
-    return { tickets: local };
+    const finalTickets = dbStore.getSupportTickets(isAdmin ? undefined : current.id, isAdmin);
+    return { tickets: finalTickets };
   },
 
   async createSupportTicket(data: { subject: string; category: string; priority: string; message: string; images?: string[] }): Promise<{ ticket: SupportTicket }> {
@@ -1567,6 +1566,9 @@ export const api = {
 
     const ticket: SupportTicket = {
       id: ticketId,
+      chatId: ticketId,
+      threadId: ticketId,
+      roomId: ticketId,
       userId: current.id,
       userEmail: current.email,
       userName: current.fullName,
@@ -1577,6 +1579,10 @@ export const api = {
       priority: data.priority as any || 'Medium',
       messages: [{
         id: `MSG-${Date.now()}`,
+        ticketId: ticketId,
+        chatId: ticketId,
+        threadId: ticketId,
+        roomId: ticketId,
         senderId: current.id,
         senderName: current.fullName,
         senderRole: current.role,
@@ -1631,6 +1637,10 @@ export const api = {
     const now = new Date().toISOString();
     const updatedMessages = [...ticket.messages, {
       id: `MSG-${Date.now()}`,
+      ticketId: ticket.id,
+      chatId: ticket.id,
+      threadId: ticket.id,
+      roomId: ticket.id,
       senderId: current.id,
       senderName: current.role === 'admin' ? 'SVB Review Support' : current.fullName,
       senderRole: current.role,
@@ -1641,6 +1651,9 @@ export const api = {
 
     const updatedTicket: SupportTicket = {
       ...ticket,
+      chatId: ticket.id,
+      threadId: ticket.id,
+      roomId: ticket.id,
       messages: updatedMessages,
       status: current.role === 'admin' ? 'In Progress' : 'Open',
       updatedAt: now

@@ -55,6 +55,16 @@
     "/support_tickets/{ticketId}": {
       "schema": "SupportTicket",
       "description": "Live chat and customer support inquiries"
+    },
+    "/chats/{chatId}": {
+      "schema": "SupportTicket",
+      "description": "Live chat conversation rooms"
+    },
+    "/support_messages/{messageId}": {
+      "description": "Live support chat messages"
+    },
+    "/messages/{messageId}": {
+      "description": "Live chat message documents"
     }
   }
 }

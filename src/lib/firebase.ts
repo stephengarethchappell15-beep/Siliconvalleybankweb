@@ -460,36 +460,92 @@ export function subscribeAllUsersFromFirestore(callback: (users: User[]) => void
 }
 
 /**
- * Sync Support Ticket & Messages to Firestore for permanent persistence
+ * Sync Support Ticket & Messages to Firestore for permanent persistence across support_tickets and chats collections
  */
 export async function syncSupportTicketToFirestore(ticket: SupportTicket): Promise<void> {
   if (!ticket || !ticket.id) return;
   try {
+    const threadId = ticket.id;
+    const nowIso = new Date().toISOString();
     const payload = cleanUndefined({
       ...ticket,
-      updatedAt: new Date().toISOString()
+      chatId: threadId,
+      threadId: threadId,
+      roomId: threadId,
+      updatedAt: ticket.updatedAt || nowIso
     });
-    await setDoc(doc(db, 'support_tickets', ticket.id), payload, { merge: true });
+
+    // 1. Write to support_tickets and chats documents with matching Room ID
+    await Promise.all([
+      setDoc(doc(db, 'support_tickets', threadId), payload, { merge: true }),
+      setDoc(doc(db, 'chats', threadId), payload, { merge: true })
+    ]);
+
+    // 2. Also mirror messages to messages & support_messages collections if present
+    if (Array.isArray(ticket.messages) && ticket.messages.length > 0) {
+      const writeMsgPromises = ticket.messages.map((m) => {
+        const msgId = m.id || `MSG-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+        const msgPayload = cleanUndefined({
+          ...m,
+          id: msgId,
+          ticketId: threadId,
+          chatId: threadId,
+          threadId: threadId,
+          roomId: threadId
+        });
+        return Promise.all([
+          setDoc(doc(db, 'support_tickets', threadId, 'messages', msgId), msgPayload, { merge: true }),
+          setDoc(doc(db, 'chats', threadId, 'messages', msgId), msgPayload, { merge: true }),
+          setDoc(doc(db, 'support_messages', msgId), msgPayload, { merge: true }),
+          setDoc(doc(db, 'messages', msgId), msgPayload, { merge: true })
+        ]);
+      });
+      await Promise.all(writeMsgPromises);
+    }
   } catch (err) {
-    console.warn('Firestore support ticket sync error:', err);
+    console.warn('Firestore support ticket & chat sync error:', err);
   }
 }
 
 /**
- * Get Support Tickets from Firestore
+ * Get Support Tickets / Chat Conversations from Firestore
  */
 export async function getSupportTicketsFromFirestore(userId?: string, isAdmin?: boolean): Promise<SupportTicket[]> {
   try {
-    const snap = await getDocs(collection(db, 'support_tickets'));
-    const list: SupportTicket[] = [];
-    snap.forEach((d) => {
-      if (d.exists()) {
+    const ticketMap = new Map<string, SupportTicket>();
+
+    const [supportSnap, chatSnap] = await Promise.all([
+      getDocs(collection(db, 'support_tickets')).catch(() => null),
+      getDocs(collection(db, 'chats')).catch(() => null)
+    ]);
+
+    const processDoc = (d: any) => {
+      if (d && d.exists()) {
         const t = d.data() as SupportTicket;
-        if (isAdmin || !userId || t.userId === userId || (t.userEmail && userId.includes('@') && t.userEmail.toLowerCase() === userId.toLowerCase())) {
-          list.push(t);
+        const threadId = t.id || d.id;
+        const normalizedTicket: SupportTicket = {
+          ...t,
+          id: threadId,
+          chatId: threadId,
+          threadId: threadId,
+          roomId: threadId
+        };
+        const isMatch = isAdmin || !userId || normalizedTicket.userId === userId || 
+          (normalizedTicket.userEmail && userId.includes('@') && normalizedTicket.userEmail.toLowerCase() === userId.toLowerCase());
+        
+        if (isMatch) {
+          const existing = ticketMap.get(threadId);
+          if (!existing || new Date(normalizedTicket.updatedAt || normalizedTicket.createdAt).getTime() >= new Date(existing.updatedAt || existing.createdAt).getTime()) {
+            ticketMap.set(threadId, normalizedTicket);
+          }
         }
       }
-    });
+    };
+
+    if (supportSnap) supportSnap.forEach(processDoc);
+    if (chatSnap) chatSnap.forEach(processDoc);
+
+    const list = Array.from(ticketMap.values());
     return list.sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime());
   } catch (err) {
     console.warn('Firestore getSupportTickets error:', err);
@@ -498,25 +554,48 @@ export async function getSupportTicketsFromFirestore(userId?: string, isAdmin?: 
 }
 
 /**
- * Subscribe to real-time Support Tickets snapshot updates from Firestore
+ * Subscribe to real-time Support Tickets and Chat snapshot updates from Firestore
  */
 export function subscribeSupportTicketsFromFirestore(userId: string | undefined, isAdmin: boolean, callback: (tickets: SupportTicket[]) => void): () => void {
   try {
-    const unsub = onSnapshot(collection(db, 'support_tickets'), (snap) => {
-      const list: SupportTicket[] = [];
-      snap.forEach((d) => {
+    const ticketMap = new Map<string, SupportTicket>();
+
+    const emit = () => {
+      const list = Array.from(ticketMap.values());
+      list.sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime());
+      callback(list);
+    };
+
+    const processSnapshot = (snap: any) => {
+      snap.forEach((d: any) => {
         if (d.exists()) {
           const t = d.data() as SupportTicket;
-          if (isAdmin || !userId || t.userId === userId || (t.userEmail && userId.includes('@') && t.userEmail.toLowerCase() === userId.toLowerCase())) {
-            list.push(t);
+          const threadId = t.id || d.id;
+          const normalizedTicket: SupportTicket = {
+            ...t,
+            id: threadId,
+            chatId: threadId,
+            threadId: threadId,
+            roomId: threadId
+          };
+          const isMatch = isAdmin || !userId || normalizedTicket.userId === userId || 
+            (normalizedTicket.userEmail && userId.includes('@') && normalizedTicket.userEmail.toLowerCase() === userId.toLowerCase());
+
+          if (isMatch) {
+            ticketMap.set(threadId, normalizedTicket);
           }
         }
       });
-      list.sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime());
-      callback(list);
-    }, (err) => console.warn('Support Tickets snapshot error:', err));
+      emit();
+    };
 
-    return unsub;
+    const unsubSupport = onSnapshot(collection(db, 'support_tickets'), processSnapshot, (err) => console.warn('Support Tickets snapshot error:', err));
+    const unsubChats = onSnapshot(collection(db, 'chats'), processSnapshot, (err) => console.warn('Chats snapshot error:', err));
+
+    return () => {
+      unsubSupport();
+      unsubChats();
+    };
   } catch (err) {
     console.warn('subscribeSupportTicketsFromFirestore error:', err);
     return () => {};

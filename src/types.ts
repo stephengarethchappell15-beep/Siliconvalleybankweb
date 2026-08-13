@@ -145,6 +145,10 @@ export interface Transaction {
 
 export interface SupportMessage {
   id: string;
+  ticketId?: string;
+  chatId?: string;
+  threadId?: string;
+  roomId?: string;
   senderId: string;
   senderName: string;
   senderRole: UserRole;
@@ -155,6 +159,9 @@ export interface SupportMessage {
 
 export interface SupportTicket {
   id: string;
+  chatId?: string;
+  threadId?: string;
+  roomId?: string;
   userId: string;
   userEmail: string;
   userName: string;

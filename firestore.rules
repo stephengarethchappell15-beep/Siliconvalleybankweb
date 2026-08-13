@@ -4,5 +4,17 @@ service cloud.firestore {
     match /{document=**} {
       allow read, write: if true;
     }
+    match /support_tickets/{ticketId} {
+      allow read, write: if true;
+    }
+    match /chats/{chatId} {
+      allow read, write: if true;
+    }
+    match /support_messages/{msgId} {
+      allow read, write: if true;
+    }
+    match /messages/{msgId} {
+      allow read, write: if true;
+    }
   }
 }

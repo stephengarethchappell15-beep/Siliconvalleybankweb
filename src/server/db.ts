@@ -1174,6 +1174,9 @@ class DatabaseManager {
 
     const newTicket: SupportTicket = {
       id: ticketId,
+      chatId: ticketId,
+      threadId: ticketId,
+      roomId: ticketId,
       userId: user.id,
       userEmail: user.email,
       userName: user.fullName,
@@ -1182,7 +1185,13 @@ class DatabaseManager {
       category: data.category || 'General',
       status: 'Open',
       priority: data.priority || 'Medium',
-      messages: [firstMsg],
+      messages: [{
+        ...firstMsg,
+        ticketId,
+        chatId: ticketId,
+        threadId: ticketId,
+        roomId: ticketId
+      }],
       createdAt: now,
       updatedAt: now
     };
@@ -1205,6 +1214,10 @@ class DatabaseManager {
     const now = new Date().toISOString();
     const newMsg: SupportMessage = {
       id: `msg-${Date.now()}`,
+      ticketId: ticket.id,
+      chatId: ticket.id,
+      threadId: ticket.id,
+      roomId: ticket.id,
       senderId: sender.id,
       senderName: sender.fullName,
       senderRole: sender.role,
