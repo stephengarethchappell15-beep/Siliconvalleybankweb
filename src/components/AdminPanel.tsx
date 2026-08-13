@@ -230,13 +230,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
     const unsubTxns = subscribeTransactionsFromFirestore(null, (liveTxns) => {
       if (liveTxns) {
         liveTxns.forEach(t => dbStore.addTransaction(t));
-        setSysTxns(liveTxns);
       }
+      const local = dbStore.getTransactions();
+      const map = new Map<string, Transaction>();
+      local.forEach(t => map.set(t.id, t));
+      if (liveTxns) liveTxns.forEach(t => map.set(t.id, t));
+      const merged = Array.from(map.values()).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      setSysTxns(merged);
     });
 
     // 5. Subscribe to Instant Admin Alerts
     const unsubAlerts = subscribeAdminAlerts((newAlert) => {
       setLiveAlerts(prev => [newAlert, ...prev.slice(0, 19)]);
+      if (newAlert.type === 'PENDING_TRANSACTION') {
+        fetchSysTxns();
+      }
     });
 
     return () => {

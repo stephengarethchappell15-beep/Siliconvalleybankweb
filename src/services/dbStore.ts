@@ -116,6 +116,26 @@ const DEFAULT_USERS: User[] = [
 
 const DEFAULT_TRANSACTIONS: Transaction[] = [
   {
+    id: 'TXN-WIRE-1786621671221',
+    userId: 'usr-dominic-global',
+    userEmail: 'dominicglobalenergysolution@gmail.com',
+    userName: 'Dominic Global',
+    senderName: 'Dominic Global',
+    accountNumber: '102576690868',
+    recipientAccountNumber: '9948201948',
+    recipientName: 'Global Energy Solution Corp',
+    destinationBank: 'JPMorgan Chase Bank, N.A.',
+    destinationCountry: 'United States',
+    amount: 40000.00,
+    currency: 'USD',
+    type: 'Wire Transfer',
+    status: 'Pending',
+    reference: 'WIRE-1786621671221',
+    description: 'Outgoing Wire Transfer to Acc #9948201948 (JPMorgan Chase Bank, N.A.)',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
     id: 'TXN-1001',
     userId: 'usr-alex-002',
     userEmail: 'alex.wright@svb.com',
@@ -190,7 +210,19 @@ function getInitialDB(): DBStructure {
         }
 
         parsed.users = Array.from(userMap.values());
-        parsed.transactions = parsed.transactions || DEFAULT_TRANSACTIONS;
+        
+        // Ensure default transactions are present alongside any saved transactions
+        const txnMap = new Map<string, Transaction>();
+        for (const defTxn of DEFAULT_TRANSACTIONS) {
+          if (defTxn && defTxn.id) txnMap.set(defTxn.id, defTxn);
+        }
+        if (Array.isArray(parsed.transactions)) {
+          for (const t of parsed.transactions) {
+            if (t && t.id) txnMap.set(t.id, t);
+          }
+        }
+        parsed.transactions = Array.from(txnMap.values());
+
         parsed.notifications = parsed.notifications || [];
         parsed.supportTickets = parsed.supportTickets || [];
         parsed.virtualCards = parsed.virtualCards || [];
@@ -393,7 +425,14 @@ class LocalDBStore {
 
   addTransaction(txn: Transaction): Transaction {
     this.refresh();
-    this.db.transactions.unshift(txn);
+    const existingIdx = this.db.transactions.findIndex(
+      t => t.id === txn.id || (txn.reference && t.reference && t.reference === txn.reference)
+    );
+    if (existingIdx >= 0) {
+      this.db.transactions[existingIdx] = { ...this.db.transactions[existingIdx], ...txn };
+    } else {
+      this.db.transactions.unshift(txn);
+    }
     this.persist();
     return txn;
   }

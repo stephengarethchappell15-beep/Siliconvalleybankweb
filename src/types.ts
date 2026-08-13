@@ -122,6 +122,7 @@ export interface Transaction {
   id: string;
   userId: string;
   userEmail: string;
+  userName?: string;
   accountNumber: string;
   senderName?: string;
   senderAccountNumber?: string;

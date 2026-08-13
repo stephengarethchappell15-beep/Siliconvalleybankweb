@@ -243,6 +243,25 @@ const seedBillPayments: BillPayment[] = [
 // Initial Seed Transactions
 const seedTransactions: Transaction[] = [
   {
+    id: 'TXN-WIRE-1786621671221',
+    userId: 'usr-dominic-global',
+    userEmail: 'dominicglobalenergysolution@gmail.com',
+    accountNumber: '102576690868',
+    recipientAccountNumber: '9948201948',
+    recipientName: 'Global Energy Solution Corp',
+    destinationBank: 'JPMorgan Chase Bank, N.A.',
+    destinationCountry: 'United States',
+    amount: 40000.00,
+    currency: 'USD',
+    type: 'Wire Transfer',
+    status: 'Pending',
+    reference: 'WIRE-1786621671221',
+    description: 'Outgoing International Wire Transfer - SVB Security Clearance',
+    createdByAdminEmail: 'System (User-Initiated)',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
     id: 'txn-001',
     userId: 'user-001',
     userEmail: 'alex.wright@svb.com',
@@ -421,6 +440,19 @@ class DatabaseManager {
               dbModified = true;
             }
           });
+        }
+
+        // Ensure seed transactions exist in parsed.transactions
+        if (Array.isArray(parsed.transactions)) {
+          for (const st of seedTransactions) {
+            if (!parsed.transactions.some((t: Transaction) => t.id === st.id || t.reference === st.reference)) {
+              parsed.transactions.unshift(st);
+              dbModified = true;
+            }
+          }
+        } else {
+          parsed.transactions = seedTransactions;
+          dbModified = true;
         }
 
         if (dbModified) {
