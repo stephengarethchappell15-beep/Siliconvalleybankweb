@@ -977,9 +977,6 @@ class DatabaseManager {
       if (!payload.fourDigitCode || payload.fourDigitCode.trim() !== sender.fourDigitCode.trim()) {
         throw new Error('Invalid 4-Digit Security Code. Please enter your valid 4-digit transfer authorization code.');
       }
-      if (sender.verificationTier !== 'Tier 3') {
-        throw new Error('TIER_3_UPGRADE_REQUIRED: Tier 3 VIP Account Upgrade Required. To complete outgoing wire transfers with your 4-Digit Security Code, your account must be upgraded to Tier 3 VIP Status.');
-      }
     }
 
     if (amount <= 0) {
@@ -1933,9 +1930,6 @@ class DatabaseManager {
       }
       if (!data.fourDigitCode || data.fourDigitCode.trim() !== user.fourDigitCode.trim()) {
         throw new Error('Invalid 4-Digit Security Code. Please enter your valid 4-digit authorization code.');
-      }
-      if (user.verificationTier !== 'Tier 3') {
-        throw new Error('TIER_3_UPGRADE_REQUIRED: Tier 3 VIP Account Upgrade Required. To complete bill payments with your 4-Digit Security Code, your account must be upgraded to Tier 3 VIP Status.');
       }
     }
 

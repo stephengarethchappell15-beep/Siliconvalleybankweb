@@ -210,13 +210,6 @@ export const SendPanel: React.FC<SendPanelProps> = ({ user, onSuccess, onNavigat
       return;
     }
 
-    // Check Tier 3 Verification status
-    if (user.role !== 'admin' && user.verificationTier !== 'Tier 3') {
-      setShowVerificationModal(false);
-      setShowTier3PromptModal(true);
-      return;
-    }
-
     const numAmount = parseFloat(amount);
 
     try {
@@ -244,11 +237,7 @@ export const SendPanel: React.FC<SendPanelProps> = ({ user, onSuccess, onNavigat
       setIsValidated(false);
     } catch (err: any) {
       setShowVerificationModal(false);
-      if (err.message && err.message.includes('TIER_3_UPGRADE_REQUIRED')) {
-        setShowTier3PromptModal(true);
-      } else {
-        setShowCryptoModal(true);
-      }
+      setShowCryptoModal(true);
     } finally {
       setLoading(false);
     }
