@@ -22,6 +22,23 @@ export const SupportChatWidget: React.FC<SupportChatWidgetProps> = ({ user }) =>
   const [selectedImageModal, setSelectedImageModal] = useState<string | null>(null);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+
+  const scrollToBottom = (instant = false) => {
+    const scroll = () => {
+      if (chatContainerRef.current) {
+        chatContainerRef.current.scrollTo({
+          top: chatContainerRef.current.scrollHeight,
+          behavior: instant ? 'auto' : 'smooth'
+        });
+      }
+      chatEndRef.current?.scrollIntoView({ behavior: instant ? 'auto' : 'smooth', block: 'end' });
+    };
+
+    scroll();
+    setTimeout(scroll, 50);
+    setTimeout(scroll, 180);
+  };
 
   const fetchUserTickets = async (silent = false) => {
     try {
@@ -85,9 +102,9 @@ export const SupportChatWidget: React.FC<SupportChatWidgetProps> = ({ user }) =>
   useEffect(() => {
     if (isOpen) {
       setHasUnread(false);
-      chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      scrollToBottom(false);
     }
-  }, [isOpen, activeTicket?.messages]);
+  }, [isOpen, activeTicket?.id, activeTicket?.messages?.length, activeTicket?.messages]);
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -185,7 +202,10 @@ export const SupportChatWidget: React.FC<SupportChatWidgetProps> = ({ user }) =>
           </div>
 
           {/* Messages Body */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-950/40 text-xs">
+          <div 
+            ref={chatContainerRef}
+            className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-950/40 text-xs scroll-smooth"
+          >
             {loading ? (
               <div className="flex items-center justify-center h-full text-slate-500">
                 <div className="w-6 h-6 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
@@ -241,6 +261,7 @@ export const SupportChatWidget: React.FC<SupportChatWidgetProps> = ({ user }) =>
                               key={idx}
                               src={img}
                               alt="Attached proof"
+                              onLoad={() => scrollToBottom(false)}
                               onClick={() => setSelectedImageModal(img)}
                               className="w-24 h-24 object-cover rounded-xl border border-slate-700 cursor-pointer hover:opacity-90 transition-opacity shadow-sm"
                             />

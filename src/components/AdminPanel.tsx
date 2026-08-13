@@ -625,11 +625,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
             >
               <Headphones className="w-3.5 h-3.5" />
               <span>Support Helpdesk</span>
-              {supportTickets.filter(t => t.status === 'Open' || t.status === 'In Progress').length > 0 && (
-                <span className="bg-rose-500 text-white text-[10px] font-black px-1.5 py-0.2 rounded-full animate-pulse">
-                  {supportTickets.filter(t => t.status === 'Open').length || supportTickets.length}
-                </span>
-              )}
+              {(() => {
+                const pendingTickets = supportTickets.filter(t => {
+                  if (t.status === 'Resolved' || t.status === 'Closed') return false;
+                  if (t.status === 'Open') return true;
+                  const lastMsg = t.messages && t.messages.length > 0 ? t.messages[t.messages.length - 1] : null;
+                  return lastMsg ? lastMsg.senderRole === 'user' : true;
+                });
+                if (pendingTickets.length === 0) return null;
+                return (
+                  <span className="bg-rose-500 text-white text-[10px] font-black px-1.5 py-0.2 rounded-full animate-pulse">
+                    {pendingTickets.length}
+                  </span>
+                );
+              })()}
             </button>
           </div>
         </div>

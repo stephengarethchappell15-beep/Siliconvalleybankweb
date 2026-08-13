@@ -439,8 +439,8 @@ export default function App() {
         </div>
       )}
 
-      {/* Floating Support Chat Widget for Logged In Users */}
-      {user && <SupportChatWidget user={user} />}
+      {/* Floating Support Chat Widget for Logged In Client Users */}
+      {user && user.role !== 'admin' && activeTab !== 'support' && <SupportChatWidget user={user} />}
 
       {/* Modals & Drawers */}
       <AuthModal

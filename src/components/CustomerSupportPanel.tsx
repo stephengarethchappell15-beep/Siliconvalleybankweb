@@ -53,14 +53,33 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({ user
   const [selectedImageModal, setSelectedImageModal] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  const scrollToBottom = (instant = false) => {
+    const scroll = () => {
+      if (messagesContainerRef.current) {
+        messagesContainerRef.current.scrollTo({
+          top: messagesContainerRef.current.scrollHeight,
+          behavior: instant ? 'auto' : 'smooth'
+        });
+      }
+      messagesEndRef.current?.scrollIntoView({
+        behavior: instant ? 'auto' : 'smooth',
+        block: 'end'
+      });
+    };
+
+    scroll();
+    // Re-scroll after micro-delays to account for DOM reflow, image rendering, or font layout
+    setTimeout(scroll, 50);
+    setTimeout(scroll, 180);
   };
 
   useEffect(() => {
-    scrollToBottom();
-  }, [selectedTicket?.messages]);
+    if (selectedTicket) {
+      scrollToBottom(false);
+    }
+  }, [selectedTicket?.id, selectedTicket?.messages?.length, selectedTicket?.messages]);
 
   const fetchTickets = async () => {
     try {
@@ -381,7 +400,10 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({ user
               </div>
 
               {/* Messages Scroll Area */}
-              <div className="flex-1 overflow-y-auto py-4 space-y-3.5 pr-1">
+              <div 
+                ref={messagesContainerRef}
+                className="flex-1 overflow-y-auto py-4 space-y-3.5 pr-1 scroll-smooth"
+              >
                 {selectedTicket.messages.map((m) => {
                   const isUser = m.senderRole === 'user';
                   return (
@@ -414,6 +436,7 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({ user
                                 <img
                                   src={img}
                                   alt="Attachment"
+                                  onLoad={() => scrollToBottom(false)}
                                   onClick={() => setSelectedImageModal(img)}
                                   className="w-28 h-28 object-cover rounded-xl border border-slate-700 cursor-pointer hover:opacity-90 transition-opacity shadow-sm"
                                 />
