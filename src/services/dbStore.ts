@@ -111,6 +111,25 @@ const DEFAULT_USERS: User[] = [
     fourDigitCode: '8842',
     transferCodeApproved: true,
     createdAt: new Date('2024-03-01').toISOString()
+  },
+  {
+    id: 'usr-diego-daniel',
+    fullName: 'Diego Daniel',
+    email: 'diegodanieldan432@gmail.com',
+    phone: '+1 (555) 018-4921',
+    accountNumber: '1098421098',
+    role: 'user',
+    balance: 0.00,
+    ledgerBalance: 0.00,
+    currency: 'USD',
+    address: 'Silicon Valley, CA',
+    country: 'United States',
+    verificationTier: 'Tier 1',
+    status: 'Active',
+    accountPin: '1234',
+    fourDigitCode: '8842',
+    transferCodeApproved: true,
+    createdAt: new Date('2024-03-01').toISOString()
   }
 ];
 

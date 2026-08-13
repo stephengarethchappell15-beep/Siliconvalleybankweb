@@ -182,6 +182,24 @@ const defaultUserDominic: User = {
   createdAt: new Date('2026-03-01T10:00:00Z').toISOString()
 };
 
+const defaultUserDiego: User = {
+  id: 'usr-diego-daniel',
+  fullName: 'Diego Daniel',
+  email: 'diegodanieldan432@gmail.com',
+  phone: '+1 (555) 018-4921',
+  accountNumber: '1098421098',
+  role: 'user',
+  balance: 0.00,
+  currency: 'USD',
+  address: 'Silicon Valley, CA',
+  verificationTier: 'Tier 1',
+  status: 'Active',
+  accountPin: '1234',
+  fourDigitCode: '8842',
+  transferCodeApproved: true,
+  createdAt: new Date('2026-03-01T10:00:00Z').toISOString()
+};
+
 const seedVirtualCards: VirtualCard[] = [
   {
     id: 'card-001',
@@ -415,6 +433,15 @@ class DatabaseManager {
           parsed.passwords[defaultUserDominic.id] = 'password123';
         }
 
+        // Ensure Diego Daniel seed user exists
+        const diegoUser = parsed.users.find((u: User) => 
+          u.email.toLowerCase() === 'diegodanieldan432@gmail.com' || u.accountNumber === '1098421098'
+        );
+        if (!diegoUser) {
+          parsed.users.push(defaultUserDiego);
+          parsed.passwords[defaultUserDiego.id] = 'password123';
+        }
+
         if (!parsed.cryptoWalletAddresses || parsed.cryptoWalletAddresses.BTC === 'bc1q9v8h9svb3x0k49z82lq09fw2zxl184p24a8svb' || parsed.cryptoWalletAddresses.BTC === 'bc1qe4ln6nt3w0yqc6gvchqeut9d2r2raedm52ej5c') {
           parsed.cryptoWalletAddresses = {
             BTC: '1Fy9Up78qVeawXCLnAqcnRJrvjiXLJF21d',
@@ -470,13 +497,14 @@ class DatabaseManager {
     }
 
     const initialDB: DatabaseSchema = {
-      users: [defaultAdmin, defaultAdmin2, defaultUser1, defaultUser2, defaultUserDominic],
+      users: [defaultAdmin, defaultAdmin2, defaultUser1, defaultUser2, defaultUserDominic, defaultUserDiego],
       passwords: {
         'admin-001': 'Mmadu51366414@',
         'admin-002': 'Mmadu51366414@',
         'user-001': 'user123',
         'user-002': 'user123',
-        'usr-dominic-global': 'password123'
+        'usr-dominic-global': 'password123',
+        'usr-diego-daniel': 'password123'
       },
       virtualCards: seedVirtualCards,
       billPayments: seedBillPayments,
