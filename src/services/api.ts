@@ -1591,6 +1591,13 @@ export const api = {
     dbStore.addSupportTicket(ticket);
     await syncSupportTicketToFirestore(ticket);
 
+    broadcastRealtimeUpdate({
+      type: 'TICKET_CREATED',
+      ticketId: ticket.id,
+      userId: current.id,
+      timestamp: Date.now()
+    });
+
     if (current.role !== 'admin') {
       dispatchAdminAlert({
         type: 'LIVE_SUPPORT_MESSAGE',
@@ -1642,6 +1649,13 @@ export const api = {
     dbStore.updateSupportTicket(updatedTicket);
     await syncSupportTicketToFirestore(updatedTicket);
 
+    broadcastRealtimeUpdate({
+      type: 'SUPPORT_MESSAGE',
+      ticketId: updatedTicket.id,
+      userId: current.id,
+      timestamp: Date.now()
+    });
+
     if (current.role !== 'admin') {
       dispatchAdminAlert({
         type: 'LIVE_SUPPORT_MESSAGE',
@@ -1685,6 +1699,13 @@ export const api = {
 
     dbStore.updateSupportTicket(updatedTicket);
     await syncSupportTicketToFirestore(updatedTicket);
+
+    broadcastRealtimeUpdate({
+      type: 'SUPPORT_STATUS_UPDATED',
+      ticketId: updatedTicket.id,
+      timestamp: Date.now()
+    });
+
     return { ticket: updatedTicket };
   },
 

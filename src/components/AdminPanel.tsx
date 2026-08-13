@@ -13,6 +13,7 @@ import {
   subscribeSupportTicketsFromFirestore
 } from '../lib/firebase';
 import { dbStore } from '../services/dbStore';
+import { subscribeRealtimeUpdates } from '../services/realtimeBus';
 import { 
   AdminAlert, 
   subscribeAdminAlerts, 
@@ -257,6 +258,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
       }
     });
 
+    // 7. Subscribe to Realtime Bus updates
+    const unsubRealtime = subscribeRealtimeUpdates((event) => {
+      if (event.type.includes('SUPPORT') || event.type.includes('TICKET')) {
+        const localTickets = dbStore.getSupportTickets(undefined, true);
+        setSupportTickets(localTickets);
+      }
+    });
+
     return () => {
       unsubUsers();
       unsubCrypto();
@@ -264,6 +273,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
       unsubTxns();
       unsubAlerts();
       unsubSupport();
+      unsubRealtime();
     };
   }, [searchQuery]);
 

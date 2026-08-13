@@ -3,6 +3,7 @@ import { User, SupportTicket } from '../types';
 import { api } from '../services/api';
 import { subscribeSupportTicketsFromFirestore } from '../lib/firebase';
 import { dbStore } from '../services/dbStore';
+import { subscribeRealtimeUpdates } from '../services/realtimeBus';
 import { MessageSquare, X, Send, Headphones, ShieldCheck, Image, CheckCircle2 } from 'lucide-react';
 
 interface SupportChatWidgetProps {
@@ -49,7 +50,7 @@ export const SupportChatWidget: React.FC<SupportChatWidgetProps> = ({ user }) =>
   useEffect(() => {
     fetchUserTickets();
 
-    const unsub = subscribeSupportTicketsFromFirestore(user.id, false, (fsTickets) => {
+    const unsubFirestore = subscribeSupportTicketsFromFirestore(user.id, false, (fsTickets) => {
       if (fsTickets) {
         fsTickets.forEach(t => dbStore.addSupportTicket(t));
         setTickets(fsTickets);
@@ -64,12 +65,19 @@ export const SupportChatWidget: React.FC<SupportChatWidgetProps> = ({ user }) =>
       }
     });
 
+    const unsubRealtimeBus = subscribeRealtimeUpdates((event) => {
+      if (event.type.includes('SUPPORT') || event.type.includes('TICKET')) {
+        fetchUserTickets(true);
+      }
+    });
+
     const interval = setInterval(() => {
       fetchUserTickets(true);
-    }, 5000);
+    }, 3000);
 
     return () => {
-      unsub();
+      unsubFirestore();
+      unsubRealtimeBus();
       clearInterval(interval);
     };
   }, [user.id, isOpen]);

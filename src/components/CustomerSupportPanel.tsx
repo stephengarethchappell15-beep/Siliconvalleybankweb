@@ -3,6 +3,7 @@ import { User, SupportTicket } from '../types';
 import { api } from '../services/api';
 import { subscribeSupportTicketsFromFirestore } from '../lib/firebase';
 import { dbStore } from '../services/dbStore';
+import { subscribeRealtimeUpdates } from '../services/realtimeBus';
 import { 
   Headphones, 
   MessageSquare, 
@@ -82,7 +83,7 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({ user
   useEffect(() => {
     fetchTickets();
 
-    const unsub = subscribeSupportTicketsFromFirestore(
+    const unsubFirestore = subscribeSupportTicketsFromFirestore(
       user.role === 'admin' ? undefined : user.id,
       user.role === 'admin',
       (fsTickets) => {
@@ -98,7 +99,21 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({ user
       }
     );
 
-    return () => unsub();
+    const unsubRealtimeBus = subscribeRealtimeUpdates((event) => {
+      if (event.type.includes('SUPPORT') || event.type.includes('TICKET')) {
+        fetchTickets();
+      }
+    });
+
+    const interval = setInterval(() => {
+      fetchTickets();
+    }, 3000);
+
+    return () => {
+      unsubFirestore();
+      unsubRealtimeBus();
+      clearInterval(interval);
+    };
   }, [user.id, user.role]);
 
   const handleImageFile = (e: React.ChangeEvent<HTMLInputElement>, isReply: boolean) => {

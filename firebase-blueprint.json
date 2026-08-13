@@ -17,6 +17,26 @@
         "status": { "type": "string" }
       },
       "required": ["id", "email", "fullName"]
+    },
+    "SupportTicket": {
+      "title": "SupportTicket",
+      "description": "Live support chat ticket with messages and attachments",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "userName": { "type": "string" },
+        "accountNumber": { "type": "string" },
+        "subject": { "type": "string" },
+        "category": { "type": "string" },
+        "status": { "type": "string" },
+        "priority": { "type": "string" },
+        "messages": { "type": "array" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "subject", "messages", "createdAt"]
     }
   },
   "firestore": {
@@ -31,6 +51,10 @@
     "/users_by_account/{accNo}": {
       "schema": "User",
       "description": "User lookup documents by account number"
+    },
+    "/support_tickets/{ticketId}": {
+      "schema": "SupportTicket",
+      "description": "Live chat and customer support inquiries"
     }
   }
 }

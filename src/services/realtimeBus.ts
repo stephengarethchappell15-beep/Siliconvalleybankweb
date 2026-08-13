@@ -4,12 +4,17 @@ export type RealtimeEventType =
   | 'TRANSACTION_UPDATED'
   | 'USER_UPDATED'
   | 'NOTIFICATIONS_UPDATED'
-  | 'DEPOSIT_UPDATED';
+  | 'DEPOSIT_UPDATED'
+  | 'SUPPORT_TICKET_UPDATED'
+  | 'SUPPORT_MESSAGE'
+  | 'TICKET_CREATED'
+  | 'SUPPORT_STATUS_UPDATED';
 
 export interface RealtimeEventPayload {
   type: RealtimeEventType;
   userId?: string;
   transactionId?: string;
+  ticketId?: string;
   data?: any;
   timestamp: number;
 }
@@ -29,14 +34,28 @@ if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
 /**
  * Broadcast a real-time event across all open tabs and components immediately
  */
-export function broadcastRealtimeUpdate(type: RealtimeEventType, data?: any, userId?: string, transactionId?: string): void {
-  const payload: RealtimeEventPayload = {
-    type,
-    userId,
-    transactionId,
-    data,
-    timestamp: Date.now()
-  };
+export function broadcastRealtimeUpdate(
+  typeOrObj: RealtimeEventType | { type: RealtimeEventType; data?: any; userId?: string; transactionId?: string; ticketId?: string; timestamp?: number }, 
+  data?: any, 
+  userId?: string, 
+  transactionId?: string
+): void {
+  const payload: RealtimeEventPayload = typeof typeOrObj === 'object' 
+    ? {
+        type: typeOrObj.type,
+        userId: typeOrObj.userId,
+        transactionId: typeOrObj.transactionId,
+        ticketId: typeOrObj.ticketId,
+        data: typeOrObj.data,
+        timestamp: typeOrObj.timestamp || Date.now()
+      }
+    : {
+        type: typeOrObj,
+        userId,
+        transactionId,
+        data,
+        timestamp: Date.now()
+      };
 
   // 1. Send via BroadcastChannel for multi-tab synchronization
   if (broadcastChannel) {
