@@ -1403,8 +1403,15 @@ class DatabaseManager {
     txn.updatedAt = new Date().toISOString();
 
     const targetUser = this.findUserById(txn.userId);
-    if (targetUser && (txn.type === 'Withdrawal' || (txn.type === 'Transfer' && !txn.description.includes('received')))) {
+    if (targetUser && (
+      txn.type === 'Withdrawal' ||
+      txn.type === 'Wire Withdrawal' ||
+      txn.type === 'Transfer' ||
+      txn.type === 'Wire Transfer' ||
+      txn.type === 'Bill Pay'
+    ) && !txn.description.includes('received')) {
       targetUser.balance += txn.amount;
+      targetUser.ledgerBalance = targetUser.balance;
     }
 
     const notif: UserNotification = {
