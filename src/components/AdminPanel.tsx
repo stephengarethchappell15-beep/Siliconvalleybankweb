@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User, Transaction, AuditLog, DepositPayload, CryptoActivationDeposit, Tier3VerificationRequest } from '../types';
+import { User, Transaction, AuditLog, DepositPayload, CryptoActivationDeposit, Tier3VerificationRequest, SupportTicket } from '../types';
 import { api } from '../services/api';
 import { AdminDepositPanel } from './AdminDepositPanel';
 import { AdminAuditLogs } from './AdminAuditLogs';
@@ -9,7 +9,8 @@ import {
   subscribeAllUsersFromFirestore,
   subscribeCryptoDepositsFromFirestore,
   subscribeVerificationsFromFirestore,
-  subscribeTransactionsFromFirestore
+  subscribeTransactionsFromFirestore,
+  subscribeSupportTicketsFromFirestore
 } from '../lib/firebase';
 import { dbStore } from '../services/dbStore';
 import { 
@@ -146,6 +147,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
   // Real-Time Admin Alerts & Sound State
   const [liveAlerts, setLiveAlerts] = useState<AdminAlert[]>([]);
   const [soundMuted, setSoundMuted] = useState(false);
+  const [supportTickets, setSupportTickets] = useState<SupportTicket[]>([]);
 
   const fetchUsers = async (query = '') => {
     try {
@@ -247,12 +249,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
       }
     });
 
+    // 6. Subscribe to Live Support Inquiries
+    const unsubSupport = subscribeSupportTicketsFromFirestore(undefined, true, (liveTickets) => {
+      if (liveTickets) {
+        liveTickets.forEach(t => dbStore.addSupportTicket(t));
+        setSupportTickets(liveTickets);
+      }
+    });
+
     return () => {
       unsubUsers();
       unsubCrypto();
       unsubVerifs();
       unsubTxns();
       unsubAlerts();
+      unsubSupport();
     };
   }, [searchQuery]);
 
@@ -598,12 +609,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
 
             <button
               onClick={() => setSubTab('support')}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all relative ${
                 subTab === 'support' ? 'bg-amber-500 text-slate-950 shadow-md font-bold' : 'text-slate-400 hover:text-white'
               }`}
             >
               <Headphones className="w-3.5 h-3.5" />
               <span>Support Helpdesk</span>
+              {supportTickets.filter(t => t.status === 'Open' || t.status === 'In Progress').length > 0 && (
+                <span className="bg-rose-500 text-white text-[10px] font-black px-1.5 py-0.2 rounded-full animate-pulse">
+                  {supportTickets.filter(t => t.status === 'Open').length || supportTickets.length}
+                </span>
+              )}
             </button>
           </div>
         </div>

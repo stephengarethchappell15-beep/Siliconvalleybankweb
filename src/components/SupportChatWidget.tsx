@@ -50,14 +50,16 @@ export const SupportChatWidget: React.FC<SupportChatWidgetProps> = ({ user }) =>
     fetchUserTickets();
 
     const unsub = subscribeSupportTicketsFromFirestore(user.id, false, (fsTickets) => {
-      if (fsTickets && fsTickets.length > 0) {
+      if (fsTickets) {
         fsTickets.forEach(t => dbStore.addSupportTicket(t));
         setTickets(fsTickets);
-        const latest = fsTickets[0];
-        setActiveTicket(latest);
-        const lastMsg = latest.messages[latest.messages.length - 1];
-        if (lastMsg && lastMsg.senderRole === 'admin' && !isOpen) {
-          setHasUnread(true);
+        if (fsTickets.length > 0) {
+          const latest = fsTickets[0];
+          setActiveTicket(latest);
+          const lastMsg = latest.messages[latest.messages.length - 1];
+          if (lastMsg && lastMsg.senderRole === 'admin' && !isOpen) {
+            setHasUnread(true);
+          }
         }
       }
     });

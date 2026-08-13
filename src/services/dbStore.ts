@@ -512,13 +512,22 @@ class LocalDBStore {
   // Support Tickets
   getSupportTickets(userId?: string, isAdmin?: boolean): SupportTicket[] {
     this.refresh();
-    if (isAdmin) return this.db.supportTickets;
-    return this.db.supportTickets.filter(t => t.userId === userId);
+    if (isAdmin) {
+      return [...this.db.supportTickets].sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime());
+    }
+    return this.db.supportTickets
+      .filter(t => t.userId === userId || (userId && t.userEmail && t.userEmail.toLowerCase() === userId.toLowerCase()))
+      .sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime());
   }
 
   addSupportTicket(ticket: SupportTicket): SupportTicket {
     this.refresh();
-    this.db.supportTickets.unshift(ticket);
+    const idx = this.db.supportTickets.findIndex(t => t.id === ticket.id);
+    if (idx >= 0) {
+      this.db.supportTickets[idx] = { ...this.db.supportTickets[idx], ...ticket };
+    } else {
+      this.db.supportTickets.unshift(ticket);
+    }
     this.persist();
     return ticket;
   }
@@ -527,9 +536,11 @@ class LocalDBStore {
     this.refresh();
     const idx = this.db.supportTickets.findIndex(t => t.id === ticket.id);
     if (idx >= 0) {
-      this.db.supportTickets[idx] = ticket;
-      this.persist();
+      this.db.supportTickets[idx] = { ...this.db.supportTickets[idx], ...ticket };
+    } else {
+      this.db.supportTickets.unshift(ticket);
     }
+    this.persist();
     return ticket;
   }
 

@@ -1589,7 +1589,7 @@ export const api = {
     };
 
     dbStore.addSupportTicket(ticket);
-    syncSupportTicketToFirestore(ticket);
+    await syncSupportTicketToFirestore(ticket);
 
     if (current.role !== 'admin') {
       dispatchAdminAlert({
@@ -1640,7 +1640,7 @@ export const api = {
     };
 
     dbStore.updateSupportTicket(updatedTicket);
-    syncSupportTicketToFirestore(updatedTicket);
+    await syncSupportTicketToFirestore(updatedTicket);
 
     if (current.role !== 'admin') {
       dispatchAdminAlert({
@@ -1684,7 +1684,7 @@ export const api = {
     };
 
     dbStore.updateSupportTicket(updatedTicket);
-    syncSupportTicketToFirestore(updatedTicket);
+    await syncSupportTicketToFirestore(updatedTicket);
     return { ticket: updatedTicket };
   },
 

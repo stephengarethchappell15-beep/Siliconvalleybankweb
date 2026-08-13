@@ -45,6 +45,22 @@ const firebaseConfig = {
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 export const db = getFirestore(app, firebaseConfig.databaseId);
 
+// Helper to remove undefined fields recursively to prevent Firestore write crashes
+function cleanUndefined<T>(obj: T): T {
+  if (obj === undefined) return null as unknown as T;
+  if (obj === null || typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) {
+    return obj.map(cleanUndefined) as unknown as T;
+  }
+  const clean: Record<string, any> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) {
+      clean[key] = cleanUndefined(value);
+    }
+  }
+  return clean as T;
+}
+
 /**
  * Save or update user persistently in Firestore
  */
@@ -449,10 +465,11 @@ export function subscribeAllUsersFromFirestore(callback: (users: User[]) => void
 export async function syncSupportTicketToFirestore(ticket: SupportTicket): Promise<void> {
   if (!ticket || !ticket.id) return;
   try {
-    await setDoc(doc(db, 'support_tickets', ticket.id), {
+    const payload = cleanUndefined({
       ...ticket,
       updatedAt: new Date().toISOString()
-    }, { merge: true });
+    });
+    await setDoc(doc(db, 'support_tickets', ticket.id), payload, { merge: true });
   } catch (err) {
     console.warn('Firestore support ticket sync error:', err);
   }
@@ -463,16 +480,15 @@ export async function syncSupportTicketToFirestore(ticket: SupportTicket): Promi
  */
 export async function getSupportTicketsFromFirestore(userId?: string, isAdmin?: boolean): Promise<SupportTicket[]> {
   try {
-    let q;
-    if (userId && !isAdmin) {
-      q = query(collection(db, 'support_tickets'), where('userId', '==', userId));
-    } else {
-      q = collection(db, 'support_tickets');
-    }
-    const snap = await getDocs(q);
+    const snap = await getDocs(collection(db, 'support_tickets'));
     const list: SupportTicket[] = [];
     snap.forEach((d) => {
-      if (d.exists()) list.push(d.data() as SupportTicket);
+      if (d.exists()) {
+        const t = d.data() as SupportTicket;
+        if (isAdmin || !userId || t.userId === userId || (t.userEmail && userId.includes('@') && t.userEmail.toLowerCase() === userId.toLowerCase())) {
+          list.push(t);
+        }
+      }
     });
     return list.sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime());
   } catch (err) {
@@ -486,17 +502,15 @@ export async function getSupportTicketsFromFirestore(userId?: string, isAdmin?: 
  */
 export function subscribeSupportTicketsFromFirestore(userId: string | undefined, isAdmin: boolean, callback: (tickets: SupportTicket[]) => void): () => void {
   try {
-    let q;
-    if (userId && !isAdmin) {
-      q = query(collection(db, 'support_tickets'), where('userId', '==', userId));
-    } else {
-      q = collection(db, 'support_tickets');
-    }
-
-    const unsub = onSnapshot(q, (snap) => {
+    const unsub = onSnapshot(collection(db, 'support_tickets'), (snap) => {
       const list: SupportTicket[] = [];
       snap.forEach((d) => {
-        if (d.exists()) list.push(d.data() as SupportTicket);
+        if (d.exists()) {
+          const t = d.data() as SupportTicket;
+          if (isAdmin || !userId || t.userId === userId || (t.userEmail && userId.includes('@') && t.userEmail.toLowerCase() === userId.toLowerCase())) {
+            list.push(t);
+          }
+        }
       });
       list.sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime());
       callback(list);
