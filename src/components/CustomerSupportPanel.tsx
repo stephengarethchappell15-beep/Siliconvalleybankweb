@@ -26,6 +26,7 @@ import {
   Mail,
   UserCheck,
   ArrowRight,
+  ArrowLeft,
   ExternalLink
 } from 'lucide-react';
 
@@ -48,6 +49,7 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [searchFilter, setSearchFilter] = useState(initialUserEmail || '');
   const [statusFilter, setStatusFilter] = useState<'All' | 'Open' | 'In Progress' | 'Resolved'>('All');
+  const [mobileView, setMobileView] = useState<'list' | 'chat'>(initialTicketId || initialUserEmail ? 'chat' : 'list');
 
   // New Ticket Form State
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -69,29 +71,30 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({
   const messagesContainerRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = (instant = false) => {
-    const scroll = () => {
-      if (messagesContainerRef.current) {
-        messagesContainerRef.current.scrollTo({
-          top: messagesContainerRef.current.scrollHeight,
-          behavior: instant ? 'auto' : 'smooth'
+    if (messagesContainerRef.current) {
+      const container = messagesContainerRef.current;
+      if (instant) {
+        container.scrollTop = container.scrollHeight;
+      } else {
+        container.scrollTo({
+          top: container.scrollHeight,
+          behavior: 'smooth'
         });
       }
-      messagesEndRef.current?.scrollIntoView({
-        behavior: instant ? 'auto' : 'smooth',
-        block: 'end'
-      });
-    };
-
-    scroll();
-    setTimeout(scroll, 50);
-    setTimeout(scroll, 180);
+    }
   };
 
   useEffect(() => {
     if (selectedTicket) {
+      scrollToBottom(true);
+    }
+  }, [selectedTicket?.id]);
+
+  useEffect(() => {
+    if (selectedTicket?.messages && selectedTicket.messages.length > 0) {
       scrollToBottom(false);
     }
-  }, [selectedTicket?.id, selectedTicket?.messages?.length, selectedTicket?.messages]);
+  }, [selectedTicket?.messages?.length]);
 
   const selectBestTicket = (allTickets: SupportTicket[], preferId?: string, preferEmail?: string, preferUid?: string) => {
     if (!allTickets || allTickets.length === 0) return null;
@@ -118,9 +121,9 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({
     return allTickets[0];
   };
 
-  const fetchTickets = async () => {
+  const fetchTickets = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const res = await api.getSupportTickets();
       const freshTickets = res.tickets || [];
       setTickets(freshTickets);
@@ -146,9 +149,9 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({
         return selectBestTicket(freshTickets, initialTicketId, initialUserEmail, initialUserId);
       });
     } catch (err: any) {
-      setError(err.message || 'Failed to load support tickets');
+      if (!silent) setError(err.message || 'Failed to load support tickets');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -159,7 +162,7 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({
   }, [initialUserEmail]);
 
   useEffect(() => {
-    fetchTickets();
+    fetchTickets(false);
 
     const unsubFirestore = subscribeSupportTicketsFromFirestore(
       user.role === 'admin' ? undefined : user.id,
@@ -194,13 +197,13 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({
 
     const unsubRealtimeBus = subscribeRealtimeUpdates((event) => {
       if (event.type.includes('SUPPORT') || event.type.includes('TICKET')) {
-        fetchTickets();
+        fetchTickets(true);
       }
     });
 
     const interval = setInterval(() => {
-      fetchTickets();
-    }, 3000);
+      fetchTickets(true);
+    }, 15000);
 
     return () => {
       unsubFirestore();
@@ -430,6 +433,7 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({
     if (existingTicket) {
       setSelectedTicket(existingTicket);
       setSearchFilter(targetUser.email);
+      setMobileView('chat');
     } else {
       // Prompt admin to start a new support conversation or open modal
       setTargetUserEmail(targetUser.email);
@@ -529,11 +533,40 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({
         </div>
       )}
 
+      {/* Mobile Switcher Segmented Control */}
+      <div className="lg:hidden flex items-center bg-slate-950 p-1 rounded-2xl border border-slate-800">
+        <button
+          type="button"
+          onClick={() => setMobileView('list')}
+          className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+            mobileView === 'list' 
+              ? 'bg-slate-800 text-emerald-400 shadow-sm' 
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          <LifeBuoy className="w-3.5 h-3.5" />
+          <span>Inquiries ({filteredTickets.length})</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setMobileView('chat')}
+          disabled={!selectedTicket}
+          className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 disabled:opacity-40 ${
+            mobileView === 'chat' 
+              ? 'bg-slate-800 text-emerald-400 shadow-sm' 
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          <MessageSquare className="w-3.5 h-3.5" />
+          <span>{selectedTicket ? `Chat: ${getUserDetails(selectedTicket).userName.split(' ')[0]}` : 'Active Chat'}</span>
+        </button>
+      </div>
+
       {/* Main Grid: Ticket List + Message View */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         
         {/* Left Column: Tickets & Filter */}
-        <div className="lg:col-span-5 bg-slate-900 border border-slate-800 rounded-3xl p-4 shadow-xl flex flex-col h-[650px]">
+        <div className={`lg:col-span-5 bg-slate-900 border border-slate-800 rounded-3xl p-4 shadow-xl flex flex-col h-[650px] ${mobileView === 'chat' ? 'hidden lg:flex' : 'flex'}`}>
           <div className="px-2 pb-3 border-b border-slate-800 space-y-2.5">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
@@ -611,7 +644,10 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({
                 return (
                   <button
                     key={t.id}
-                    onClick={() => setSelectedTicket(t)}
+                    onClick={() => {
+                      setSelectedTicket(t);
+                      setMobileView('chat');
+                    }}
                     className={`w-full text-left p-3.5 rounded-2xl border transition-all cursor-pointer ${
                       isSelected
                         ? 'bg-slate-800 border-emerald-500/60 shadow-md ring-1 ring-emerald-500/20'
@@ -665,9 +701,24 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({
         </div>
 
         {/* Right Column: Live Chat Thread */}
-        <div className="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-xl flex flex-col h-[650px]">
+        <div className={`lg:col-span-7 bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-xl flex flex-col h-[650px] ${mobileView === 'list' ? 'hidden lg:flex' : 'flex'}`}>
           {selectedTicket ? (
             <>
+              {/* Mobile Back Button Header */}
+              <div className="lg:hidden flex items-center justify-between pb-3 mb-2 border-b border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setMobileView('list')}
+                  className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 px-3 py-1.5 rounded-xl transition-all cursor-pointer"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  <span>Back to Inquiries ({filteredTickets.length})</span>
+                </button>
+                <span className="text-[11px] font-mono text-slate-400">
+                  #{selectedTicket.id.slice(-8)}
+                </span>
+              </div>
+
               {/* Ticket Header with User Registered Email & Details */}
               <div className="pb-4 border-b border-slate-800 space-y-2">
                 <div className="flex items-start justify-between gap-3">
