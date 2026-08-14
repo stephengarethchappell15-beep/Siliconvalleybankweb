@@ -458,7 +458,7 @@ class LocalDBStore {
 
   updateTransaction(id: string, updates: Partial<Transaction>): Transaction | null {
     this.refresh();
-    const idx = this.db.transactions.findIndex(t => t.id === id);
+    const idx = this.db.transactions.findIndex(t => t.id === id || (t.reference && t.reference === id));
     if (idx >= 0) {
       this.db.transactions[idx] = { ...this.db.transactions[idx], ...updates, updatedAt: new Date().toISOString() };
       this.persist();

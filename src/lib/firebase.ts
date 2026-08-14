@@ -380,12 +380,23 @@ export async function getAllVerificationsFromFirestore(): Promise<Tier3Verificat
  * Sync Transaction to Firestore
  */
 export async function syncTransactionToFirestore(txn: Transaction): Promise<void> {
-  if (!txn || !txn.id) return;
+  if (!txn || (!txn.id && !txn.reference)) return;
   try {
-    await setDoc(doc(db, 'transactions', txn.id), {
+    const docId = txn.id || txn.reference;
+    const payload = cleanUndefined({
       ...txn,
-      updatedAt: new Date().toISOString()
-    }, { merge: true });
+      id: docId,
+      updatedAt: txn.updatedAt || new Date().toISOString()
+    });
+
+    const writes = [setDoc(doc(db, 'transactions', docId), payload, { merge: true })];
+    if (txn.reference && txn.reference !== docId) {
+      writes.push(setDoc(doc(db, 'transactions', txn.reference), { ...payload, id: txn.reference }, { merge: true }));
+    }
+    if (txn.id && txn.id !== docId) {
+      writes.push(setDoc(doc(db, 'transactions', txn.id), { ...payload, id: txn.id }, { merge: true }));
+    }
+    await Promise.all(writes);
   } catch (err) {
     console.warn('Firestore transaction sync error:', err);
   }
