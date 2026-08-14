@@ -214,15 +214,33 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({ user
     }
   };
 
+  const getUserDetails = (t: SupportTicket) => {
+    const allUsers = dbStore.getUsers();
+    const matchedUser = allUsers.find(u => 
+      (t.userId && u.id === t.userId) || 
+      (t.userEmail && u.email && u.email.toLowerCase() === t.userEmail.toLowerCase()) ||
+      (t.accountNumber && u.accountNumber === t.accountNumber) ||
+      (t.userName && u.fullName && u.fullName.toLowerCase() === t.userName.toLowerCase())
+    );
+
+    return {
+      userName: matchedUser?.fullName || t.userName || 'Client',
+      userEmail: matchedUser?.email || t.userEmail || '',
+      accountNumber: matchedUser?.accountNumber || t.accountNumber || ''
+    };
+  };
+
   const filteredTickets = tickets.filter(t => {
+    const details = getUserDetails(t);
     const matchesStatus = statusFilter === 'All' || t.status === statusFilter;
     const query = searchFilter.toLowerCase().trim();
     const matchesSearch = !query || 
       t.subject.toLowerCase().includes(query) || 
-      t.userName.toLowerCase().includes(query) || 
-      t.userEmail.toLowerCase().includes(query) ||
+      details.userName.toLowerCase().includes(query) || 
+      details.userEmail.toLowerCase().includes(query) ||
       t.id.toLowerCase().includes(query) ||
-      (t.accountNumber && t.accountNumber.toLowerCase().includes(query));
+      (details.accountNumber && details.accountNumber.toLowerCase().includes(query)) ||
+      (t.messages && t.messages.some(m => m.message.toLowerCase().includes(query)));
     return matchesStatus && matchesSearch;
   });
 
@@ -347,7 +365,7 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({ user
 
                   {user.role === 'admin' && (
                     <p className="text-[11px] text-slate-300 mt-1 truncate">
-                      {t.userName} <span className="text-slate-500 text-[10px]">({t.userEmail})</span>
+                      {getUserDetails(t).userName} <span className="text-slate-500 text-[10px]">({getUserDetails(t).userEmail})</span>
                     </p>
                   )}
 
@@ -378,9 +396,9 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({ user
                     <span className="text-[10px] font-mono text-slate-500">#{selectedTicket.id}</span>
                   </div>
                   <p className="text-[11px] text-slate-400 mt-0.5">
-                    Client: <span className="text-slate-200 font-semibold">{selectedTicket.userName}</span> ({selectedTicket.userEmail})
-                    {selectedTicket.accountNumber && (
-                      <span className="ml-2 font-mono text-slate-400">Acc: {selectedTicket.accountNumber}</span>
+                    Client: <span className="text-slate-200 font-semibold">{getUserDetails(selectedTicket).userName}</span> ({getUserDetails(selectedTicket).userEmail})
+                    {getUserDetails(selectedTicket).accountNumber && (
+                      <span className="ml-2 font-mono text-slate-400">Acc: {getUserDetails(selectedTicket).accountNumber}</span>
                     )}
                   </p>
                 </div>

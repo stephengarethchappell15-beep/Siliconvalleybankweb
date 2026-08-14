@@ -236,8 +236,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
       }
       const local = dbStore.getTransactions();
       const map = new Map<string, Transaction>();
-      local.forEach(t => map.set(t.id, t));
-      if (liveTxns) liveTxns.forEach(t => map.set(t.id, t));
+      const mergeTxn = (t: Transaction) => {
+        const key = t.reference || t.id;
+        const existing = map.get(key);
+        if (!existing) {
+          map.set(key, t);
+        } else {
+          const isNewer = new Date(t.updatedAt || t.createdAt).getTime() >= new Date(existing.updatedAt || existing.createdAt).getTime();
+          if (isNewer || (existing.status === 'Pending' && t.status !== 'Pending')) {
+            map.set(key, { ...existing, ...t });
+          }
+        }
+      };
+      local.forEach(mergeTxn);
+      if (liveTxns) liveTxns.forEach(mergeTxn);
       const merged = Array.from(map.values()).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       setSysTxns(merged);
     });
@@ -376,9 +388,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
     }
     try {
       await api.approveTransaction(txnId, senderName.trim());
+      setSysTxns(prev => prev.map(t => (t.id === txnId || t.reference === txnId) ? { ...t, status: 'Completed', senderName: senderName.trim(), updatedAt: new Date().toISOString() } : t));
       alert('Transaction approved successfully! Recipient account has been credited.');
-      fetchSysTxns();
-      fetchUsers(searchQuery);
+      await fetchSysTxns();
+      await fetchUsers(searchQuery);
     } catch (err: any) {
       alert(err.message || 'Approval failed.');
     }
@@ -388,9 +401,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
     if (!confirm('Are you sure you want to cancel this transfer/transaction? User funds will be adjusted.')) return;
     try {
       await api.adminCancelTransaction(txnId);
+      setSysTxns(prev => prev.map(t => (t.id === txnId || t.reference === txnId) ? { ...t, status: 'Cancelled', updatedAt: new Date().toISOString() } : t));
       alert('Transaction cancelled successfully.');
-      fetchSysTxns();
-      fetchUsers(searchQuery);
+      await fetchSysTxns();
+      await fetchUsers(searchQuery);
     } catch (err: any) {
       alert(err.message || 'Cancellation failed.');
     }
@@ -401,9 +415,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
     if (reason === null) return; // user cancelled prompt
     try {
       await api.rejectTransaction(txnId, reason);
+      setSysTxns(prev => prev.map(t => (t.id === txnId || t.reference === txnId) ? { ...t, status: 'Rejected', updatedAt: new Date().toISOString() } : t));
       alert('Transaction rejected successfully. Funds returned to user balance.');
-      fetchSysTxns();
-      fetchUsers(searchQuery);
+      await fetchSysTxns();
+      await fetchUsers(searchQuery);
     } catch (err: any) {
       alert(err.message || 'Rejection failed.');
     }

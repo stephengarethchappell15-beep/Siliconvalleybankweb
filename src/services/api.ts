@@ -1249,10 +1249,23 @@ export const api = {
     }
 
     const map = new Map<string, Transaction>();
-    localTxns.forEach(t => map.set(t.id, t));
-    allTxns.forEach(t => map.set(t.id, t));
+    const mergeTxn = (t: Transaction) => {
+      const key = t.reference || t.id;
+      const existing = map.get(key);
+      if (!existing) {
+        map.set(key, t);
+      } else {
+        const isNewer = new Date(t.updatedAt || t.createdAt).getTime() >= new Date(existing.updatedAt || existing.createdAt).getTime();
+        if (isNewer || (existing.status === 'Pending' && t.status !== 'Pending')) {
+          map.set(key, { ...existing, ...t });
+        }
+      }
+    };
+
+    localTxns.forEach(mergeTxn);
+    allTxns.forEach(mergeTxn);
     fsTxns.forEach(t => {
-      map.set(t.id, t);
+      mergeTxn(t);
       dbStore.addTransaction(t);
     });
 
@@ -1270,7 +1283,7 @@ export const api = {
       console.warn('Backend approveTransaction fallback:', e);
     }
 
-    const txn = dbStore.getTransactions().find(t => t.id === txnId);
+    const txn = dbStore.getTransactions().find(t => t.id === txnId || (t.reference && t.reference === txnId));
     if (txn) {
       const updatedTxn: Transaction = {
         ...txn,
@@ -1279,6 +1292,9 @@ export const api = {
         updatedAt: new Date().toISOString()
       };
       dbStore.updateTransaction(txnId, updatedTxn);
+      if (txn.reference && txn.reference !== txnId) {
+        dbStore.updateTransaction(txn.reference, updatedTxn);
+      }
       syncTransactionToFirestore(updatedTxn);
 
       if (txn.recipientAccountNumber || txn.recipientEmail) {
@@ -1346,7 +1362,7 @@ export const api = {
       console.warn('Backend rejectTransaction fallback:', e);
     }
 
-    const txn = dbStore.getTransactions().find(t => t.id === txnId);
+    const txn = dbStore.getTransactions().find(t => t.id === txnId || (t.reference && t.reference === txnId));
     if (txn) {
       const updatedTxn: Transaction = {
         ...txn,
@@ -1354,6 +1370,9 @@ export const api = {
         updatedAt: new Date().toISOString()
       };
       dbStore.updateTransaction(txnId, updatedTxn);
+      if (txn.reference && txn.reference !== txnId) {
+        dbStore.updateTransaction(txn.reference, updatedTxn);
+      }
       syncTransactionToFirestore(updatedTxn);
 
       const user = dbStore.getUserById(txn.userId);

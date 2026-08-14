@@ -1297,7 +1297,7 @@ class DatabaseManager {
   public approveTransaction(adminUser: User, transactionId: string, senderNameInput?: string): { transaction: Transaction } {
     if (adminUser.role !== 'admin') throw new Error('Unauthorized. Admin privileges required.');
 
-    const senderTxn = this.db.transactions.find(t => t.id === transactionId);
+    const senderTxn = this.db.transactions.find(t => t.id === transactionId || (t.reference && t.reference === transactionId));
     if (!senderTxn) throw new Error('Transaction not found.');
 
     if (senderTxn.status !== 'Pending') {
@@ -1430,7 +1430,7 @@ class DatabaseManager {
   public rejectTransaction(adminUser: User, transactionId: string, reason?: string): { transaction: Transaction } {
     if (adminUser.role !== 'admin') throw new Error('Unauthorized. Admin privileges required.');
 
-    const txn = this.db.transactions.find(t => t.id === transactionId);
+    const txn = this.db.transactions.find(t => t.id === transactionId || (t.reference && t.reference === transactionId));
     if (!txn) throw new Error('Transaction not found.');
 
     if (txn.status === 'Rejected' || txn.status === 'Cancelled') {
@@ -1780,7 +1780,7 @@ class DatabaseManager {
   public adminCancelTransaction(adminUser: User, transactionId: string): { transaction: Transaction } {
     if (adminUser.role !== 'admin') throw new Error('Unauthorized. Admin privileges required.');
 
-    const txn = this.db.transactions.find(t => t.id === transactionId);
+    const txn = this.db.transactions.find(t => t.id === transactionId || (t.reference && t.reference === transactionId));
     if (!txn) throw new Error('Transaction not found.');
 
     if (txn.status === 'Cancelled') throw new Error('Transaction is already cancelled.');

@@ -458,11 +458,18 @@ class LocalDBStore {
 
   updateTransaction(id: string, updates: Partial<Transaction>): Transaction | null {
     this.refresh();
-    const idx = this.db.transactions.findIndex(t => t.id === id || (t.reference && t.reference === id));
-    if (idx >= 0) {
-      this.db.transactions[idx] = { ...this.db.transactions[idx], ...updates, updatedAt: new Date().toISOString() };
+    let updated: Transaction | null = null;
+    this.db.transactions = this.db.transactions.map(t => {
+      if (t.id === id || (t.reference && t.reference === id)) {
+        updated = { ...t, ...updates, updatedAt: new Date().toISOString() };
+        return updated;
+      }
+      return t;
+    });
+
+    if (updated) {
       this.persist();
-      return this.db.transactions[idx];
+      return updated;
     }
     return null;
   }
@@ -531,36 +538,79 @@ class LocalDBStore {
   // Support Tickets
   getSupportTickets(userId?: string, isAdmin?: boolean): SupportTicket[] {
     this.refresh();
+    const enrich = (t: SupportTicket): SupportTicket => {
+      const user = this.db.users.find(u => 
+        (t.userId && u.id === t.userId) || 
+        (t.userEmail && u.email && u.email.toLowerCase() === t.userEmail.toLowerCase()) ||
+        (t.accountNumber && u.accountNumber === t.accountNumber) ||
+        (t.userName && u.fullName && u.fullName.toLowerCase() === t.userName.toLowerCase())
+      );
+      if (!user) return t;
+      return {
+        ...t,
+        userName: user.fullName || t.userName,
+        userEmail: user.email || t.userEmail,
+        accountNumber: user.accountNumber || t.accountNumber
+      };
+    };
+
+    const all = this.db.supportTickets.map(enrich);
     if (isAdmin) {
-      return [...this.db.supportTickets].sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime());
+      return all.sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime());
     }
-    return this.db.supportTickets
+    return all
       .filter(t => t.userId === userId || (userId && t.userEmail && t.userEmail.toLowerCase() === userId.toLowerCase()))
       .sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime());
   }
 
   addSupportTicket(ticket: SupportTicket): SupportTicket {
     this.refresh();
-    const idx = this.db.supportTickets.findIndex(t => t.id === ticket.id);
+    const user = this.db.users.find(u => 
+      (ticket.userId && u.id === ticket.userId) || 
+      (ticket.userEmail && u.email && u.email.toLowerCase() === ticket.userEmail.toLowerCase()) ||
+      (ticket.accountNumber && u.accountNumber === ticket.accountNumber) ||
+      (ticket.userName && u.fullName && u.fullName.toLowerCase() === ticket.userName.toLowerCase())
+    );
+    const enrichedTicket: SupportTicket = user ? {
+      ...ticket,
+      userName: user.fullName || ticket.userName,
+      userEmail: user.email || ticket.userEmail,
+      accountNumber: user.accountNumber || ticket.accountNumber
+    } : ticket;
+
+    const idx = this.db.supportTickets.findIndex(t => t.id === enrichedTicket.id);
     if (idx >= 0) {
-      this.db.supportTickets[idx] = { ...this.db.supportTickets[idx], ...ticket };
+      this.db.supportTickets[idx] = { ...this.db.supportTickets[idx], ...enrichedTicket };
     } else {
-      this.db.supportTickets.unshift(ticket);
+      this.db.supportTickets.unshift(enrichedTicket);
     }
     this.persist();
-    return ticket;
+    return enrichedTicket;
   }
 
   updateSupportTicket(ticket: SupportTicket): SupportTicket {
     this.refresh();
-    const idx = this.db.supportTickets.findIndex(t => t.id === ticket.id);
+    const user = this.db.users.find(u => 
+      (ticket.userId && u.id === ticket.userId) || 
+      (ticket.userEmail && u.email && u.email.toLowerCase() === ticket.userEmail.toLowerCase()) ||
+      (ticket.accountNumber && u.accountNumber === ticket.accountNumber) ||
+      (ticket.userName && u.fullName && u.fullName.toLowerCase() === ticket.userName.toLowerCase())
+    );
+    const enrichedTicket: SupportTicket = user ? {
+      ...ticket,
+      userName: user.fullName || ticket.userName,
+      userEmail: user.email || ticket.userEmail,
+      accountNumber: user.accountNumber || ticket.accountNumber
+    } : ticket;
+
+    const idx = this.db.supportTickets.findIndex(t => t.id === enrichedTicket.id);
     if (idx >= 0) {
-      this.db.supportTickets[idx] = { ...this.db.supportTickets[idx], ...ticket };
+      this.db.supportTickets[idx] = { ...this.db.supportTickets[idx], ...enrichedTicket };
     } else {
-      this.db.supportTickets.unshift(ticket);
+      this.db.supportTickets.unshift(enrichedTicket);
     }
     this.persist();
-    return ticket;
+    return enrichedTicket;
   }
 
   // Virtual Cards
