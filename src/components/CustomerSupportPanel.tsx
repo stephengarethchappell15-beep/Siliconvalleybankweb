@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { User, SupportTicket, SupportMessage } from '../types';
 import { api } from '../services/api';
-import { subscribeSupportTicketsFromFirestore, subscribeTicketMessagesFromFirestore, normalizeSupportMessage } from '../lib/firebase';
+import { subscribeSupportTicketsFromFirestore, subscribeTicketMessagesFromFirestore, getTicketMessagesFromFirestore, normalizeSupportMessage } from '../lib/firebase';
 import { dbStore } from '../services/dbStore';
 import { subscribeRealtimeUpdates } from '../services/realtimeBus';
 import { 
@@ -214,6 +214,23 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({
     if (!selectedTicket || !selectedTicket.id) return;
 
     const currentTicketId = selectedTicket.id;
+
+    // Instant proactive hydration from Firestore
+    getTicketMessagesFromFirestore(currentTicketId).then((fetchedMsgs) => {
+      if (fetchedMsgs && fetchedMsgs.length > 0) {
+        setSelectedTicket(prev => {
+          if (!prev || prev.id !== currentTicketId) return prev;
+          const msgMap = new Map<string, SupportMessage>();
+          (prev.messages || []).forEach(m => msgMap.set(m.id || `${m.senderId}-${m.message}-${m.createdAt}`, m));
+          fetchedMsgs.forEach(m => msgMap.set(m.id || `${m.senderId}-${m.message}-${m.createdAt}`, m));
+          const merged = Array.from(msgMap.values()).sort(
+            (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+          );
+          return { ...prev, messages: merged };
+        });
+      }
+    }).catch((e) => console.warn('Instant ticket messages hydration warning:', e));
+
     const unsubTicketMessages = subscribeTicketMessagesFromFirestore(currentTicketId, (liveMsgs) => {
       if (liveMsgs && liveMsgs.length > 0) {
         setSelectedTicket(prev => {

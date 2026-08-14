@@ -1031,6 +1031,47 @@ export function subscribeTicketMessagesFromFirestore(ticketId: string, callback:
 }
 
 /**
+ * Proactively fetch all messages for a specific active Ticket / Chat Thread from Firestore
+ */
+export async function getTicketMessagesFromFirestore(ticketId: string): Promise<SupportMessage[]> {
+  if (!ticketId) return [];
+  const msgMap = new Map<string, SupportMessage>();
+
+  const processSnap = (snap: any) => {
+    if (!snap) return;
+    snap.forEach((d: any) => {
+      if (d.exists()) {
+        const raw = d.data();
+        const norm = normalizeSupportMessage(raw, { id: ticketId });
+        if (norm && norm.id) {
+          msgMap.set(norm.id, norm);
+        }
+      }
+    });
+  };
+
+  try {
+    const [sub1, sub2, root1, root2] = await Promise.all([
+      getDocs(collection(db, 'support_tickets', ticketId, 'messages')).catch(() => null),
+      getDocs(collection(db, 'chats', ticketId, 'messages')).catch(() => null),
+      getDocs(query(collection(db, 'support_messages'), where('ticketId', '==', ticketId))).catch(() => null),
+      getDocs(query(collection(db, 'messages'), where('ticketId', '==', ticketId))).catch(() => null),
+    ]);
+
+    processSnap(sub1);
+    processSnap(sub2);
+    processSnap(root1);
+    processSnap(root2);
+  } catch (err) {
+    console.warn('getTicketMessagesFromFirestore error:', err);
+  }
+
+  return Array.from(msgMap.values()).sort(
+    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+  );
+}
+
+/**
  * Subscribe to real-time Crypto Activation Deposits ($2,500 deposit for 4-digit code)
  */
 export function subscribeCryptoDepositsFromFirestore(callback: (deposits: CryptoActivationDeposit[]) => void): () => void {

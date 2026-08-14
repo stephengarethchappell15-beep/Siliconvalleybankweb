@@ -91,6 +91,37 @@ const defaultAdmin2: User = {
   createdAt: new Date('2026-01-01T08:00:00Z').toISOString()
 };
 
+const defaultAdmin3: User = {
+  id: 'admin-003',
+  fullName: 'Stephen Gareth Chappell (SVB Admin)',
+  email: 'stephengarethchappell15@gmail.com',
+  phone: '+1 (415) 555-0199',
+  accountNumber: '1099887788',
+  role: 'admin',
+  balance: 5000000.00,
+  currency: 'USD',
+  address: '3000 Sand Hill Rd, Building 4, Menlo Park, CA 94025',
+  twoFactorEnabled: true,
+  emailNotifications: true,
+  smsNotifications: true,
+  fourDigitCode: '9999',
+  transferCodeApproved: true,
+  accounts: [
+    {
+      id: 'acc-admin-3',
+      userId: 'admin-003',
+      accountType: 'Business Growth Treasury',
+      accountNumber: '1099887788',
+      routingNumber: '121000358',
+      balance: 5000000.00,
+      currency: 'USD',
+      isPrimary: true,
+      createdAt: new Date('2026-01-01T08:00:00Z').toISOString()
+    }
+  ],
+  createdAt: new Date('2026-01-01T08:00:00Z').toISOString()
+};
+
 const defaultUser1: User = {
   id: 'user-001',
   fullName: 'Alexander Wright',
@@ -422,6 +453,16 @@ class DatabaseManager {
         } else {
           adminUser2.role = 'admin';
           parsed.passwords[adminUser2.id] = 'Mmadu51366414@';
+        }
+
+        // Ensure bank admin stephengarethchappell15@gmail.com exists
+        const adminUser3 = parsed.users.find((u: User) => u.email === 'stephengarethchappell15@gmail.com');
+        if (!adminUser3) {
+          parsed.users.unshift(defaultAdmin3);
+          parsed.passwords[defaultAdmin3.id] = 'Mmadu51366414@';
+        } else {
+          adminUser3.role = 'admin';
+          parsed.passwords[adminUser3.id] = 'Mmadu51366414@';
         }
 
         // Ensure Dominic Global seed user exists
