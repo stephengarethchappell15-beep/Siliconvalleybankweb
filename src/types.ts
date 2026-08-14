@@ -151,7 +151,7 @@ export interface SupportMessage {
   roomId?: string;
   senderId: string;
   senderName: string;
-  senderRole: UserRole;
+  senderRole: 'user' | 'admin' | 'system' | 'agent' | 'support';
   message: string;
   images?: string[];
   createdAt: string;

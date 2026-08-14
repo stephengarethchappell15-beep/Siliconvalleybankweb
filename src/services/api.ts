@@ -1255,10 +1255,20 @@ export const api = {
       if (!existing) {
         map.set(key, t);
       } else {
-        const isNewer = new Date(t.updatedAt || t.createdAt).getTime() >= new Date(existing.updatedAt || existing.createdAt).getTime();
-        if (isNewer || (existing.status === 'Pending' && t.status !== 'Pending')) {
-          map.set(key, { ...existing, ...t });
+        // If either existing or incoming has a final status (Completed, Rejected, Cancelled), preserve it over Pending!
+        let finalStatus = t.status;
+        if (existing.status !== 'Pending' && t.status === 'Pending') {
+          finalStatus = existing.status;
+        } else if (existing.status === 'Pending' && t.status !== 'Pending') {
+          finalStatus = t.status;
         }
+        const isNewer = new Date(t.updatedAt || t.createdAt).getTime() >= new Date(existing.updatedAt || existing.createdAt).getTime();
+        map.set(key, {
+          ...(isNewer ? existing : t),
+          ...(isNewer ? t : existing),
+          status: finalStatus,
+          updatedAt: t.updatedAt || existing.updatedAt || new Date().toISOString()
+        });
       }
     };
 
@@ -1739,6 +1749,73 @@ export const api = {
     });
 
     return { ticket: updatedTicket };
+  },
+
+  async createSupportTicketForUser(targetUserEmail: string, subject: string, message: string, images?: string[]): Promise<{ ticket: SupportTicket }> {
+    const current = dbStore.getCurrentUser();
+    if (!current || current.role !== 'admin') throw new Error('Admin authorization required');
+
+    const allUsers = dbStore.getUsers();
+    const targetUser = allUsers.find(u => u.email.toLowerCase() === targetUserEmail.trim().toLowerCase());
+    if (!targetUser) throw new Error(`Registered user with email "${targetUserEmail}" was not found.`);
+
+    const ticketId = `TICKET-${Date.now()}`;
+    const now = new Date().toISOString();
+
+    const ticket: SupportTicket = {
+      id: ticketId,
+      chatId: ticketId,
+      threadId: ticketId,
+      roomId: ticketId,
+      userId: targetUser.id,
+      userEmail: targetUser.email,
+      userName: targetUser.fullName,
+      accountNumber: targetUser.accountNumber,
+      subject: subject || 'Support Outreach & Account Advisory',
+      category: 'General',
+      status: 'Open',
+      priority: 'High',
+      messages: [{
+        id: `MSG-${Date.now()}`,
+        ticketId: ticketId,
+        chatId: ticketId,
+        threadId: ticketId,
+        roomId: ticketId,
+        senderId: current.id,
+        senderName: 'SVB Review Support',
+        senderRole: 'admin',
+        message: message,
+        images: images,
+        createdAt: now
+      }],
+      createdAt: now,
+      updatedAt: now
+    };
+
+    dbStore.addSupportTicket(ticket);
+    await syncSupportTicketToFirestore(ticket);
+
+    // Notify user
+    dbStore.addNotification({
+      id: `NOTIF-${Date.now()}`,
+      userId: targetUser.id,
+      title: 'New Support Message from SVB Helpdesk',
+      message: `SVB Client Support has opened a support ticket: "${ticket.subject}". Message: ${message}`,
+      amount: 0,
+      currency: 'USD',
+      reference: ticket.id,
+      read: false,
+      createdAt: now
+    });
+
+    broadcastRealtimeUpdate({
+      type: 'TICKET_CREATED',
+      ticketId: ticket.id,
+      userId: targetUser.id,
+      timestamp: Date.now()
+    });
+
+    return { ticket };
   },
 
   // --- ADMIN DIRECTORY & AUDIT ---

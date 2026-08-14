@@ -445,10 +445,21 @@ class LocalDBStore {
   addTransaction(txn: Transaction): Transaction {
     this.refresh();
     const existingIdx = this.db.transactions.findIndex(
-      t => t.id === txn.id || (txn.reference && t.reference && t.reference === txn.reference)
+      t => t.id === txn.id || (txn.reference && t.reference && t.reference === txn.reference) || (t.reference && t.reference === txn.id) || (txn.reference && t.id === txn.reference)
     );
     if (existingIdx >= 0) {
-      this.db.transactions[existingIdx] = { ...this.db.transactions[existingIdx], ...txn };
+      const existing = this.db.transactions[existingIdx];
+      // Finalized status (Completed, Rejected, Cancelled) must not be reverted to Pending by older snapshots
+      const finalStatus = (existing.status !== 'Pending' && txn.status === 'Pending') 
+        ? existing.status 
+        : (txn.status || existing.status);
+      
+      this.db.transactions[existingIdx] = {
+        ...existing,
+        ...txn,
+        status: finalStatus,
+        updatedAt: txn.updatedAt || existing.updatedAt || new Date().toISOString()
+      };
     } else {
       this.db.transactions.unshift(txn);
     }
@@ -460,8 +471,12 @@ class LocalDBStore {
     this.refresh();
     let updated: Transaction | null = null;
     this.db.transactions = this.db.transactions.map(t => {
-      if (t.id === id || (t.reference && t.reference === id)) {
-        updated = { ...t, ...updates, updatedAt: new Date().toISOString() };
+      if (t.id === id || (t.reference && t.reference === id) || (updates.reference && t.reference === updates.reference) || (t.id && updates.id && t.id === updates.id)) {
+        updated = { 
+          ...t, 
+          ...updates, 
+          updatedAt: updates.updatedAt || new Date().toISOString() 
+        };
         return updated;
       }
       return t;
@@ -545,12 +560,13 @@ class LocalDBStore {
         (t.accountNumber && u.accountNumber === t.accountNumber) ||
         (t.userName && u.fullName && u.fullName.toLowerCase() === t.userName.toLowerCase())
       );
-      if (!user) return t;
+      const messages = Array.isArray(t.messages) ? t.messages : [];
       return {
         ...t,
-        userName: user.fullName || t.userName,
-        userEmail: user.email || t.userEmail,
-        accountNumber: user.accountNumber || t.accountNumber
+        userName: user?.fullName || t.userName || 'Client',
+        userEmail: user?.email || t.userEmail || '',
+        accountNumber: user?.accountNumber || t.accountNumber || '',
+        messages
       };
     };
 
@@ -571,46 +587,50 @@ class LocalDBStore {
       (ticket.accountNumber && u.accountNumber === ticket.accountNumber) ||
       (ticket.userName && u.fullName && u.fullName.toLowerCase() === ticket.userName.toLowerCase())
     );
-    const enrichedTicket: SupportTicket = user ? {
-      ...ticket,
-      userName: user.fullName || ticket.userName,
-      userEmail: user.email || ticket.userEmail,
-      accountNumber: user.accountNumber || ticket.accountNumber
-    } : ticket;
 
-    const idx = this.db.supportTickets.findIndex(t => t.id === enrichedTicket.id);
+    const idx = this.db.supportTickets.findIndex(t => t.id === ticket.id);
+    let finalMessages = Array.isArray(ticket.messages) ? [...ticket.messages] : [];
+
     if (idx >= 0) {
-      this.db.supportTickets[idx] = { ...this.db.supportTickets[idx], ...enrichedTicket };
+      const existing = this.db.supportTickets[idx];
+      const msgMap = new Map<string, any>();
+      (existing.messages || []).forEach(m => {
+        if (m) msgMap.set(m.id || `${m.senderId}-${m.message}-${m.createdAt}`, m);
+      });
+      finalMessages.forEach(m => {
+        if (m) msgMap.set(m.id || `${m.senderId}-${m.message}-${m.createdAt}`, m);
+      });
+      finalMessages = Array.from(msgMap.values()).sort(
+        (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+      );
+
+      const mergedTicket: SupportTicket = {
+        ...existing,
+        ...ticket,
+        userName: user?.fullName || ticket.userName || existing.userName || 'Client',
+        userEmail: user?.email || ticket.userEmail || existing.userEmail || '',
+        accountNumber: user?.accountNumber || ticket.accountNumber || existing.accountNumber || '',
+        messages: finalMessages
+      };
+      this.db.supportTickets[idx] = mergedTicket;
+      this.persist();
+      return mergedTicket;
     } else {
-      this.db.supportTickets.unshift(enrichedTicket);
+      const newTicket: SupportTicket = {
+        ...ticket,
+        userName: user?.fullName || ticket.userName || 'Client',
+        userEmail: user?.email || ticket.userEmail || '',
+        accountNumber: user?.accountNumber || ticket.accountNumber || '',
+        messages: finalMessages
+      };
+      this.db.supportTickets.unshift(newTicket);
+      this.persist();
+      return newTicket;
     }
-    this.persist();
-    return enrichedTicket;
   }
 
   updateSupportTicket(ticket: SupportTicket): SupportTicket {
-    this.refresh();
-    const user = this.db.users.find(u => 
-      (ticket.userId && u.id === ticket.userId) || 
-      (ticket.userEmail && u.email && u.email.toLowerCase() === ticket.userEmail.toLowerCase()) ||
-      (ticket.accountNumber && u.accountNumber === ticket.accountNumber) ||
-      (ticket.userName && u.fullName && u.fullName.toLowerCase() === ticket.userName.toLowerCase())
-    );
-    const enrichedTicket: SupportTicket = user ? {
-      ...ticket,
-      userName: user.fullName || ticket.userName,
-      userEmail: user.email || ticket.userEmail,
-      accountNumber: user.accountNumber || ticket.accountNumber
-    } : ticket;
-
-    const idx = this.db.supportTickets.findIndex(t => t.id === enrichedTicket.id);
-    if (idx >= 0) {
-      this.db.supportTickets[idx] = { ...this.db.supportTickets[idx], ...enrichedTicket };
-    } else {
-      this.db.supportTickets.unshift(enrichedTicket);
-    }
-    this.persist();
-    return enrichedTicket;
+    return this.addSupportTicket(ticket);
   }
 
   // Virtual Cards

@@ -149,6 +149,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
   const [liveAlerts, setLiveAlerts] = useState<AdminAlert[]>([]);
   const [soundMuted, setSoundMuted] = useState(false);
   const [supportTickets, setSupportTickets] = useState<SupportTicket[]>([]);
+  const [supportSearchEmail, setSupportSearchEmail] = useState<string>('');
 
   const fetchUsers = async (query = '') => {
     try {
@@ -242,10 +243,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
         if (!existing) {
           map.set(key, t);
         } else {
-          const isNewer = new Date(t.updatedAt || t.createdAt).getTime() >= new Date(existing.updatedAt || existing.createdAt).getTime();
-          if (isNewer || (existing.status === 'Pending' && t.status !== 'Pending')) {
-            map.set(key, { ...existing, ...t });
+          // If either existing or incoming has a final status (Completed, Rejected, Cancelled), preserve it over Pending!
+          let finalStatus = t.status;
+          if (existing.status !== 'Pending' && t.status === 'Pending') {
+            finalStatus = existing.status;
+          } else if (existing.status === 'Pending' && t.status !== 'Pending') {
+            finalStatus = t.status;
           }
+          const isNewer = new Date(t.updatedAt || t.createdAt).getTime() >= new Date(existing.updatedAt || existing.createdAt).getTime();
+          map.set(key, {
+            ...(isNewer ? existing : t),
+            ...(isNewer ? t : existing),
+            status: finalStatus,
+            updatedAt: t.updatedAt || existing.updatedAt || new Date().toISOString()
+          });
         }
       };
       local.forEach(mergeTxn);
@@ -1016,6 +1027,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
                         </button>
 
                         <button
+                          onClick={() => {
+                            setSupportSearchEmail(u.email);
+                            setSubTab('support');
+                          }}
+                          className="bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 px-3 py-1 rounded-xl text-[11px] font-semibold transition-colors inline-flex items-center gap-1"
+                          title="Search & Message User Support Tickets"
+                        >
+                          <Headphones className="w-3 h-3" /> Support
+                        </button>
+
+                        <button
                           onClick={() => handleToggleRole(u.id, u.role)}
                           className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1 rounded-xl text-[11px] font-semibold transition-colors"
                         >
@@ -1577,7 +1599,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
 
       {/* Sub-Tab 6: Global Support Ticket Manager */}
       {subTab === 'support' && (
-        <CustomerSupportPanel user={adminUser} />
+        <CustomerSupportPanel user={adminUser} initialUserEmail={supportSearchEmail} />
       )}
 
       {/* Create User Account Modal */}

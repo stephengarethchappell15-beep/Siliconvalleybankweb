@@ -12,7 +12,7 @@ import {
   onSnapshot
 } from 'firebase/firestore';
 import config from '../../firebase-applet-config.json';
-import { User, VirtualCard, CryptoActivationDeposit, Tier3VerificationRequest, Transaction, SupportTicket } from '../types';
+import { User, VirtualCard, CryptoActivationDeposit, Tier3VerificationRequest, Transaction, SupportTicket, SupportMessage } from '../types';
 
 // Helper to safely get config values across Vite client and Node server
 const getEnvVal = (key: string): string => {
@@ -566,6 +566,236 @@ export function subscribeAllUsersFromFirestore(callback: (users: User[]) => void
 }
 
 /**
+ * Helper to normalize any incoming SupportMessage from Firestore docs, subcollections, or root payloads
+ */
+export function normalizeSupportMessage(rawMsg: any, parentTicket?: any): SupportMessage {
+  if (!rawMsg) {
+    return {
+      id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      senderId: 'system',
+      senderName: 'System',
+      senderRole: 'system',
+      message: '',
+      createdAt: new Date().toISOString()
+    };
+  }
+
+  if (typeof rawMsg === 'string') {
+    return {
+      id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      senderId: parentTicket?.userId || 'user',
+      senderName: parentTicket?.userName || 'Client',
+      senderRole: 'user',
+      message: rawMsg,
+      createdAt: parentTicket?.createdAt || new Date().toISOString()
+    };
+  }
+
+  const rawText = 
+    rawMsg.message !== undefined && rawMsg.message !== null ? rawMsg.message :
+    rawMsg.text !== undefined && rawMsg.text !== null ? rawMsg.text :
+    rawMsg.content !== undefined && rawMsg.content !== null ? rawMsg.content :
+    rawMsg.body !== undefined && rawMsg.body !== null ? rawMsg.body :
+    rawMsg.msg !== undefined && rawMsg.msg !== null ? rawMsg.msg :
+    rawMsg.messageText !== undefined && rawMsg.messageText !== null ? rawMsg.messageText :
+    rawMsg.description !== undefined && rawMsg.description !== null ? rawMsg.description :
+    '';
+
+  const messageStr = typeof rawText === 'string' ? rawText : (typeof rawText === 'object' ? JSON.stringify(rawText) : String(rawText));
+
+  let images: string[] = [];
+  if (Array.isArray(rawMsg.images)) {
+    images = rawMsg.images.filter(Boolean);
+  } else if (rawMsg.image) {
+    images = [rawMsg.image];
+  } else if (rawMsg.imageUrl) {
+    images = [rawMsg.imageUrl];
+  } else if (rawMsg.attachment) {
+    images = [rawMsg.attachment];
+  } else if (rawMsg.attachmentUrl) {
+    images = [rawMsg.attachmentUrl];
+  }
+
+  const isSenderAdmin = 
+    rawMsg.senderRole === 'admin' || 
+    rawMsg.role === 'admin' || 
+    rawMsg.isAdmin === true || 
+    rawMsg.fromAdmin === true ||
+    (rawMsg.senderName && rawMsg.senderName.toLowerCase().includes('support')) ||
+    (rawMsg.senderName && rawMsg.senderName.toLowerCase().includes('desk'));
+
+  const role: 'admin' | 'user' | 'system' = isSenderAdmin ? 'admin' : (rawMsg.senderRole === 'system' || rawMsg.role === 'system' ? 'system' : 'user');
+
+  const senderName = 
+    rawMsg.senderName || 
+    rawMsg.userName || 
+    rawMsg.name || 
+    rawMsg.sender || 
+    (role === 'admin' ? 'SVB Client Support' : (parentTicket?.userName || 'Client'));
+
+  const senderId = 
+    rawMsg.senderId || 
+    rawMsg.userId || 
+    rawMsg.sender || 
+    (role === 'admin' ? 'admin' : (parentTicket?.userId || 'user'));
+
+  let createdAt = new Date().toISOString();
+  if (rawMsg.createdAt) {
+    if (typeof rawMsg.createdAt === 'string') createdAt = rawMsg.createdAt;
+    else if (rawMsg.createdAt.toDate && typeof rawMsg.createdAt.toDate === 'function') createdAt = rawMsg.createdAt.toDate().toISOString();
+    else if (typeof rawMsg.createdAt === 'number') createdAt = new Date(rawMsg.createdAt).toISOString();
+  } else if (rawMsg.timestamp) {
+    if (typeof rawMsg.timestamp === 'string') createdAt = rawMsg.timestamp;
+    else if (rawMsg.timestamp.toDate && typeof rawMsg.timestamp.toDate === 'function') createdAt = rawMsg.timestamp.toDate().toISOString();
+    else if (typeof rawMsg.timestamp === 'number') createdAt = new Date(rawMsg.timestamp).toISOString();
+  }
+
+  const threadId = rawMsg.ticketId || rawMsg.chatId || rawMsg.threadId || rawMsg.roomId || parentTicket?.id || `TICKET-${Date.now()}`;
+
+  return {
+    id: rawMsg.id || rawMsg._id || `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    ticketId: threadId,
+    chatId: threadId,
+    threadId: threadId,
+    roomId: threadId,
+    senderId,
+    senderName,
+    senderRole: role,
+    message: messageStr,
+    images: images.length > 0 ? images : undefined,
+    createdAt
+  };
+}
+
+/**
+ * Helper to normalize any incoming SupportTicket document
+ */
+export function normalizeSupportTicket(rawDoc: any, docId?: string): SupportTicket {
+  if (!rawDoc) {
+    const id = docId || `TICKET-${Date.now()}`;
+    return {
+      id,
+      chatId: id,
+      threadId: id,
+      roomId: id,
+      userId: '',
+      userEmail: '',
+      userName: 'Client',
+      accountNumber: '',
+      subject: 'Support Inquiry',
+      category: 'General',
+      status: 'Open',
+      priority: 'Medium',
+      messages: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+  }
+
+  const id = rawDoc.id || docId || rawDoc.threadId || rawDoc.chatId || rawDoc.roomId || `TICKET-${Date.now()}`;
+  const nowIso = new Date().toISOString();
+  
+  let createdAt = nowIso;
+  if (rawDoc.createdAt) {
+    if (typeof rawDoc.createdAt === 'string') createdAt = rawDoc.createdAt;
+    else if (rawDoc.createdAt.toDate) createdAt = rawDoc.createdAt.toDate().toISOString();
+    else if (typeof rawDoc.createdAt === 'number') createdAt = new Date(rawDoc.createdAt).toISOString();
+  }
+
+  let updatedAt = createdAt;
+  if (rawDoc.updatedAt) {
+    if (typeof rawDoc.updatedAt === 'string') updatedAt = rawDoc.updatedAt;
+    else if (rawDoc.updatedAt.toDate) updatedAt = rawDoc.updatedAt.toDate().toISOString();
+    else if (typeof rawDoc.updatedAt === 'number') updatedAt = new Date(rawDoc.updatedAt).toISOString();
+  }
+
+  let rawMessages: any[] = [];
+  if (Array.isArray(rawDoc.messages)) {
+    rawMessages = rawDoc.messages;
+  } else if (Array.isArray(rawDoc.chatMessages)) {
+    rawMessages = rawDoc.chatMessages;
+  } else if (Array.isArray(rawDoc.history)) {
+    rawMessages = rawDoc.history;
+  }
+
+  const messages: SupportMessage[] = rawMessages.map(m => normalizeSupportMessage(m, { ...rawDoc, id, createdAt }));
+
+  // If messages is empty, but doc has top-level inquiry / body / message / text, synthesize initial message
+  const rootText = rawDoc.message || rawDoc.text || rawDoc.content || rawDoc.body || rawDoc.description || rawDoc.inquiry;
+  if (messages.length === 0 && rootText) {
+    const textStr = typeof rootText === 'string' ? rootText : JSON.stringify(rootText);
+    if (textStr.trim()) {
+      messages.push({
+        id: `msg-initial-${id}`,
+        ticketId: id,
+        chatId: id,
+        threadId: id,
+        roomId: id,
+        senderId: rawDoc.userId || 'user',
+        senderName: rawDoc.userName || rawDoc.userEmail?.split('@')[0] || 'Client',
+        senderRole: 'user',
+        message: textStr.trim(),
+        images: Array.isArray(rawDoc.images) ? rawDoc.images : (rawDoc.image ? [rawDoc.image] : undefined),
+        createdAt
+      });
+    }
+  }
+
+  return {
+    id,
+    chatId: id,
+    threadId: id,
+    roomId: id,
+    userId: rawDoc.userId || '',
+    userEmail: rawDoc.userEmail || rawDoc.email || '',
+    userName: rawDoc.userName || rawDoc.name || (rawDoc.userEmail ? rawDoc.userEmail.split('@')[0] : 'Client'),
+    accountNumber: rawDoc.accountNumber || '',
+    subject: rawDoc.subject || rawDoc.title || rawDoc.topic || 'Support Consultation',
+    category: rawDoc.category || 'General',
+    status: (rawDoc.status === 'Resolved' || rawDoc.status === 'Closed' || rawDoc.status === 'In Progress') ? rawDoc.status : 'Open',
+    priority: (rawDoc.priority === 'High' || rawDoc.priority === 'Low') ? rawDoc.priority : 'Medium',
+    messages,
+    createdAt,
+    updatedAt
+  };
+}
+
+/**
+ * Merge two ticket representations preserving all messages and highest metadata fidelity
+ */
+export function mergeSupportTickets(existing: SupportTicket, incoming: SupportTicket): SupportTicket {
+  const msgMap = new Map<string, SupportMessage>();
+
+  (existing.messages || []).forEach(m => {
+    if (!m) return;
+    const key = m.id || `${m.senderId}-${m.message}-${m.createdAt}`;
+    msgMap.set(key, m);
+  });
+
+  (incoming.messages || []).forEach(m => {
+    if (!m) return;
+    const key = m.id || `${m.senderId}-${m.message}-${m.createdAt}`;
+    msgMap.set(key, m);
+  });
+
+  const mergedMessages = Array.from(msgMap.values()).sort(
+    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+  );
+
+  return {
+    ...existing,
+    ...incoming,
+    userEmail: incoming.userEmail || existing.userEmail,
+    userName: incoming.userName || existing.userName,
+    accountNumber: incoming.accountNumber || existing.accountNumber,
+    messages: mergedMessages,
+    updatedAt: new Date(incoming.updatedAt || 0).getTime() >= new Date(existing.updatedAt || 0).getTime() 
+      ? (incoming.updatedAt || existing.updatedAt) 
+      : existing.updatedAt
+  };
+}
+
+/**
  * Sync Support Ticket & Messages to Firestore for permanent persistence across support_tickets and chats collections
  */
 export async function syncSupportTicketToFirestore(ticket: SupportTicket): Promise<void> {
@@ -573,12 +803,14 @@ export async function syncSupportTicketToFirestore(ticket: SupportTicket): Promi
   try {
     const threadId = ticket.id;
     const nowIso = new Date().toISOString();
+    const normalized = normalizeSupportTicket(ticket, threadId);
+
     const payload = cleanUndefined({
-      ...ticket,
+      ...normalized,
       chatId: threadId,
       threadId: threadId,
       roomId: threadId,
-      updatedAt: ticket.updatedAt || nowIso
+      updatedAt: normalized.updatedAt || nowIso
     });
 
     // 1. Write to support_tickets and chats documents with matching Room ID
@@ -587,12 +819,13 @@ export async function syncSupportTicketToFirestore(ticket: SupportTicket): Promi
       setDoc(doc(db, 'chats', threadId), payload, { merge: true })
     ]);
 
-    // 2. Also mirror messages to messages & support_messages collections if present
-    if (Array.isArray(ticket.messages) && ticket.messages.length > 0) {
-      const writeMsgPromises = ticket.messages.map((m) => {
-        const msgId = m.id || `MSG-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    // 2. Mirror each message to subcollections & root message collections
+    if (Array.isArray(normalized.messages) && normalized.messages.length > 0) {
+      const writeMsgPromises = normalized.messages.map((m) => {
+        const normalizedMsg = normalizeSupportMessage(m, normalized);
+        const msgId = normalizedMsg.id;
         const msgPayload = cleanUndefined({
-          ...m,
+          ...normalizedMsg,
           id: msgId,
           ticketId: threadId,
           chatId: threadId,
@@ -614,7 +847,7 @@ export async function syncSupportTicketToFirestore(ticket: SupportTicket): Promi
 }
 
 /**
- * Get Support Tickets / Chat Conversations from Firestore
+ * Get Support Tickets / Chat Conversations from Firestore with Subcollection message hydration
  */
 export async function getSupportTicketsFromFirestore(userId?: string, isAdmin?: boolean): Promise<SupportTicket[]> {
   try {
@@ -627,22 +860,19 @@ export async function getSupportTicketsFromFirestore(userId?: string, isAdmin?: 
 
     const processDoc = (d: any) => {
       if (d && d.exists()) {
-        const t = d.data() as SupportTicket;
-        const threadId = t.id || d.id;
-        const normalizedTicket: SupportTicket = {
-          ...t,
-          id: threadId,
-          chatId: threadId,
-          threadId: threadId,
-          roomId: threadId
-        };
+        const raw = d.data();
+        const threadId = raw.id || d.id;
+        const normalizedTicket = normalizeSupportTicket(raw, threadId);
+        
         const isMatch = isAdmin || !userId || normalizedTicket.userId === userId || 
           (normalizedTicket.userEmail && userId.includes('@') && normalizedTicket.userEmail.toLowerCase() === userId.toLowerCase());
         
         if (isMatch) {
           const existing = ticketMap.get(threadId);
-          if (!existing || new Date(normalizedTicket.updatedAt || normalizedTicket.createdAt).getTime() >= new Date(existing.updatedAt || existing.createdAt).getTime()) {
+          if (!existing) {
             ticketMap.set(threadId, normalizedTicket);
+          } else {
+            ticketMap.set(threadId, mergeSupportTickets(existing, normalizedTicket));
           }
         }
       }
@@ -650,6 +880,25 @@ export async function getSupportTicketsFromFirestore(userId?: string, isAdmin?: 
 
     if (supportSnap) supportSnap.forEach(processDoc);
     if (chatSnap) chatSnap.forEach(processDoc);
+
+    // Hydrate subcollection messages for tickets with empty messages
+    const ticketList = Array.from(ticketMap.values());
+    await Promise.all(ticketList.map(async (t) => {
+      if (!t.messages || t.messages.length === 0) {
+        try {
+          const [sub1, sub2] = await Promise.all([
+            getDocs(collection(db, 'support_tickets', t.id, 'messages')).catch(() => null),
+            getDocs(collection(db, 'chats', t.id, 'messages')).catch(() => null)
+          ]);
+          const subMsgs: SupportMessage[] = [];
+          if (sub1) sub1.forEach(mDoc => subMsgs.push(normalizeSupportMessage(mDoc.data(), t)));
+          if (sub2) sub2.forEach(mDoc => subMsgs.push(normalizeSupportMessage(mDoc.data(), t)));
+          if (subMsgs.length > 0) {
+            ticketMap.set(t.id, mergeSupportTickets(t, { ...t, messages: subMsgs }));
+          }
+        } catch (e) {}
+      }
+    }));
 
     const list = Array.from(ticketMap.values());
     return list.sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime());
@@ -675,20 +924,20 @@ export function subscribeSupportTicketsFromFirestore(userId: string | undefined,
     const processSnapshot = (snap: any) => {
       snap.forEach((d: any) => {
         if (d.exists()) {
-          const t = d.data() as SupportTicket;
-          const threadId = t.id || d.id;
-          const normalizedTicket: SupportTicket = {
-            ...t,
-            id: threadId,
-            chatId: threadId,
-            threadId: threadId,
-            roomId: threadId
-          };
+          const raw = d.data();
+          const threadId = raw.id || d.id;
+          const normalizedTicket = normalizeSupportTicket(raw, threadId);
+          
           const isMatch = isAdmin || !userId || normalizedTicket.userId === userId || 
             (normalizedTicket.userEmail && userId.includes('@') && normalizedTicket.userEmail.toLowerCase() === userId.toLowerCase());
 
           if (isMatch) {
-            ticketMap.set(threadId, normalizedTicket);
+            const existing = ticketMap.get(threadId);
+            if (!existing) {
+              ticketMap.set(threadId, normalizedTicket);
+            } else {
+              ticketMap.set(threadId, mergeSupportTickets(existing, normalizedTicket));
+            }
           }
         }
       });
@@ -704,6 +953,79 @@ export function subscribeSupportTicketsFromFirestore(userId: string | undefined,
     };
   } catch (err) {
     console.warn('subscribeSupportTicketsFromFirestore error:', err);
+    return () => {};
+  }
+}
+
+/**
+ * Subscribe directly to live messages for a specific active Ticket / Chat Thread
+ */
+export function subscribeTicketMessagesFromFirestore(ticketId: string, callback: (messages: SupportMessage[]) => void): () => void {
+  if (!ticketId) return () => {};
+
+  try {
+    const msgMap = new Map<string, SupportMessage>();
+    const unsubs: Array<() => void> = [];
+
+    const emit = () => {
+      const list = Array.from(msgMap.values()).sort(
+        (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+      );
+      callback(list);
+    };
+
+    const processMessageDocs = (snap: any) => {
+      snap.forEach((d: any) => {
+        if (d.exists()) {
+          const raw = d.data();
+          const norm = normalizeSupportMessage(raw, { id: ticketId });
+          if (norm && norm.id) {
+            msgMap.set(norm.id, norm);
+          }
+        }
+      });
+      emit();
+    };
+
+    // 1. Subcollection support_tickets/{ticketId}/messages
+    const unsub1 = onSnapshot(
+      collection(db, 'support_tickets', ticketId, 'messages'),
+      processMessageDocs,
+      (err) => console.warn('Subcollection messages snapshot error:', err)
+    );
+    unsubs.push(unsub1);
+
+    // 2. Subcollection chats/{ticketId}/messages
+    const unsub2 = onSnapshot(
+      collection(db, 'chats', ticketId, 'messages'),
+      processMessageDocs,
+      (err) => console.warn('Chats subcollection messages snapshot error:', err)
+    );
+    unsubs.push(unsub2);
+
+    // 3. Root collection support_messages query
+    const unsub3 = onSnapshot(
+      query(collection(db, 'support_messages'), where('ticketId', '==', ticketId)),
+      processMessageDocs,
+      (err) => console.warn('Root support_messages query snapshot error:', err)
+    );
+    unsubs.push(unsub3);
+
+    // 4. Root collection messages query
+    const unsub4 = onSnapshot(
+      query(collection(db, 'messages'), where('ticketId', '==', ticketId)),
+      processMessageDocs,
+      (err) => console.warn('Root messages query snapshot error:', err)
+    );
+    unsubs.push(unsub4);
+
+    return () => {
+      unsubs.forEach(u => {
+        try { u(); } catch (e) {}
+      });
+    };
+  } catch (err) {
+    console.warn('subscribeTicketMessagesFromFirestore error:', err);
     return () => {};
   }
 }

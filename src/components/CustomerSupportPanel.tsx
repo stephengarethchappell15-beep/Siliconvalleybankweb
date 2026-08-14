@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { User, SupportTicket } from '../types';
+import { User, SupportTicket, SupportMessage } from '../types';
 import { api } from '../services/api';
-import { subscribeSupportTicketsFromFirestore } from '../lib/firebase';
+import { subscribeSupportTicketsFromFirestore, subscribeTicketMessagesFromFirestore, normalizeSupportMessage } from '../lib/firebase';
 import { dbStore } from '../services/dbStore';
 import { subscribeRealtimeUpdates } from '../services/realtimeBus';
 import { 
@@ -22,23 +22,36 @@ import {
   Filter,
   Sparkles,
   Paperclip,
-  Maximize2
+  Maximize2,
+  Mail,
+  UserCheck,
+  ArrowRight,
+  ExternalLink
 } from 'lucide-react';
 
 interface CustomerSupportPanelProps {
   user: User;
+  initialTicketId?: string;
+  initialUserId?: string;
+  initialUserEmail?: string;
 }
 
-export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({ user }) => {
+export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({ 
+  user, 
+  initialTicketId,
+  initialUserId,
+  initialUserEmail 
+}) => {
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [searchFilter, setSearchFilter] = useState('');
+  const [searchFilter, setSearchFilter] = useState(initialUserEmail || '');
   const [statusFilter, setStatusFilter] = useState<'All' | 'Open' | 'In Progress' | 'Resolved'>('All');
 
   // New Ticket Form State
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [targetUserEmail, setTargetUserEmail] = useState('');
   const [subject, setSubject] = useState('');
   const [category, setCategory] = useState<'Deposit' | 'Withdrawal' | 'Account' | 'Security' | 'General'>('General');
   const [priority, setPriority] = useState<'Low' | 'Medium' | 'High'>('Medium');
@@ -70,7 +83,6 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({ user
     };
 
     scroll();
-    // Re-scroll after micro-delays to account for DOM reflow, image rendering, or font layout
     setTimeout(scroll, 50);
     setTimeout(scroll, 180);
   };
@@ -81,17 +93,58 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({ user
     }
   }, [selectedTicket?.id, selectedTicket?.messages?.length, selectedTicket?.messages]);
 
+  const selectBestTicket = (allTickets: SupportTicket[], preferId?: string, preferEmail?: string, preferUid?: string) => {
+    if (!allTickets || allTickets.length === 0) return null;
+    
+    // 1. Direct ticketId match
+    if (preferId) {
+      const match = allTickets.find(t => t.id === preferId || t.chatId === preferId);
+      if (match) return match;
+    }
+
+    // 2. Direct userEmail match
+    if (preferEmail && preferEmail.trim()) {
+      const cleanEmail = preferEmail.trim().toLowerCase();
+      const match = allTickets.find(t => (t.userEmail && t.userEmail.toLowerCase() === cleanEmail));
+      if (match) return match;
+    }
+
+    // 3. Direct userId match
+    if (preferUid && preferUid.trim()) {
+      const match = allTickets.find(t => t.userId === preferUid);
+      if (match) return match;
+    }
+
+    return allTickets[0];
+  };
+
   const fetchTickets = async () => {
     try {
       setLoading(true);
       const res = await api.getSupportTickets();
-      setTickets(res.tickets);
-      if (selectedTicket) {
-        const updated = res.tickets.find(t => t.id === selectedTicket.id);
-        if (updated) setSelectedTicket(updated);
-      } else if (res.tickets.length > 0) {
-        setSelectedTicket(res.tickets[0]);
-      }
+      const freshTickets = res.tickets || [];
+      setTickets(freshTickets);
+      
+      setSelectedTicket(prev => {
+        if (prev) {
+          const updated = freshTickets.find(t => t.id === prev.id);
+          if (updated) {
+            // Keep any live messages merged
+            const currentMsgs = prev.messages || [];
+            const freshMsgs = updated.messages || [];
+            const msgMap = new Map<string, any>();
+            freshMsgs.forEach(m => msgMap.set(m.id || `${m.senderId}-${m.message}-${m.createdAt}`, m));
+            currentMsgs.forEach(m => msgMap.set(m.id || `${m.senderId}-${m.message}-${m.createdAt}`, m));
+            return {
+              ...updated,
+              messages: Array.from(msgMap.values()).sort(
+                (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+              )
+            };
+          }
+        }
+        return selectBestTicket(freshTickets, initialTicketId, initialUserEmail, initialUserId);
+      });
     } catch (err: any) {
       setError(err.message || 'Failed to load support tickets');
     } finally {
@@ -100,19 +153,40 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({ user
   };
 
   useEffect(() => {
+    if (initialUserEmail) {
+      setSearchFilter(initialUserEmail);
+    }
+  }, [initialUserEmail]);
+
+  useEffect(() => {
     fetchTickets();
 
     const unsubFirestore = subscribeSupportTicketsFromFirestore(
       user.role === 'admin' ? undefined : user.id,
       user.role === 'admin',
       (fsTickets) => {
-        if (fsTickets) {
+        if (fsTickets && fsTickets.length > 0) {
           fsTickets.forEach(t => dbStore.addSupportTicket(t));
           setTickets(fsTickets);
           setSelectedTicket(prev => {
-            if (!prev) return fsTickets.length > 0 ? fsTickets[0] : null;
+            if (!prev) {
+              return selectBestTicket(fsTickets, initialTicketId, initialUserEmail, initialUserId);
+            }
             const updated = fsTickets.find(t => t.id === prev.id);
-            return updated || (fsTickets.length > 0 ? fsTickets[0] : null);
+            if (updated) {
+              const currentMsgs = prev.messages || [];
+              const freshMsgs = updated.messages || [];
+              const msgMap = new Map<string, any>();
+              freshMsgs.forEach(m => msgMap.set(m.id || `${m.senderId}-${m.message}-${m.createdAt}`, m));
+              currentMsgs.forEach(m => msgMap.set(m.id || `${m.senderId}-${m.message}-${m.createdAt}`, m));
+              return {
+                ...updated,
+                messages: Array.from(msgMap.values()).sort(
+                  (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+                )
+              };
+            }
+            return fsTickets[0];
           });
         }
       }
@@ -133,7 +207,49 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({ user
       unsubRealtimeBus();
       clearInterval(interval);
     };
-  }, [user.id, user.role]);
+  }, [user.id, user.role, initialTicketId, initialUserEmail, initialUserId]);
+
+  // Live real-time subcollection and query listener for the currently selected active ticket
+  useEffect(() => {
+    if (!selectedTicket || !selectedTicket.id) return;
+
+    const currentTicketId = selectedTicket.id;
+    const unsubTicketMessages = subscribeTicketMessagesFromFirestore(currentTicketId, (liveMsgs) => {
+      if (liveMsgs && liveMsgs.length > 0) {
+        setSelectedTicket(prev => {
+          if (!prev || prev.id !== currentTicketId) return prev;
+          const msgMap = new Map<string, SupportMessage>();
+          (prev.messages || []).forEach(m => msgMap.set(m.id || `${m.senderId}-${m.message}-${m.createdAt}`, m));
+          liveMsgs.forEach(m => msgMap.set(m.id || `${m.senderId}-${m.message}-${m.createdAt}`, m));
+          const merged = Array.from(msgMap.values()).sort(
+            (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+          );
+          return {
+            ...prev,
+            messages: merged
+          };
+        });
+
+        // Also update in dbStore and tickets list state
+        setTickets(prevList => prevList.map(t => {
+          if (t.id === currentTicketId) {
+            const msgMap = new Map<string, SupportMessage>();
+            (t.messages || []).forEach(m => msgMap.set(m.id || `${m.senderId}-${m.message}-${m.createdAt}`, m));
+            liveMsgs.forEach(m => msgMap.set(m.id || `${m.senderId}-${m.message}-${m.createdAt}`, m));
+            const merged = Array.from(msgMap.values()).sort(
+              (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+            );
+            return { ...t, messages: merged };
+          }
+          return t;
+        }));
+      }
+    });
+
+    return () => {
+      unsubTicketMessages();
+    };
+  }, [selectedTicket?.id]);
 
   const handleImageFile = (e: React.ChangeEvent<HTMLInputElement>, isReply: boolean) => {
     const file = e.target.files?.[0];
@@ -162,19 +278,36 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({ user
 
     try {
       setCreateLoading(true);
-      const res = await api.createSupportTicket({
-        subject: subject.trim(),
-        category,
-        priority,
-        message: message.trim() || 'Attached image file',
-        images: createImage ? [createImage] : undefined
-      });
-      setShowCreateModal(false);
-      setSubject('');
-      setMessage('');
-      setCreateImage('');
-      await fetchTickets();
-      setSelectedTicket(res.ticket);
+
+      if (user.role === 'admin' && targetUserEmail.trim()) {
+        const res = await api.createSupportTicketForUser(
+          targetUserEmail.trim(),
+          subject.trim(),
+          message.trim() || 'Attached image file',
+          createImage ? [createImage] : undefined
+        );
+        setShowCreateModal(false);
+        setTargetUserEmail('');
+        setSubject('');
+        setMessage('');
+        setCreateImage('');
+        await fetchTickets();
+        setSelectedTicket(res.ticket);
+      } else {
+        const res = await api.createSupportTicket({
+          subject: subject.trim(),
+          category,
+          priority,
+          message: message.trim() || 'Attached image file',
+          images: createImage ? [createImage] : undefined
+        });
+        setShowCreateModal(false);
+        setSubject('');
+        setMessage('');
+        setCreateImage('');
+        await fetchTickets();
+        setSelectedTicket(res.ticket);
+      }
     } catch (err: any) {
       alert(err.message || 'Failed to submit ticket.');
     } finally {
@@ -230,6 +363,32 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({ user
     };
   };
 
+  // Safe helper to extract text string from any message format
+  const extractMessageText = (m: SupportMessage | any): string => {
+    if (!m) return '';
+    if (typeof m === 'string') return m;
+    const text = m.message !== undefined && m.message !== null ? m.message :
+      m.text !== undefined && m.text !== null ? m.text :
+      m.content !== undefined && m.content !== null ? m.content :
+      m.body !== undefined && m.body !== null ? m.body :
+      m.msg !== undefined && m.msg !== null ? m.msg :
+      m.messageText !== undefined && m.messageText !== null ? m.messageText :
+      m.description !== undefined && m.description !== null ? m.description : '';
+    return typeof text === 'string' ? text : JSON.stringify(text);
+  };
+
+  // Find registered users matching the email/name search query
+  const matchingRegisteredUsers = React.useMemo(() => {
+    if (user.role !== 'admin' || !searchFilter.trim()) return [];
+    const query = searchFilter.toLowerCase().trim();
+    const allUsers = dbStore.getUsers();
+    return allUsers.filter(u => 
+      u.email.toLowerCase().includes(query) || 
+      u.fullName.toLowerCase().includes(query) ||
+      (u.accountNumber && u.accountNumber.includes(query))
+    );
+  }, [user.role, searchFilter]);
+
   const filteredTickets = tickets.filter(t => {
     const details = getUserDetails(t);
     const matchesStatus = statusFilter === 'All' || t.status === statusFilter;
@@ -240,9 +399,27 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({ user
       details.userEmail.toLowerCase().includes(query) ||
       t.id.toLowerCase().includes(query) ||
       (details.accountNumber && details.accountNumber.toLowerCase().includes(query)) ||
-      (t.messages && t.messages.some(m => m.message.toLowerCase().includes(query)));
+      (t.messages && t.messages.some(m => extractMessageText(m).toLowerCase().includes(query)));
     return matchesStatus && matchesSearch;
   });
+
+  const handleStartMessageWithUser = async (targetUser: User) => {
+    // Check if user already has an existing ticket
+    const existingTicket = tickets.find(t => {
+      const details = getUserDetails(t);
+      return details.userEmail.toLowerCase() === targetUser.email.toLowerCase() || t.userId === targetUser.id;
+    });
+
+    if (existingTicket) {
+      setSelectedTicket(existingTicket);
+      setSearchFilter(targetUser.email);
+    } else {
+      // Prompt admin to start a new support conversation or open modal
+      setTargetUserEmail(targetUser.email);
+      setSubject(`Support Inquiry for ${targetUser.fullName}`);
+      setShowCreateModal(true);
+    }
+  };
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -269,26 +446,77 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({ user
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
               {user.role === 'admin' 
-                ? 'Review, assist, and reply to client inquiries in real time.' 
+                ? 'Review registered client inquiries, search by user email, and send real-time support responses.' 
                 : 'Assigned Lead: Sarah Mitchell | Official Client Service Desk'}
             </p>
           </div>
         </div>
 
         <button
-          onClick={() => setShowCreateModal(true)}
-          className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-4 py-2.5 rounded-xl text-xs flex items-center gap-2 transition-all shadow-md shadow-emerald-500/20 shrink-0"
+          onClick={() => {
+            setTargetUserEmail('');
+            setSubject('');
+            setMessage('');
+            setShowCreateModal(true);
+          }}
+          className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-4 py-2.5 rounded-xl text-xs flex items-center gap-2 transition-all shadow-md shadow-emerald-500/20 shrink-0 cursor-pointer"
         >
           <Plus className="w-4 h-4" />
-          <span>New Support Ticket</span>
+          <span>{user.role === 'admin' ? 'Direct Message / New Ticket' : 'New Support Ticket'}</span>
         </button>
       </div>
+
+      {/* Admin Email Search & Registered User Match Quick Bar */}
+      {user.role === 'admin' && matchingRegisteredUsers.length > 0 && searchFilter.trim() && (
+        <div className="bg-slate-900/90 border border-emerald-500/30 rounded-2xl p-4 shadow-lg space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5 uppercase tracking-wider">
+              <UserCheck className="w-4 h-4" />
+              Registered User Directory Match ({matchingRegisteredUsers.length})
+            </span>
+            <span className="text-[11px] text-slate-400">Search: "{searchFilter}"</span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {matchingRegisteredUsers.map(regUser => {
+              const userTicket = tickets.find(t => {
+                const det = getUserDetails(t);
+                return det.userEmail.toLowerCase() === regUser.email.toLowerCase() || t.userId === regUser.id;
+              });
+
+              return (
+                <div 
+                  key={regUser.id}
+                  className="bg-slate-950 border border-slate-800 rounded-xl p-3 flex items-center justify-between gap-2 hover:border-slate-700 transition-colors"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="font-bold text-white text-xs truncate">{regUser.fullName}</div>
+                    <div className="text-[11px] text-emerald-400 font-mono flex items-center gap-1 truncate">
+                      <Mail className="w-3 h-3 shrink-0" />
+                      <span className="truncate">{regUser.email}</span>
+                    </div>
+                    <div className="text-[10px] text-slate-400 font-mono mt-0.5">Acc #{regUser.accountNumber}</div>
+                  </div>
+
+                  <button
+                    onClick={() => handleStartMessageWithUser(regUser)}
+                    className="bg-emerald-500/20 hover:bg-emerald-500 text-emerald-300 hover:text-slate-950 border border-emerald-500/40 text-[11px] font-bold px-2.5 py-1.5 rounded-lg flex items-center gap-1 transition-all shrink-0 cursor-pointer"
+                  >
+                    <span>{userTicket ? 'Open Chat' : 'Message'}</span>
+                    <ArrowRight className="w-3 h-3" />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Main Grid: Ticket List + Message View */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         
         {/* Left Column: Tickets & Filter */}
-        <div className="lg:col-span-5 bg-slate-900 border border-slate-800 rounded-3xl p-4 shadow-xl flex flex-col h-[600px]">
+        <div className="lg:col-span-5 bg-slate-900 border border-slate-800 rounded-3xl p-4 shadow-xl flex flex-col h-[650px]">
           <div className="px-2 pb-3 border-b border-slate-800 space-y-2.5">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
@@ -300,16 +528,24 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({ user
               </span>
             </div>
 
-            {/* Search Input */}
+            {/* Search Input for User Email & Subject */}
             <div className="relative">
               <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 value={searchFilter}
                 onChange={(e) => setSearchFilter(e.target.value)}
-                placeholder="Search ticket subject, client, or ID..."
-                className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500/50 rounded-xl pl-8 pr-3 py-1.5 text-xs text-white placeholder-slate-500 outline-none"
+                placeholder="Search user email, client name, subject, or account #..."
+                className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500/50 rounded-xl pl-8 pr-8 py-2 text-xs text-white placeholder-slate-500 outline-none transition-colors"
               />
+              {searchFilter && (
+                <button
+                  onClick={() => setSearchFilter('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
 
             {/* Status Filter Tabs */}
@@ -320,7 +556,7 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({ user
                   onClick={() => setStatusFilter(st)}
                   className={`px-2.5 py-1 rounded-lg font-medium transition-colors shrink-0 ${
                     statusFilter === st 
-                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' 
+                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold' 
                       : 'text-slate-400 hover:text-slate-200 bg-slate-950/60'
                   }`}
                 >
@@ -338,83 +574,124 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({ user
             ) : filteredTickets.length === 0 ? (
               <div className="text-center py-12 px-4 text-slate-500 space-y-2">
                 <MessageSquare className="w-8 h-8 mx-auto text-slate-600" />
-                <p className="text-xs">No support tickets found.</p>
-                <p className="text-[11px] text-slate-600">Click "New Support Ticket" above to open an inquiry.</p>
+                <p className="text-xs font-semibold text-slate-400">No support tickets found matching query.</p>
+                {user.role === 'admin' ? (
+                  <p className="text-[11px] text-slate-500">
+                    Search by registered user email or click "Direct Message / New Ticket" to message a client.
+                  </p>
+                ) : (
+                  <p className="text-[11px] text-slate-600">Click "New Support Ticket" above to open an inquiry.</p>
+                )}
               </div>
             ) : (
-              filteredTickets.map((t) => (
-                <button
-                  key={t.id}
-                  onClick={() => setSelectedTicket(t)}
-                  className={`w-full text-left p-3.5 rounded-2xl border transition-all ${
-                    selectedTicket?.id === t.id
-                      ? 'bg-slate-800 border-emerald-500/50 shadow-md'
-                      : 'bg-slate-950/60 border-slate-800/80 hover:bg-slate-950'
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-semibold text-xs text-slate-100 truncate">{t.subject}</span>
-                    <span className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded-full border shrink-0 ${
-                      t.status === 'Open' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
-                      t.status === 'In Progress' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
-                      'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                    }`}>
-                      {t.status}
-                    </span>
-                  </div>
+              filteredTickets.map((t) => {
+                const userDet = getUserDetails(t);
+                const isSelected = selectedTicket?.id === t.id;
+                const messageCount = (t.messages || []).length;
+                const lastMsg = messageCount > 0 ? t.messages[messageCount - 1] : null;
+                const lastMsgText = lastMsg ? extractMessageText(lastMsg) : '';
 
-                  {user.role === 'admin' && (
-                    <p className="text-[11px] text-slate-300 mt-1 truncate">
-                      {getUserDetails(t).userName} <span className="text-slate-500 text-[10px]">({getUserDetails(t).userEmail})</span>
-                    </p>
-                  )}
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => setSelectedTicket(t)}
+                    className={`w-full text-left p-3.5 rounded-2xl border transition-all cursor-pointer ${
+                      isSelected
+                        ? 'bg-slate-800 border-emerald-500/60 shadow-md ring-1 ring-emerald-500/20'
+                        : 'bg-slate-950/60 border-slate-800/80 hover:bg-slate-950 hover:border-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-semibold text-xs text-slate-100 truncate">{t.subject}</span>
+                      <span className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded-full border shrink-0 ${
+                        t.status === 'Open' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
+                        t.status === 'In Progress' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
+                        'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                      }`}>
+                        {t.status}
+                      </span>
+                    </div>
 
-                  <div className="flex items-center justify-between text-[10px] text-slate-400 mt-2">
-                    <span className="bg-slate-900 border border-slate-800 px-2 py-0.5 rounded-md text-slate-300">
-                      {t.category}
-                    </span>
-                    <span className="flex items-center gap-1 font-mono">
-                      <Clock className="w-3 h-3 text-slate-500" />
-                      {new Date(t.updatedAt || t.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </span>
-                  </div>
-                </button>
-              ))
+                    {/* Registered Email & User Details Badge */}
+                    <div className="mt-1.5 space-y-0.5">
+                      <div className="flex items-center gap-1.5 text-xs text-white font-medium">
+                        <UserIcon className="w-3 h-3 text-slate-400 shrink-0" />
+                        <span className="truncate">{userDet.userName}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-[11px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20 w-fit max-w-full truncate">
+                        <Mail className="w-3 h-3 shrink-0 text-emerald-400" />
+                        <span className="truncate">{userDet.userEmail || 'No Email Recorded'}</span>
+                      </div>
+                    </div>
+
+                    {/* Message Preview Snippet */}
+                    {lastMsgText && (
+                      <p className="text-[11px] text-slate-400 line-clamp-1 mt-1.5 italic">
+                        "{lastMsgText}"
+                      </p>
+                    )}
+
+                    <div className="flex items-center justify-between text-[10px] text-slate-400 mt-2.5 pt-2 border-t border-slate-800/60">
+                      <span className="bg-slate-900 border border-slate-800 px-2 py-0.5 rounded text-slate-300 font-mono">
+                        {userDet.accountNumber ? `Acc #${userDet.accountNumber}` : t.category}
+                      </span>
+                      <span className="flex items-center gap-1 font-mono text-slate-400">
+                        <Clock className="w-3 h-3 text-slate-500" />
+                        {new Date(t.updatedAt || t.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })
             )}
           </div>
         </div>
 
         {/* Right Column: Live Chat Thread */}
-        <div className="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-xl flex flex-col h-[600px]">
+        <div className="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-xl flex flex-col h-[650px]">
           {selectedTicket ? (
             <>
-              {/* Ticket Header */}
-              <div className="pb-4 border-b border-slate-800 flex items-start justify-between gap-3">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-bold text-white">{selectedTicket.subject}</h3>
-                    <span className="text-[10px] font-mono text-slate-500">#{selectedTicket.id}</span>
-                  </div>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
-                    Client: <span className="text-slate-200 font-semibold">{getUserDetails(selectedTicket).userName}</span> ({getUserDetails(selectedTicket).userEmail})
-                    {getUserDetails(selectedTicket).accountNumber && (
-                      <span className="ml-2 font-mono text-slate-400">Acc: {getUserDetails(selectedTicket).accountNumber}</span>
-                    )}
-                  </p>
-                </div>
+              {/* Ticket Header with User Registered Email & Details */}
+              <div className="pb-4 border-b border-slate-800 space-y-2">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-bold text-white">{selectedTicket.subject}</h3>
+                      <span className="text-[10px] font-mono text-slate-500">#{selectedTicket.id}</span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 mt-1.5">
+                      <span className="text-xs text-white font-semibold flex items-center gap-1">
+                        <UserIcon className="w-3.5 h-3.5 text-slate-400" />
+                        {getUserDetails(selectedTicket).userName}
+                      </span>
 
-                {user.role === 'admin' && (
-                  <select
-                    value={selectedTicket.status}
-                    onChange={(e) => handleUpdateStatus(selectedTicket.id, e.target.value)}
-                    className="bg-slate-950 border border-slate-700 text-xs text-white rounded-xl px-2.5 py-1 outline-none font-semibold cursor-pointer"
-                  >
-                    <option value="Open">Status: Open</option>
-                    <option value="In Progress">Status: In Progress</option>
-                    <option value="Resolved">Status: Resolved</option>
-                    <option value="Closed">Status: Closed</option>
-                  </select>
-                )}
+                      {/* Prominent Registered Email Badge */}
+                      <span className="inline-flex items-center gap-1 bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 text-xs font-mono px-2 py-0.5 rounded-lg">
+                        <Mail className="w-3 h-3 text-emerald-400" />
+                        <span>Registered Email: {getUserDetails(selectedTicket).userEmail || 'N/A'}</span>
+                      </span>
+
+                      {getUserDetails(selectedTicket).accountNumber && (
+                        <span className="bg-slate-950 text-slate-300 border border-slate-800 text-[11px] font-mono px-2 py-0.5 rounded-lg">
+                          Acc: {getUserDetails(selectedTicket).accountNumber}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {user.role === 'admin' && (
+                    <select
+                      value={selectedTicket.status}
+                      onChange={(e) => handleUpdateStatus(selectedTicket.id, e.target.value)}
+                      className="bg-slate-950 border border-slate-700 text-xs text-white rounded-xl px-2.5 py-1.5 outline-none font-semibold cursor-pointer shrink-0 hover:border-emerald-500 transition-colors"
+                    >
+                      <option value="Open">Status: Open</option>
+                      <option value="In Progress">Status: In Progress</option>
+                      <option value="Resolved">Status: Resolved</option>
+                      <option value="Closed">Status: Closed</option>
+                    </select>
+                  )}
+                </div>
               </div>
 
               {/* Messages Scroll Area */}
@@ -422,58 +699,79 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({ user
                 ref={messagesContainerRef}
                 className="flex-1 overflow-y-auto py-4 space-y-3.5 pr-1 scroll-smooth"
               >
-                {selectedTicket.messages.map((m) => {
-                  const isUser = m.senderRole === 'user';
-                  return (
-                    <div
-                      key={m.id}
-                      className={`flex flex-col max-w-[85%] ${isUser ? 'mr-auto items-start' : 'ml-auto items-end'}`}
-                    >
-                      <div className="flex items-center gap-1.5 text-[10px] text-slate-400 mb-1">
-                        <span className="font-semibold text-slate-300">{m.senderName}</span>
-                        {!isUser && (
-                          <span className="bg-amber-500/10 text-amber-400 text-[9px] px-1.5 rounded font-bold border border-amber-500/20">
-                            SUPPORT DESK
-                          </span>
-                        )}
-                        <span>• {new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                      </div>
-
-                      <div className={`p-3.5 rounded-2xl text-xs space-y-2 ${
-                        isUser 
-                          ? 'bg-slate-950 border border-slate-800 rounded-tl-none text-slate-100' 
-                          : 'bg-emerald-600/30 border border-emerald-500/30 rounded-tr-none text-slate-100'
-                      }`}>
-                        <p className="whitespace-pre-wrap leading-relaxed">{m.message}</p>
-
-                        {/* Render attached images */}
-                        {m.images && m.images.length > 0 && (
-                          <div className="flex flex-wrap gap-2 pt-2">
-                            {m.images.map((img, idx) => (
-                              <div key={idx} className="relative group">
-                                <img
-                                  src={img}
-                                  alt="Attachment"
-                                  onLoad={() => scrollToBottom(false)}
-                                  onClick={() => setSelectedImageModal(img)}
-                                  className="w-28 h-28 object-cover rounded-xl border border-slate-700 cursor-pointer hover:opacity-90 transition-opacity shadow-sm"
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => setSelectedImageModal(img)}
-                                  className="absolute bottom-1.5 right-1.5 p-1 bg-slate-950/80 rounded-md text-white opacity-0 group-hover:opacity-100 transition-opacity"
-                                  title="Expand image"
-                                >
-                                  <Maximize2 className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
+                {!selectedTicket.messages || selectedTicket.messages.length === 0 ? (
+                  <div className="text-center py-10 px-4 bg-slate-950/60 border border-slate-800/80 rounded-2xl space-y-3">
+                    <div className="w-11 h-11 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto shadow-md shadow-emerald-500/10">
+                      <Headphones className="w-5 h-5" />
                     </div>
-                  );
-                })}
+                    <div>
+                      <p className="text-xs font-bold text-white">Support Conversation Active</p>
+                      <p className="text-[11px] text-slate-400 mt-1 max-w-sm mx-auto leading-relaxed">
+                        Ticket opened for client inquiry: <span className="text-emerald-400 font-semibold">{selectedTicket.subject}</span>.
+                        Type your message or attach an image below to communicate directly.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  selectedTicket.messages.map((m, mIdx) => {
+                    const isUser = m.senderRole === 'user';
+                    const msgText = extractMessageText(m);
+
+                    return (
+                      <div
+                        key={m.id || `msg-${mIdx}`}
+                        className={`flex flex-col max-w-[85%] ${isUser ? 'mr-auto items-start' : 'ml-auto items-end'}`}
+                      >
+                        <div className="flex items-center gap-1.5 text-[10px] text-slate-400 mb-1">
+                          <span className="font-semibold text-slate-300">
+                            {m.senderName || (isUser ? 'Client' : 'Support Desk')}
+                          </span>
+                          {!isUser && (
+                            <span className="bg-amber-500/10 text-amber-400 text-[9px] px-1.5 rounded font-bold border border-amber-500/20">
+                              SUPPORT DESK
+                            </span>
+                          )}
+                          <span>• {new Date(m.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                        </div>
+
+                        <div className={`p-3.5 rounded-2xl text-xs space-y-2 ${
+                          isUser 
+                            ? 'bg-slate-950 border border-slate-800 rounded-tl-none text-slate-100' 
+                            : 'bg-emerald-600/30 border border-emerald-500/30 rounded-tr-none text-slate-100'
+                        }`}>
+                          {msgText && (
+                            <p className="whitespace-pre-wrap leading-relaxed break-words font-medium">{msgText}</p>
+                          )}
+
+                          {/* Render attached images */}
+                          {m.images && m.images.length > 0 && (
+                            <div className="flex flex-wrap gap-2 pt-2">
+                              {m.images.map((img, idx) => (
+                                <div key={idx} className="relative group">
+                                  <img
+                                    src={img}
+                                    alt="Attachment"
+                                    onLoad={() => scrollToBottom(false)}
+                                    onClick={() => setSelectedImageModal(img)}
+                                    className="w-28 h-28 object-cover rounded-xl border border-slate-700 cursor-pointer hover:opacity-90 transition-opacity shadow-sm"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedImageModal(img)}
+                                    className="absolute bottom-1.5 right-1.5 p-1 bg-slate-950/80 rounded-md text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                                    title="Expand image"
+                                  >
+                                    <Maximize2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
                 <div ref={messagesEndRef} />
               </div>
 
@@ -488,7 +786,7 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({ user
                   </div>
                   <button
                     onClick={() => setReplyImage('')}
-                    className="text-slate-400 hover:text-rose-400 p-1"
+                    className="text-slate-400 hover:text-rose-400 p-1 cursor-pointer"
                   >
                     <X className="w-4 h-4" />
                   </button>
@@ -514,84 +812,130 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({ user
                   type="text"
                   value={replyText}
                   onChange={(e) => setReplyText(e.target.value)}
-                  placeholder={user.role === 'admin' ? "Reply to client inquiry as Official Support..." : "Type your reply message..."}
-                  className="flex-1 bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl px-4 py-2 text-xs text-white placeholder-slate-500 outline-none transition-colors"
+                  placeholder={user.role === 'admin' ? "Type a reply to registered client..." : "Type your message to support..."}
+                  className="flex-1 bg-slate-950 border border-slate-800 focus:border-emerald-500/50 rounded-xl px-4 py-2.5 text-xs text-white placeholder-slate-500 outline-none transition-colors"
                 />
+
                 <button
                   type="submit"
                   disabled={replyLoading || (!replyText.trim() && !replyImage)}
-                  className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-md shadow-emerald-500/20 disabled:opacity-50 shrink-0"
+                  className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-4 py-2.5 rounded-xl text-xs transition-all shadow-md shadow-emerald-500/20 flex items-center gap-1.5 disabled:opacity-50 cursor-pointer shrink-0"
                 >
-                  {replyLoading ? 'Sending...' : (
-                    <>
-                      <span>Reply</span>
-                      <Send className="w-3.5 h-3.5" />
-                    </>
-                  )}
+                  <Send className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">{replyLoading ? 'Sending...' : 'Send'}</span>
                 </button>
               </form>
             </>
           ) : (
-            <div className="flex flex-col items-center justify-center h-full text-slate-500 space-y-2">
-              <Headphones className="w-10 h-10 text-slate-600" />
-              <p className="text-xs">Select a ticket from the left column to view conversation history.</p>
+            <div className="flex-1 flex flex-col items-center justify-center text-center p-8 text-slate-500 space-y-3">
+              <div className="w-14 h-14 rounded-3xl bg-slate-950 border border-slate-800 flex items-center justify-center text-slate-400 shadow-inner">
+                <MessageSquare className="w-7 h-7" />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-slate-200">No Support Ticket Selected</h4>
+                <p className="text-xs text-slate-400 mt-1 max-w-xs">
+                  {user.role === 'admin' 
+                    ? 'Select a client conversation from the inquiry list on the left, or search a registered user to message.' 
+                    : 'Select an inquiry to view your messages or click "New Support Ticket" to get help.'}
+                </p>
+              </div>
             </div>
           )}
         </div>
       </div>
 
-      {/* New Support Ticket Modal */}
+      {/* Expanded Image Modal */}
+      {selectedImageModal && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-fadeIn"
+          onClick={() => setSelectedImageModal(null)}
+        >
+          <div className="relative max-w-3xl max-h-[90vh] bg-slate-900 border border-slate-700 rounded-2xl overflow-hidden p-2 shadow-2xl">
+            <button
+              onClick={() => setSelectedImageModal(null)}
+              className="absolute top-4 right-4 bg-slate-950/80 text-white p-2 rounded-full hover:bg-slate-800 transition-colors z-10"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <img
+              src={selectedImageModal}
+              alt="Expanded Preview"
+              className="max-h-[85vh] w-auto mx-auto object-contain rounded-xl"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* New Ticket / Direct Message Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-lg w-full shadow-2xl space-y-4 animate-scaleUp">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-lg w-full shadow-2xl space-y-4">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <LifeBuoy className="w-5 h-5 text-emerald-400" />
-                Submit New Customer Inquiry
-              </h3>
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-emerald-500/10 rounded-xl text-emerald-400 border border-emerald-500/20">
+                  <Headphones className="w-4 h-4" />
+                </div>
+                <h3 className="text-sm font-bold text-white">
+                  {user.role === 'admin' ? 'Send Direct Message to Registered Client' : 'Create New Support Ticket'}
+                </h3>
+              </div>
               <button
                 onClick={() => setShowCreateModal(false)}
-                className="text-slate-400 hover:text-white text-xs font-bold bg-slate-800 hover:bg-slate-700 px-2.5 py-1 rounded-lg"
+                className="text-slate-400 hover:text-white p-1 rounded-lg"
               >
-                ✕
+                <X className="w-4 h-4" />
               </button>
             </div>
 
-            <form onSubmit={handleCreateTicket} className="space-y-4 text-xs">
+            <form onSubmit={handleCreateTicket} className="space-y-3.5 text-xs">
+              {user.role === 'admin' && (
+                <div>
+                  <label className="block text-slate-400 font-medium mb-1">Target Registered User Email *</label>
+                  <input
+                    type="email"
+                    required
+                    value={targetUserEmail}
+                    onChange={(e) => setTargetUserEmail(e.target.value)}
+                    placeholder="client@company.com"
+                    className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl px-3.5 py-2.5 text-white outline-none"
+                  />
+                </div>
+              )}
+
               <div>
-                <label className="block font-semibold text-slate-300 mb-1.5">Subject / Brief Summary</label>
+                <label className="block text-slate-400 font-medium mb-1">Subject / Inquiry Title *</label>
                 <input
                   type="text"
+                  required
                   value={subject}
                   onChange={(e) => setSubject(e.target.value)}
-                  placeholder="e.g. Deposit confirmation delay inquiry"
-                  className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl px-3.5 py-2 text-white outline-none"
-                  required
+                  placeholder="e.g. Wire Transfer Verification / Activation Code"
+                  className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl px-3.5 py-2.5 text-white outline-none"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold text-slate-300 mb-1.5">Category</label>
+                  <label className="block text-slate-400 font-medium mb-1">Category</label>
                   <select
                     value={category}
                     onChange={(e) => setCategory(e.target.value as any)}
-                    className="w-full bg-slate-950 border border-slate-800 text-white rounded-xl px-3 py-2 outline-none"
+                    className="w-full bg-slate-950 border border-slate-800 text-white rounded-xl px-3 py-2.5 outline-none"
                   >
-                    <option value="Deposit">Deposit Inquiry</option>
+                    <option value="Deposit">Deposit & Funding</option>
                     <option value="Withdrawal">Withdrawal / Wire</option>
-                    <option value="Account">Account Limits</option>
-                    <option value="Security">Security & 2FA</option>
-                    <option value="General">General Banking</option>
+                    <option value="Security">4-Digit Security Code</option>
+                    <option value="Account">Tier 3 VIP Verification</option>
+                    <option value="General">General Inquiry</option>
                   </select>
                 </div>
 
                 <div>
-                  <label className="block font-semibold text-slate-300 mb-1.5">Priority Level</label>
+                  <label className="block text-slate-400 font-medium mb-1">Priority</label>
                   <select
                     value={priority}
                     onChange={(e) => setPriority(e.target.value as any)}
-                    className="w-full bg-slate-950 border border-slate-800 text-white rounded-xl px-3 py-2 outline-none"
+                    className="w-full bg-slate-950 border border-slate-800 text-white rounded-xl px-3 py-2.5 outline-none"
                   >
                     <option value="Low">Low</option>
                     <option value="Medium">Medium</option>
@@ -601,69 +945,64 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({ user
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-300 mb-1.5">Detailed Message</label>
+                <label className="block text-slate-400 font-medium mb-1">Detailed Message *</label>
                 <textarea
+                  required
+                  rows={4}
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
-                  rows={4}
-                  placeholder="Describe your issue or question in detail..."
-                  className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl p-3 text-white outline-none resize-none"
-                  required
+                  placeholder="Explain your inquiry in detail, provide reference numbers or transaction IDs..."
+                  className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl p-3.5 text-white outline-none resize-none"
                 />
               </div>
 
-              {/* Attach Screenshot / Proof */}
+              {/* Attach Image */}
               <div>
-                <label className="block font-semibold text-slate-300 mb-1.5">Attach Image / Screenshot (Optional)</label>
-                <label className="flex items-center gap-2 p-3 bg-slate-950 border border-slate-800 rounded-xl cursor-pointer hover:border-slate-700 transition-colors">
-                  <Paperclip className="w-4 h-4 text-emerald-400" />
-                  <span className="text-slate-400 text-xs truncate">
-                    {createImage ? 'Image attached successfully' : 'Upload photo, receipt or document (Max 5MB)'}
-                  </span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => handleImageFile(e, false)}
-                    className="hidden"
-                  />
-                </label>
-                {createImage && (
-                  <div className="mt-2 flex items-center gap-2">
-                    <img src={createImage} alt="Preview" className="w-12 h-12 object-cover rounded-lg border border-slate-700" />
-                    <button
-                      type="button"
-                      onClick={() => setCreateImage('')}
-                      className="text-xs text-rose-400 hover:underline"
-                    >
-                      Remove
-                    </button>
-                  </div>
-                )}
+                <label className="block text-slate-400 font-medium mb-1">Attach Image / Screenshot (Optional)</label>
+                <div className="flex items-center gap-3">
+                  <label className="bg-slate-950 border border-slate-800 hover:border-slate-700 px-3 py-2 rounded-xl text-slate-300 flex items-center gap-2 cursor-pointer transition-colors">
+                    <ImageIcon className="w-4 h-4 text-emerald-400" />
+                    <span>Choose File</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => handleImageFile(e, false)}
+                      className="hidden"
+                    />
+                  </label>
+                  {createImage && (
+                    <div className="flex items-center gap-2">
+                      <img src={createImage} alt="Uploaded" className="w-8 h-8 object-cover rounded-lg border border-slate-700" />
+                      <span className="text-emerald-400 font-semibold text-[11px]">Image Attached</span>
+                      <button
+                        type="button"
+                        onClick={() => setCreateImage('')}
+                        className="text-slate-400 hover:text-rose-400"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
 
-              <button
-                type="submit"
-                disabled={createLoading || !subject.trim() || !message.trim()}
-                className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold py-3 rounded-xl text-xs transition-all shadow-md shadow-emerald-500/20 disabled:opacity-50"
-              >
-                {createLoading ? 'Submitting...' : 'Submit Support Ticket'}
-              </button>
+              <div className="pt-3 border-t border-slate-800 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateModal(false)}
+                  className="px-4 py-2 text-slate-400 hover:text-white rounded-xl transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={createLoading}
+                  className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-5 py-2 rounded-xl transition-all shadow-md shadow-emerald-500/20 disabled:opacity-50 cursor-pointer"
+                >
+                  {createLoading ? 'Sending...' : 'Start Conversation'}
+                </button>
+              </div>
             </form>
-          </div>
-        </div>
-      )}
-
-      {/* Full-screen Image Lightbox Modal */}
-      {selectedImageModal && (
-        <div className="fixed inset-0 z-[100] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="relative max-w-3xl w-full bg-slate-900 border border-slate-800 rounded-3xl p-4 shadow-2xl">
-            <button
-              onClick={() => setSelectedImageModal(null)}
-              className="absolute top-3 right-3 text-slate-400 hover:text-white p-2 rounded-xl bg-slate-800 hover:bg-slate-700 transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
-            <img src={selectedImageModal} alt="Expanded View" className="max-h-[80vh] w-auto mx-auto rounded-2xl object-contain" />
           </div>
         </div>
       )}
