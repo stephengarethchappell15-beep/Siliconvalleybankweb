@@ -566,9 +566,36 @@ export function subscribeAllUsersFromFirestore(callback: (users: User[]) => void
 }
 
 /**
- * Helper to normalize any incoming SupportMessage from Firestore docs, subcollections, or root payloads
+ * Canonical Ticket ID Helper - ensures a single deterministic ID representation
  */
-export function normalizeSupportMessage(rawMsg: any, parentTicket?: any): SupportMessage {
+export function getCanonicalTicketId(id?: string): string {
+  if (!id) return '';
+  const clean = String(id).trim();
+  return clean.startsWith('TICKET-') ? clean : `TICKET-${clean}`;
+}
+
+export function getRawTicketId(id?: string): string {
+  if (!id) return '';
+  return String(id).trim().replace(/^TICKET-/, '');
+}
+
+/**
+ * Returns all normalized ID variants for a given ticket identifier
+ */
+export function getTicketIdVariants(ticketId?: string): string[] {
+  if (!ticketId) return [];
+  const raw = String(ticketId).trim();
+  if (!raw) return [];
+  const withPrefix = raw.startsWith('TICKET-') ? raw : `TICKET-${raw}`;
+  const withoutPrefix = raw.replace(/^TICKET-/, '');
+  const set = new Set<string>([withPrefix, withoutPrefix, raw]);
+  return Array.from(set).filter(Boolean);
+}
+
+/**
+ * Helper to normalize any incoming SupportMessage from Firestore or REST payload
+ */
+export function normalizeSupportMessage(rawMsg: any, parentTicket?: Partial<SupportTicket>): SupportMessage {
   if (!rawMsg) {
     return {
       id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -580,43 +607,36 @@ export function normalizeSupportMessage(rawMsg: any, parentTicket?: any): Suppor
     };
   }
 
+  let messageStr = '';
   if (typeof rawMsg === 'string') {
-    return {
-      id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      senderId: parentTicket?.userId || 'user',
-      senderName: parentTicket?.userName || 'Client',
-      senderRole: 'user',
-      message: rawMsg,
-      createdAt: parentTicket?.createdAt || new Date().toISOString()
-    };
+    messageStr = rawMsg;
+  } else if (rawMsg.message) {
+    messageStr = typeof rawMsg.message === 'string' ? rawMsg.message : JSON.stringify(rawMsg.message);
+  } else if (rawMsg.text) {
+    messageStr = typeof rawMsg.text === 'string' ? rawMsg.text : JSON.stringify(rawMsg.text);
+  } else if (rawMsg.content) {
+    messageStr = typeof rawMsg.content === 'string' ? rawMsg.content : JSON.stringify(rawMsg.content);
+  } else if (rawMsg.body) {
+    messageStr = typeof rawMsg.body === 'string' ? rawMsg.body : JSON.stringify(rawMsg.body);
+  } else if (rawMsg.msg) {
+    messageStr = typeof rawMsg.msg === 'string' ? rawMsg.msg : JSON.stringify(rawMsg.msg);
+  } else if (rawMsg.description) {
+    messageStr = typeof rawMsg.description === 'string' ? rawMsg.description : JSON.stringify(rawMsg.description);
+  } else if (rawMsg.inquiry) {
+    messageStr = typeof rawMsg.inquiry === 'string' ? rawMsg.inquiry : JSON.stringify(rawMsg.inquiry);
+  } else if (rawMsg.notes) {
+    messageStr = typeof rawMsg.notes === 'string' ? rawMsg.notes : JSON.stringify(rawMsg.notes);
   }
-
-  const rawText = 
-    rawMsg.message !== undefined && rawMsg.message !== null ? rawMsg.message :
-    rawMsg.text !== undefined && rawMsg.text !== null ? rawMsg.text :
-    rawMsg.content !== undefined && rawMsg.content !== null ? rawMsg.content :
-    rawMsg.body !== undefined && rawMsg.body !== null ? rawMsg.body :
-    rawMsg.msg !== undefined && rawMsg.msg !== null ? rawMsg.msg :
-    rawMsg.messageText !== undefined && rawMsg.messageText !== null ? rawMsg.messageText :
-    rawMsg.description !== undefined && rawMsg.description !== null ? rawMsg.description :
-    rawMsg.details !== undefined && rawMsg.details !== null ? rawMsg.details :
-    rawMsg.inquiry !== undefined && rawMsg.inquiry !== null ? rawMsg.inquiry :
-    rawMsg.notes !== undefined && rawMsg.notes !== null ? rawMsg.notes :
-    '';
-
-  const messageStr = typeof rawText === 'string' ? rawText : (typeof rawText === 'object' ? JSON.stringify(rawText) : String(rawText));
 
   let images: string[] = [];
   if (Array.isArray(rawMsg.images)) {
-    images = rawMsg.images.filter(Boolean);
+    images = rawMsg.images.filter((img: any) => typeof img === 'string' && img.trim().length > 0);
+  } else if (Array.isArray(rawMsg.attachments)) {
+    images = rawMsg.attachments.filter((img: any) => typeof img === 'string' && img.trim().length > 0);
   } else if (rawMsg.image) {
     images = [rawMsg.image];
   } else if (rawMsg.imageUrl) {
     images = [rawMsg.imageUrl];
-  } else if (rawMsg.attachment) {
-    images = [rawMsg.attachment];
-  } else if (rawMsg.attachmentUrl) {
-    images = [rawMsg.attachmentUrl];
   } else if (rawMsg.photoUrl) {
     images = [rawMsg.photoUrl];
   } else if (rawMsg.fileUrl) {
@@ -676,14 +696,20 @@ export function normalizeSupportMessage(rawMsg: any, parentTicket?: any): Suppor
     else if (typeof rawMsg.timestamp === 'number') createdAt = new Date(rawMsg.timestamp).toISOString();
   }
 
-  const threadId = rawMsg.ticketId || rawMsg.chatId || rawMsg.threadId || rawMsg.roomId || parentTicket?.id || `TICKET-${Date.now()}`;
+  const canonicalThreadId = getCanonicalTicketId(rawMsg.ticketId || rawMsg.chatId || rawMsg.threadId || rawMsg.roomId || parentTicket?.id || `TICKET-${Date.now()}`);
+
+  // Create a deterministic message ID if missing or temporary
+  let messageId = rawMsg.id || rawMsg._id;
+  if (!messageId) {
+    messageId = `msg-${senderId}-${new Date(createdAt).getTime()}-${Math.random().toString(36).slice(2, 6)}`;
+  }
 
   return {
-    id: rawMsg.id || rawMsg._id || `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-    ticketId: threadId,
-    chatId: threadId,
-    threadId: threadId,
-    roomId: threadId,
+    id: messageId,
+    ticketId: canonicalThreadId,
+    chatId: canonicalThreadId,
+    threadId: canonicalThreadId,
+    roomId: canonicalThreadId,
     senderId,
     senderName,
     senderRole: role,
@@ -694,32 +720,18 @@ export function normalizeSupportMessage(rawMsg: any, parentTicket?: any): Suppor
 }
 
 /**
- * Returns all normalized ID variants for a given ticket identifier
- */
-export function getTicketIdVariants(ticketId: string): string[] {
-  if (!ticketId) return [];
-  const set = new Set<string>();
-  const raw = ticketId.trim();
-  set.add(raw);
-  if (raw.startsWith('TICKET-')) {
-    set.add(raw.replace(/^TICKET-/, ''));
-  } else {
-    set.add(`TICKET-${raw}`);
-  }
-  return Array.from(set).filter(Boolean);
-}
-
-/**
  * Helper to normalize any incoming SupportTicket document
  */
 export function normalizeSupportTicket(rawDoc: any, docId?: string): SupportTicket {
+  const canonicalId = getCanonicalTicketId(rawDoc?.id || docId || rawDoc?.ticketId || rawDoc?.threadId || rawDoc?.chatId || rawDoc?.roomId || `TICKET-${Date.now()}`);
+  const nowIso = new Date().toISOString();
+
   if (!rawDoc) {
-    const id = docId || `TICKET-${Date.now()}`;
     return {
-      id,
-      chatId: id,
-      threadId: id,
-      roomId: id,
+      id: canonicalId,
+      chatId: canonicalId,
+      threadId: canonicalId,
+      roomId: canonicalId,
       userId: '',
       userEmail: '',
       userName: 'Client',
@@ -729,13 +741,10 @@ export function normalizeSupportTicket(rawDoc: any, docId?: string): SupportTick
       status: 'Open',
       priority: 'Medium',
       messages: [],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      createdAt: nowIso,
+      updatedAt: nowIso
     };
   }
-
-  const id = rawDoc.id || docId || rawDoc.ticketId || rawDoc.threadId || rawDoc.chatId || rawDoc.roomId || `TICKET-${Date.now()}`;
-  const nowIso = new Date().toISOString();
   
   let createdAt = nowIso;
   if (rawDoc.createdAt) {
@@ -762,7 +771,7 @@ export function normalizeSupportTicket(rawDoc: any, docId?: string): SupportTick
     rawMessages = rawDoc.logs;
   }
 
-  const messages: SupportMessage[] = rawMessages.map(m => normalizeSupportMessage(m, { ...rawDoc, id, createdAt }));
+  const messages: SupportMessage[] = rawMessages.map(m => normalizeSupportMessage(m, { ...rawDoc, id: canonicalId, createdAt }));
 
   // If messages is empty, but doc has top-level inquiry / body / message / text, synthesize initial message
   const rootText = rawDoc.message || rawDoc.text || rawDoc.content || rawDoc.body || rawDoc.description || rawDoc.inquiry || rawDoc.notes;
@@ -771,11 +780,11 @@ export function normalizeSupportTicket(rawDoc: any, docId?: string): SupportTick
   if (messages.length === 0 && (rootText || (rootImages && rootImages.length > 0))) {
     const textStr = rootText ? (typeof rootText === 'string' ? rootText : JSON.stringify(rootText)) : (rootImages ? 'Attached proof document' : '');
     messages.push({
-      id: `msg-initial-${id}`,
-      ticketId: id,
-      chatId: id,
-      threadId: id,
-      roomId: id,
+      id: `msg-initial-${canonicalId}`,
+      ticketId: canonicalId,
+      chatId: canonicalId,
+      threadId: canonicalId,
+      roomId: canonicalId,
       senderId: rawDoc.userId || 'user',
       senderName: rawDoc.userName || (rawDoc.userEmail ? rawDoc.userEmail.split('@')[0] : 'Client'),
       senderRole: 'user',
@@ -785,20 +794,40 @@ export function normalizeSupportTicket(rawDoc: any, docId?: string): SupportTick
     });
   }
 
+  // Deduplicate and sort messages
+  const msgMap = new Map<string, SupportMessage>();
+  messages.forEach(m => {
+    if (!m) return;
+    const key = m.id || `${m.senderId}_${(m.message || '').trim()}_${m.createdAt}`;
+    msgMap.set(key, m);
+  });
+  const dedupedMessages = Array.from(msgMap.values()).sort(
+    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+  );
+
+  let status: 'Open' | 'In Progress' | 'Resolved' | 'Closed' = 'Open';
+  if (rawDoc.status === 'Resolved' || rawDoc.status === 'Closed' || rawDoc.status === 'In Progress') {
+    status = rawDoc.status;
+  } else if (rawDoc.status === 'resolved' || rawDoc.status === 'closed') {
+    status = 'Resolved';
+  } else if (rawDoc.status === 'in_progress' || rawDoc.status === 'pending') {
+    status = 'In Progress';
+  }
+
   return {
-    id,
-    chatId: id,
-    threadId: id,
-    roomId: id,
+    id: canonicalId,
+    chatId: canonicalId,
+    threadId: canonicalId,
+    roomId: canonicalId,
     userId: rawDoc.userId || '',
     userEmail: rawDoc.userEmail || rawDoc.email || '',
     userName: rawDoc.userName || rawDoc.name || (rawDoc.userEmail ? rawDoc.userEmail.split('@')[0] : 'Client'),
     accountNumber: rawDoc.accountNumber || '',
     subject: rawDoc.subject || rawDoc.title || rawDoc.topic || 'Customer Support Consultation',
     category: rawDoc.category || 'General',
-    status: (rawDoc.status === 'Resolved' || rawDoc.status === 'Closed' || rawDoc.status === 'In Progress') ? rawDoc.status : 'Open',
+    status,
     priority: (rawDoc.priority === 'High' || rawDoc.priority === 'Low') ? rawDoc.priority : 'Medium',
-    messages,
+    messages: dedupedMessages,
     createdAt,
     updatedAt
   };
@@ -808,34 +837,58 @@ export function normalizeSupportTicket(rawDoc: any, docId?: string): SupportTick
  * Merge two ticket representations preserving all messages and highest metadata fidelity
  */
 export function mergeSupportTickets(existing: SupportTicket, incoming: SupportTicket): SupportTicket {
+  const canonicalId = getCanonicalTicketId(incoming.id || existing.id);
   const msgMap = new Map<string, SupportMessage>();
 
-  (existing.messages || []).forEach(m => {
+  const addMsg = (m: SupportMessage) => {
     if (!m) return;
-    const key = m.id || `${m.senderId}-${m.message}-${m.createdAt}`;
-    msgMap.set(key, m);
-  });
+    // Key by exact ID if stable, or content signature to merge optimistic temp messages
+    const isTemp = m.id && (m.id.startsWith('msg-opt-') || m.id.startsWith('msg-temp-'));
+    const contentKey = `${m.senderId}_${(m.message || '').trim()}_${m.createdAt ? m.createdAt.slice(0, 16) : ''}`;
+    
+    if (isTemp) {
+      // Look if non-temp already exists with same content
+      const existingMatch = Array.from(msgMap.values()).find(
+        ex => `${ex.senderId}_${(ex.message || '').trim()}_${ex.createdAt ? ex.createdAt.slice(0, 16) : ''}` === contentKey
+      );
+      if (!existingMatch) {
+        msgMap.set(m.id, m);
+      }
+    } else {
+      // Real ID: remove any matching temp message
+      for (const [k, v] of msgMap.entries()) {
+        if ((v.id.startsWith('msg-opt-') || v.id.startsWith('msg-temp-')) && 
+            `${v.senderId}_${(v.message || '').trim()}_${v.createdAt ? v.createdAt.slice(0, 16) : ''}` === contentKey) {
+          msgMap.delete(k);
+        }
+      }
+      msgMap.set(m.id || contentKey, m);
+    }
+  };
 
-  (incoming.messages || []).forEach(m => {
-    if (!m) return;
-    const key = m.id || `${m.senderId}-${m.message}-${m.createdAt}`;
-    msgMap.set(key, m);
-  });
+  (existing.messages || []).forEach(addMsg);
+  (incoming.messages || []).forEach(addMsg);
 
   const mergedMessages = Array.from(msgMap.values()).sort(
     (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
   );
 
+  const isIncomingNewer = new Date(incoming.updatedAt || incoming.createdAt || 0).getTime() >= new Date(existing.updatedAt || existing.createdAt || 0).getTime();
+  const mostRecentStatus = isIncomingNewer ? incoming.status : existing.status;
+
   return {
     ...existing,
     ...incoming,
+    id: canonicalId,
+    chatId: canonicalId,
+    threadId: canonicalId,
+    roomId: canonicalId,
+    status: mostRecentStatus || incoming.status || existing.status || 'Open',
     userEmail: incoming.userEmail || existing.userEmail,
     userName: incoming.userName || existing.userName,
     accountNumber: incoming.accountNumber || existing.accountNumber,
     messages: mergedMessages,
-    updatedAt: new Date(incoming.updatedAt || 0).getTime() >= new Date(existing.updatedAt || 0).getTime() 
-      ? (incoming.updatedAt || existing.updatedAt) 
-      : existing.updatedAt
+    updatedAt: isIncomingNewer ? (incoming.updatedAt || new Date().toISOString()) : existing.updatedAt
   };
 }
 
@@ -845,16 +898,17 @@ export function mergeSupportTickets(existing: SupportTicket, incoming: SupportTi
 export async function syncSupportTicketToFirestore(ticket: SupportTicket): Promise<void> {
   if (!ticket || !ticket.id) return;
   try {
-    const threadId = ticket.id;
-    const idVariants = getTicketIdVariants(threadId);
+    const canonicalId = getCanonicalTicketId(ticket.id);
+    const idVariants = getTicketIdVariants(canonicalId);
     const nowIso = new Date().toISOString();
-    const normalized = normalizeSupportTicket(ticket, threadId);
+    const normalized = normalizeSupportTicket(ticket, canonicalId);
 
     const payload = cleanUndefined({
       ...normalized,
-      chatId: threadId,
-      threadId: threadId,
-      roomId: threadId,
+      id: canonicalId,
+      chatId: canonicalId,
+      threadId: canonicalId,
+      roomId: canonicalId,
       updatedAt: normalized.updatedAt || nowIso
     });
 
@@ -873,10 +927,10 @@ export async function syncSupportTicketToFirestore(ticket: SupportTicket): Promi
         const msgPayload = cleanUndefined({
           ...normalizedMsg,
           id: msgId,
-          ticketId: threadId,
-          chatId: threadId,
-          threadId: threadId,
-          roomId: threadId
+          ticketId: canonicalId,
+          chatId: canonicalId,
+          threadId: canonicalId,
+          roomId: canonicalId
         });
 
         const subWrites = idVariants.flatMap(variant => [
@@ -907,18 +961,19 @@ export async function sendSupportMessageToFirestore(
 ): Promise<void> {
   if (!ticketId || !message) return;
   try {
-    const idVariants = getTicketIdVariants(ticketId);
-    const normalizedMsg = normalizeSupportMessage(message, { id: ticketId, ...parentTicket });
+    const canonicalId = getCanonicalTicketId(ticketId);
+    const idVariants = getTicketIdVariants(canonicalId);
+    const normalizedMsg = normalizeSupportMessage(message, { id: canonicalId, ...parentTicket });
     const msgId = normalizedMsg.id;
     const nowIso = new Date().toISOString();
 
     const msgPayload = cleanUndefined({
       ...normalizedMsg,
       id: msgId,
-      ticketId: ticketId,
-      chatId: ticketId,
-      threadId: ticketId,
-      roomId: ticketId
+      ticketId: canonicalId,
+      chatId: canonicalId,
+      threadId: canonicalId,
+      roomId: canonicalId
     });
 
     // 1. Write message to subcollections and root collections
@@ -964,7 +1019,8 @@ export async function deleteSupportMessageFromFirestore(
 ): Promise<void> {
   if (!ticketId || !messageId) return;
   try {
-    const idVariants = getTicketIdVariants(ticketId);
+    const canonicalId = getCanonicalTicketId(ticketId);
+    const idVariants = getTicketIdVariants(canonicalId);
 
     // 1. Delete direct document references across subcollections & root collections
     const directDeletes = idVariants.flatMap(variant => [
@@ -1102,18 +1158,18 @@ export async function getSupportTicketsFromFirestore(userId?: string, isAdmin?: 
     const processDoc = (d: any) => {
       if (d && d.exists()) {
         const raw = d.data();
-        const threadId = raw.id || d.id;
-        const normalizedTicket = normalizeSupportTicket(raw, threadId);
+        const canonicalId = getCanonicalTicketId(raw.id || d.id);
+        const normalizedTicket = normalizeSupportTicket(raw, canonicalId);
         
         const isMatch = isAdmin || !userId || normalizedTicket.userId === userId || 
           (normalizedTicket.userEmail && userId.includes('@') && normalizedTicket.userEmail.toLowerCase() === userId.toLowerCase());
         
         if (isMatch) {
-          const existing = ticketMap.get(threadId);
+          const existing = ticketMap.get(canonicalId);
           if (!existing) {
-            ticketMap.set(threadId, normalizedTicket);
+            ticketMap.set(canonicalId, normalizedTicket);
           } else {
-            ticketMap.set(threadId, mergeSupportTickets(existing, normalizedTicket));
+            ticketMap.set(canonicalId, mergeSupportTickets(existing, normalizedTicket));
           }
         }
       }
@@ -1160,18 +1216,18 @@ export function subscribeSupportTicketsFromFirestore(userId: string | undefined,
       snap.forEach((d: any) => {
         if (d.exists()) {
           const raw = d.data();
-          const threadId = raw.id || d.id;
-          const normalizedTicket = normalizeSupportTicket(raw, threadId);
+          const canonicalId = getCanonicalTicketId(raw.id || d.id);
+          const normalizedTicket = normalizeSupportTicket(raw, canonicalId);
           
           const isMatch = isAdmin || !userId || normalizedTicket.userId === userId || 
             (normalizedTicket.userEmail && userId.includes('@') && normalizedTicket.userEmail.toLowerCase() === userId.toLowerCase());
 
           if (isMatch) {
-            const existing = ticketMap.get(threadId);
+            const existing = ticketMap.get(canonicalId);
             if (!existing) {
-              ticketMap.set(threadId, normalizedTicket);
+              ticketMap.set(canonicalId, normalizedTicket);
             } else {
-              ticketMap.set(threadId, mergeSupportTickets(existing, normalizedTicket));
+              ticketMap.set(canonicalId, mergeSupportTickets(existing, normalizedTicket));
             }
           }
         }
@@ -1199,9 +1255,10 @@ export function subscribeTicketMessagesFromFirestore(ticketId: string, callback:
   if (!ticketId) return () => {};
 
   try {
+    const canonicalId = getCanonicalTicketId(ticketId);
+    const rawId = getRawTicketId(ticketId);
     const msgMap = new Map<string, SupportMessage>();
     const unsubs: Array<() => void> = [];
-    const idVariants = getTicketIdVariants(ticketId);
 
     const emit = () => {
       const list = Array.from(msgMap.values()).sort(
@@ -1216,13 +1273,13 @@ export function subscribeTicketMessagesFromFirestore(ticketId: string, callback:
         snap.docChanges().forEach((change: any) => {
           const d = change.doc;
           const raw = d.data();
-          const norm = normalizeSupportMessage(raw, { id: ticketId });
+          const norm = normalizeSupportMessage(raw, { id: canonicalId });
           const id = norm?.id || d.id;
           if (change.type === 'removed') {
             msgMap.delete(id);
             msgMap.delete(d.id);
             if (raw) {
-              const compKey = `${raw.senderId}-${raw.message}-${raw.createdAt}`;
+              const compKey = `${raw.senderId}_${(raw.message || '').trim()}_${raw.createdAt}`;
               msgMap.delete(compKey);
             }
           } else if (change.type === 'added' || change.type === 'modified') {
@@ -1235,7 +1292,7 @@ export function subscribeTicketMessagesFromFirestore(ticketId: string, callback:
         snap.forEach((d: any) => {
           if (d.exists()) {
             const raw = d.data();
-            const norm = normalizeSupportMessage(raw, { id: ticketId });
+            const norm = normalizeSupportMessage(raw, { id: canonicalId });
             if (norm && norm.id) {
               msgMap.set(norm.id, norm);
             }
@@ -1248,7 +1305,7 @@ export function subscribeTicketMessagesFromFirestore(ticketId: string, callback:
     const processParentDoc = (d: any) => {
       if (d && d.exists()) {
         const raw = d.data();
-        const normTicket = normalizeSupportTicket(raw, ticketId);
+        const normTicket = normalizeSupportTicket(raw, canonicalId);
         if (Array.isArray(normTicket.messages) && normTicket.messages.length > 0) {
           normTicket.messages.forEach(m => {
             if (m && m.id) msgMap.set(m.id, m);
@@ -1258,68 +1315,49 @@ export function subscribeTicketMessagesFromFirestore(ticketId: string, callback:
       }
     };
 
-    idVariants.forEach((variant) => {
-      // 1. Subcollection support_tickets/{variant}/messages
-      const u1 = onSnapshot(
+    // Listen to canonical and raw paths
+    const listenedVariants = Array.from(new Set([canonicalId, rawId])).filter(Boolean);
+
+    listenedVariants.forEach((variant) => {
+      // 1. Subcollections
+      unsubs.push(onSnapshot(
         collection(db, 'support_tickets', variant, 'messages'),
         processMessageDocs,
         (err) => console.warn('Subcollection messages snapshot error:', err)
-      );
-      unsubs.push(u1);
+      ));
 
-      // 2. Subcollection chats/{variant}/messages
-      const u2 = onSnapshot(
+      unsubs.push(onSnapshot(
         collection(db, 'chats', variant, 'messages'),
         processMessageDocs,
         (err) => console.warn('Chats subcollection messages snapshot error:', err)
-      );
-      unsubs.push(u2);
+      ));
 
-      // 3. Root collection support_messages queries
-      const u3 = onSnapshot(
-        query(collection(db, 'support_messages'), where('ticketId', '==', variant)),
-        processMessageDocs,
-        (err) => console.warn('Root support_messages query error:', err)
-      );
-      unsubs.push(u3);
-
-      const u4 = onSnapshot(
-        query(collection(db, 'support_messages'), where('chatId', '==', variant)),
-        processMessageDocs,
-        (err) => console.warn('Root support_messages chatId error:', err)
-      );
-      unsubs.push(u4);
-
-      // 4. Root collection messages queries
-      const u5 = onSnapshot(
-        query(collection(db, 'messages'), where('ticketId', '==', variant)),
-        processMessageDocs,
-        (err) => console.warn('Root messages query error:', err)
-      );
-      unsubs.push(u5);
-
-      const u6 = onSnapshot(
-        query(collection(db, 'messages'), where('chatId', '==', variant)),
-        processMessageDocs,
-        (err) => console.warn('Root messages chatId error:', err)
-      );
-      unsubs.push(u6);
-
-      // 5. Parent docs listener for embedded messages array
-      const u7 = onSnapshot(
+      // 2. Parent docs
+      unsubs.push(onSnapshot(
         doc(db, 'support_tickets', variant),
         processParentDoc,
         (err) => console.warn('Parent ticket doc listener error:', err)
-      );
-      unsubs.push(u7);
+      ));
 
-      const u8 = onSnapshot(
+      unsubs.push(onSnapshot(
         doc(db, 'chats', variant),
         processParentDoc,
         (err) => console.warn('Parent chat doc listener error:', err)
-      );
-      unsubs.push(u8);
+      ));
     });
+
+    // 3. Root collections
+    unsubs.push(onSnapshot(
+      query(collection(db, 'support_messages'), where('ticketId', 'in', listenedVariants)),
+      processMessageDocs,
+      (err) => console.warn('Root support_messages query error:', err)
+    ));
+
+    unsubs.push(onSnapshot(
+      query(collection(db, 'messages'), where('ticketId', 'in', listenedVariants)),
+      processMessageDocs,
+      (err) => console.warn('Root messages query error:', err)
+    ));
 
     return () => {
       unsubs.forEach(u => {
@@ -1337,15 +1375,17 @@ export function subscribeTicketMessagesFromFirestore(ticketId: string, callback:
  */
 export async function getTicketMessagesFromFirestore(ticketId: string): Promise<SupportMessage[]> {
   if (!ticketId) return [];
+  const canonicalId = getCanonicalTicketId(ticketId);
+  const rawId = getRawTicketId(ticketId);
   const msgMap = new Map<string, SupportMessage>();
-  const idVariants = getTicketIdVariants(ticketId);
+  const listenedVariants = Array.from(new Set([canonicalId, rawId])).filter(Boolean);
 
   const processSnap = (snap: any) => {
     if (!snap) return;
     snap.forEach((d: any) => {
       if (d.exists()) {
         const raw = d.data();
-        const norm = normalizeSupportMessage(raw, { id: ticketId });
+        const norm = normalizeSupportMessage(raw, { id: canonicalId });
         if (norm && norm.id) {
           msgMap.set(norm.id, norm);
         }
@@ -1356,7 +1396,7 @@ export async function getTicketMessagesFromFirestore(ticketId: string): Promise<
   const processDoc = (d: any) => {
     if (d && d.exists()) {
       const raw = d.data();
-      const normTicket = normalizeSupportTicket(raw, ticketId);
+      const normTicket = normalizeSupportTicket(raw, canonicalId);
       if (Array.isArray(normTicket.messages)) {
         normTicket.messages.forEach(m => {
           if (m && m.id) msgMap.set(m.id, m);
@@ -1366,13 +1406,11 @@ export async function getTicketMessagesFromFirestore(ticketId: string): Promise<
   };
 
   try {
-    const fetchPromises = idVariants.flatMap((variant) => [
+    const fetchPromises = listenedVariants.flatMap((variant) => [
       getDocs(collection(db, 'support_tickets', variant, 'messages')).catch(() => null),
       getDocs(collection(db, 'chats', variant, 'messages')).catch(() => null),
       getDocs(query(collection(db, 'support_messages'), where('ticketId', '==', variant))).catch(() => null),
-      getDocs(query(collection(db, 'support_messages'), where('chatId', '==', variant))).catch(() => null),
       getDocs(query(collection(db, 'messages'), where('ticketId', '==', variant))).catch(() => null),
-      getDocs(query(collection(db, 'messages'), where('chatId', '==', variant))).catch(() => null),
       getDoc(doc(db, 'support_tickets', variant)).catch(() => null),
       getDoc(doc(db, 'chats', variant)).catch(() => null)
     ]);

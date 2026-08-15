@@ -580,8 +580,13 @@ class LocalDBStore {
         (t.userName && u.fullName && u.fullName.toLowerCase() === t.userName.toLowerCase())
       );
       const messages = Array.isArray(t.messages) ? t.messages : [];
+      const canonicalId = (t.id || '').startsWith('TICKET-') ? t.id : `TICKET-${t.id || Date.now()}`;
       return {
         ...t,
+        id: canonicalId,
+        chatId: canonicalId,
+        threadId: canonicalId,
+        roomId: canonicalId,
         userName: user?.fullName || t.userName || 'Client',
         userEmail: user?.email || t.userEmail || '',
         accountNumber: user?.accountNumber || t.accountNumber || '',
@@ -590,10 +595,46 @@ class LocalDBStore {
     };
 
     const all = this.db.supportTickets.map(enrich);
+    
+    // Deduplicate by canonical ID
+    const dedupMap = new Map<string, SupportTicket>();
+    all.forEach(t => {
+      const canon = t.id;
+      const ex = dedupMap.get(canon);
+      if (!ex) {
+        dedupMap.set(canon, t);
+      } else {
+        const msgMap = new Map<string, any>();
+        (ex.messages || []).forEach(m => {
+          if (m) msgMap.set(m.id || `${m.senderId}_${(m.message || '').trim()}_${m.createdAt}`, m);
+        });
+        (t.messages || []).forEach(m => {
+          if (m) msgMap.set(m.id || `${m.senderId}_${(m.message || '').trim()}_${m.createdAt}`, m);
+        });
+        const mergedMsgs = Array.from(msgMap.values()).sort(
+          (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+        );
+        const isTNewer = new Date(t.updatedAt || t.createdAt || 0).getTime() >= new Date(ex.updatedAt || ex.createdAt || 0).getTime();
+        dedupMap.set(canon, {
+          ...ex,
+          ...t,
+          id: canon,
+          chatId: canon,
+          threadId: canon,
+          roomId: canon,
+          status: isTNewer ? t.status : ex.status,
+          messages: mergedMsgs,
+          updatedAt: isTNewer ? (t.updatedAt || new Date().toISOString()) : ex.updatedAt
+        });
+      }
+    });
+
+    const dedupedList = Array.from(dedupMap.values());
+
     if (isAdmin) {
-      return all.sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime());
+      return dedupedList.sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime());
     }
-    return all
+    return dedupedList
       .filter(t => t.userId === userId || (userId && t.userEmail && t.userEmail.toLowerCase() === userId.toLowerCase()))
       .sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime());
   }
@@ -607,17 +648,25 @@ class LocalDBStore {
       (ticket.userName && u.fullName && u.fullName.toLowerCase() === ticket.userName.toLowerCase())
     );
 
-    const idx = this.db.supportTickets.findIndex(t => t.id === ticket.id);
+    const canonicalId = (ticket.id || '').startsWith('TICKET-') ? ticket.id : `TICKET-${ticket.id || Date.now()}`;
+    const cleanId = canonicalId.replace(/^TICKET-/, '').trim().toLowerCase();
+
+    const idx = this.db.supportTickets.findIndex(t => {
+      const tId = (t.id || '').replace(/^TICKET-/, '').trim().toLowerCase();
+      const cId = (t.chatId || '').replace(/^TICKET-/, '').trim().toLowerCase();
+      return tId === cleanId || cId === cleanId;
+    });
+
     let finalMessages = Array.isArray(ticket.messages) ? [...ticket.messages] : [];
 
     if (idx >= 0) {
       const existing = this.db.supportTickets[idx];
       const msgMap = new Map<string, any>();
       (existing.messages || []).forEach(m => {
-        if (m) msgMap.set(m.id || `${m.senderId}-${m.message}-${m.createdAt}`, m);
+        if (m) msgMap.set(m.id || `${m.senderId}_${(m.message || '').trim()}_${m.createdAt}`, m);
       });
       finalMessages.forEach(m => {
-        if (m) msgMap.set(m.id || `${m.senderId}-${m.message}-${m.createdAt}`, m);
+        if (m) msgMap.set(m.id || `${m.senderId}_${(m.message || '').trim()}_${m.createdAt}`, m);
       });
       finalMessages = Array.from(msgMap.values()).sort(
         (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
@@ -626,10 +675,15 @@ class LocalDBStore {
       const mergedTicket: SupportTicket = {
         ...existing,
         ...ticket,
+        id: canonicalId,
+        chatId: canonicalId,
+        threadId: canonicalId,
+        roomId: canonicalId,
         userName: user?.fullName || ticket.userName || existing.userName || 'Client',
         userEmail: user?.email || ticket.userEmail || existing.userEmail || '',
         accountNumber: user?.accountNumber || ticket.accountNumber || existing.accountNumber || '',
-        messages: finalMessages
+        messages: finalMessages,
+        updatedAt: ticket.updatedAt || new Date().toISOString()
       };
       this.db.supportTickets[idx] = mergedTicket;
       this.persist();
@@ -637,10 +691,16 @@ class LocalDBStore {
     } else {
       const newTicket: SupportTicket = {
         ...ticket,
+        id: canonicalId,
+        chatId: canonicalId,
+        threadId: canonicalId,
+        roomId: canonicalId,
         userName: user?.fullName || ticket.userName || 'Client',
         userEmail: user?.email || ticket.userEmail || '',
         accountNumber: user?.accountNumber || ticket.accountNumber || '',
-        messages: finalMessages
+        messages: finalMessages,
+        createdAt: ticket.createdAt || new Date().toISOString(),
+        updatedAt: ticket.updatedAt || new Date().toISOString()
       };
       this.db.supportTickets.unshift(newTicket);
       this.persist();
@@ -666,8 +726,8 @@ class LocalDBStore {
       const filteredMessages = (ticket.messages || []).filter(m => {
         if (!m) return false;
         if (m.id === messageId) return false;
-        const msgKey = `${m.senderId}-${m.message}-${m.createdAt}`;
-        if (msgKey === messageId) return false;
+        const msgKey = `${m.senderId}_${(m.message || '').trim()}_${m.createdAt}`;
+        if (msgKey === messageId || `${m.senderId}-${m.message}-${m.createdAt}` === messageId) return false;
         return true;
       });
 
