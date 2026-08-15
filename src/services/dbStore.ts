@@ -652,6 +652,37 @@ class LocalDBStore {
     return this.addSupportTicket(ticket);
   }
 
+  deleteSupportMessage(ticketId: string, messageId: string): SupportTicket | null {
+    this.refresh();
+    const cleanTId = (ticketId || '').replace(/^TICKET-/, '').trim().toLowerCase();
+    const idx = this.db.supportTickets.findIndex(t => {
+      const tId = (t.id || '').replace(/^TICKET-/, '').trim().toLowerCase();
+      const cId = (t.chatId || '').replace(/^TICKET-/, '').trim().toLowerCase();
+      return tId === cleanTId || cId === cleanTId;
+    });
+
+    if (idx >= 0) {
+      const ticket = this.db.supportTickets[idx];
+      const filteredMessages = (ticket.messages || []).filter(m => {
+        if (!m) return false;
+        if (m.id === messageId) return false;
+        const msgKey = `${m.senderId}-${m.message}-${m.createdAt}`;
+        if (msgKey === messageId) return false;
+        return true;
+      });
+
+      const updatedTicket: SupportTicket = {
+        ...ticket,
+        messages: filteredMessages,
+        updatedAt: new Date().toISOString()
+      };
+      this.db.supportTickets[idx] = updatedTicket;
+      this.persist();
+      return updatedTicket;
+    }
+    return null;
+  }
+
   // Virtual Cards
   getVirtualCards(userId: string): VirtualCard[] {
     this.refresh();

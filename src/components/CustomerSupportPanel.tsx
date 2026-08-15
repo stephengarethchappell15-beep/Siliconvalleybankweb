@@ -33,7 +33,8 @@ import {
   UserCheck,
   ArrowRight,
   ArrowLeft,
-  ExternalLink
+  ExternalLink,
+  Trash2
 } from 'lucide-react';
 
 interface CustomerSupportPanelProps {
@@ -81,6 +82,7 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({
   const [replyImage, setReplyImage] = useState<string>('');
   const [replyLoading, setReplyLoading] = useState(false);
   const [selectedImageModal, setSelectedImageModal] = useState<string | null>(null);
+  const [deletingMsgId, setDeletingMsgId] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -377,6 +379,78 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({
     } catch (err: any) {
       alert(err.message || 'Failed to update status.');
     }
+  };
+
+  const handleDeleteMessage = async (msgId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (!selectedTicket || !msgId) return;
+
+    if (!window.confirm('Are you sure you want to permanently delete this message from the chat thread and Firebase?')) {
+      return;
+    }
+
+    setDeletingMsgId(msgId);
+
+    // Optimistically remove from state
+    const remaining = (selectedTicket.messages || []).filter(m => 
+      m && m.id !== msgId && `${m.senderId}-${m.message}-${m.createdAt}` !== msgId
+    );
+
+    setSelectedTicket(prev => prev ? {
+      ...prev,
+      messages: remaining,
+      updatedAt: new Date().toISOString()
+    } : prev);
+
+    setTickets(prev => prev.map(t => {
+      if (isSameTicketId(t.id, selectedTicket.id)) {
+        return {
+          ...t,
+          messages: remaining,
+          updatedAt: new Date().toISOString()
+        };
+      }
+      return t;
+    }));
+
+    try {
+      await api.deleteSupportMessage(selectedTicket.id, msgId);
+      await fetchTickets(true);
+    } catch (err: any) {
+      console.error('Delete message error:', err);
+      alert(err.message || 'Failed to delete message from Firebase.');
+      await fetchTickets(true);
+    } finally {
+      setDeletingMsgId(null);
+    }
+  };
+
+  const handleClearTestMessages = async () => {
+    if (!selectedTicket) return;
+    const testMsgs = (selectedTicket.messages || []).filter(m => {
+      const txt = extractMessageText(m).toLowerCase();
+      return txt.includes('$175') || txt.includes('deposit') || txt.includes('test message') || txt.includes('test');
+    });
+
+    if (testMsgs.length === 0) {
+      alert('No test messages found in this thread.');
+      return;
+    }
+
+    if (!window.confirm(`Permanently delete ${testMsgs.length} test message(s) (including $175 deposit messages) from Firebase?`)) {
+      return;
+    }
+
+    for (const m of testMsgs) {
+      const id = m.id || `${m.senderId}-${m.message}-${m.createdAt}`;
+      try {
+        await api.deleteSupportMessage(selectedTicket.id, id);
+      } catch (e) {
+        console.warn('Error deleting test message:', e);
+      }
+    }
+
+    await fetchTickets(true);
   };
 
   const getUserDetails = (t: SupportTicket) => {
@@ -761,16 +835,28 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({
                   </div>
 
                   {user.role === 'admin' && (
-                    <select
-                      value={selectedTicket.status}
-                      onChange={(e) => handleUpdateStatus(selectedTicket.id, e.target.value)}
-                      className="bg-slate-950 border border-slate-700 text-xs text-white rounded-xl px-2.5 py-1.5 outline-none font-semibold cursor-pointer shrink-0 hover:border-emerald-500 transition-colors"
-                    >
-                      <option value="Open">Status: Open</option>
-                      <option value="In Progress">Status: In Progress</option>
-                      <option value="Resolved">Status: Resolved</option>
-                      <option value="Closed">Status: Closed</option>
-                    </select>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleClearTestMessages}
+                        className="px-2.5 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
+                        title="Quickly clear test messages ($175 deposit, etc.) from Firebase"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">Clear Test Messages</span>
+                      </button>
+
+                      <select
+                        value={selectedTicket.status}
+                        onChange={(e) => handleUpdateStatus(selectedTicket.id, e.target.value)}
+                        className="bg-slate-950 border border-slate-700 text-xs text-white rounded-xl px-2.5 py-1.5 outline-none font-semibold cursor-pointer shrink-0 hover:border-emerald-500 transition-colors"
+                      >
+                        <option value="Open">Status: Open</option>
+                        <option value="In Progress">Status: In Progress</option>
+                        <option value="Resolved">Status: Resolved</option>
+                        <option value="Closed">Status: Closed</option>
+                      </select>
+                    </div>
                   )}
                 </div>
               </div>
@@ -797,11 +883,13 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({
                   selectedTicket.messages.map((m, mIdx) => {
                     const isUser = m.senderRole === 'user';
                     const msgText = extractMessageText(m);
+                    const messageIdentifier = m.id || `${m.senderId}-${m.message}-${m.createdAt}`;
+                    const isDeleting = deletingMsgId === messageIdentifier;
 
                     return (
                       <div
-                        key={m.id || `msg-${mIdx}`}
-                        className={`flex flex-col max-w-[85%] ${isUser ? 'mr-auto items-start' : 'ml-auto items-end'}`}
+                        key={messageIdentifier || `msg-${mIdx}`}
+                        className={`group relative flex flex-col max-w-[85%] ${isUser ? 'mr-auto items-start' : 'ml-auto items-end'}`}
                       >
                         <div className="flex items-center gap-1.5 text-[10px] text-slate-400 mb-1">
                           <span className="font-semibold text-slate-300">
@@ -813,6 +901,18 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({
                             </span>
                           )}
                           <span>• {new Date(m.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+
+                          {/* Delete Message Button */}
+                          <button
+                            type="button"
+                            onClick={(e) => handleDeleteMessage(messageIdentifier, e)}
+                            disabled={isDeleting}
+                            className="text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 p-1 rounded-md transition-all ml-1 cursor-pointer flex items-center gap-0.5 opacity-60 group-hover:opacity-100"
+                            title="Permanently delete message from Firebase"
+                          >
+                            <Trash2 className={`w-3 h-3 ${isDeleting ? 'animate-spin text-rose-400' : ''}`} />
+                            <span className="text-[9px] hidden sm:inline">{isDeleting ? 'Deleting...' : 'Delete'}</span>
+                          </button>
                         </div>
 
                         <div className={`p-3.5 rounded-2xl text-xs space-y-2 ${

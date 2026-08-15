@@ -32,7 +32,8 @@ import {
   getTransactionsFromFirestore,
   syncSupportTicketToFirestore,
   getSupportTicketsFromFirestore,
-  sendSupportMessageToFirestore
+  sendSupportMessageToFirestore,
+  deleteSupportMessageFromFirestore
 } from '../lib/firebase';
 
 export const getStoredToken = (): string | null => dbStore.getStoredToken();
@@ -1799,6 +1800,51 @@ export const api = {
     });
 
     return { ticket: updatedTicket };
+  },
+
+  async deleteSupportMessage(ticketId: string, messageId: string): Promise<{ success: boolean; ticket: SupportTicket | null }> {
+    const current = dbStore.getCurrentUser();
+    if (!current) throw new Error('Not authenticated');
+
+    const matchTicket = (t: SupportTicket) => {
+      if (!t) return false;
+      if (t.id === ticketId || t.chatId === ticketId || t.threadId === ticketId) return true;
+      const clean1 = (t.id || '').replace(/^TICKET-/, '').toLowerCase();
+      const clean2 = (ticketId || '').replace(/^TICKET-/, '').toLowerCase();
+      return clean1 === clean2;
+    };
+
+    // Remove from local dbStore
+    let updatedTicket = dbStore.deleteSupportMessage(ticketId, messageId);
+
+    // If not found in local memory, lookup from Firestore tickets
+    if (!updatedTicket) {
+      try {
+        const fsTickets = await getSupportTicketsFromFirestore(undefined, true);
+        const target = fsTickets.find(matchTicket);
+        if (target) {
+          const filtered = (target.messages || []).filter(m => m && m.id !== messageId && `${m.senderId}-${m.message}-${m.createdAt}` !== messageId);
+          updatedTicket = { ...target, messages: filtered, updatedAt: new Date().toISOString() };
+          dbStore.updateSupportTicket(updatedTicket);
+        }
+      } catch (e) {}
+    }
+
+    // Permanently remove from Firebase (subcollections, root collections, and parent doc messages array)
+    try {
+      await deleteSupportMessageFromFirestore(ticketId, messageId, updatedTicket?.messages);
+    } catch (e) {
+      console.warn('Error deleting message from Firestore:', e);
+    }
+
+    broadcastRealtimeUpdate({
+      type: 'SUPPORT_MESSAGE_DELETED',
+      ticketId: updatedTicket ? updatedTicket.id : ticketId,
+      messageId: messageId,
+      timestamp: Date.now()
+    });
+
+    return { success: true, ticket: updatedTicket };
   },
 
   async createSupportTicketForUser(targetUserEmail: string, subject: string, message: string, images?: string[]): Promise<{ ticket: SupportTicket }> {

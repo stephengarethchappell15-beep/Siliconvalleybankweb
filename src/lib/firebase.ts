@@ -955,6 +955,139 @@ export async function sendSupportMessageToFirestore(
 }
 
 /**
+ * Permanently delete an individual message from Firestore across subcollections, root collections, and parent docs
+ */
+export async function deleteSupportMessageFromFirestore(
+  ticketId: string, 
+  messageId: string,
+  remainingMessages?: SupportMessage[]
+): Promise<void> {
+  if (!ticketId || !messageId) return;
+  try {
+    const idVariants = getTicketIdVariants(ticketId);
+
+    // 1. Delete direct document references across subcollections & root collections
+    const directDeletes = idVariants.flatMap(variant => [
+      deleteDoc(doc(db, 'support_tickets', variant, 'messages', messageId)).catch(() => null),
+      deleteDoc(doc(db, 'chats', variant, 'messages', messageId)).catch(() => null)
+    ]);
+
+    await Promise.all([
+      ...directDeletes,
+      deleteDoc(doc(db, 'support_messages', messageId)).catch(() => null),
+      deleteDoc(doc(db, 'messages', messageId)).catch(() => null)
+    ]);
+
+    // 2. Query support_messages and messages by id / ticketId / chatId to catch any custom doc keys
+    const queryDeletes: Promise<any>[] = [];
+    idVariants.forEach(variant => {
+      queryDeletes.push(
+        getDocs(query(collection(db, 'support_messages'), where('ticketId', '==', variant))).then(snap => {
+          const toDelete: Promise<any>[] = [];
+          snap.forEach(d => {
+            const data = d.data();
+            if (d.id === messageId || data.id === messageId || `${data.senderId}-${data.message}-${data.createdAt}` === messageId) {
+              toDelete.push(deleteDoc(d.ref).catch(() => null));
+            }
+          });
+          return Promise.all(toDelete);
+        }).catch(() => null),
+
+        getDocs(query(collection(db, 'messages'), where('ticketId', '==', variant))).then(snap => {
+          const toDelete: Promise<any>[] = [];
+          snap.forEach(d => {
+            const data = d.data();
+            if (d.id === messageId || data.id === messageId || `${data.senderId}-${data.message}-${data.createdAt}` === messageId) {
+              toDelete.push(deleteDoc(d.ref).catch(() => null));
+            }
+          });
+          return Promise.all(toDelete);
+        }).catch(() => null),
+
+        getDocs(query(collection(db, 'support_messages'), where('chatId', '==', variant))).then(snap => {
+          const toDelete: Promise<any>[] = [];
+          snap.forEach(d => {
+            const data = d.data();
+            if (d.id === messageId || data.id === messageId || `${data.senderId}-${data.message}-${data.createdAt}` === messageId) {
+              toDelete.push(deleteDoc(d.ref).catch(() => null));
+            }
+          });
+          return Promise.all(toDelete);
+        }).catch(() => null),
+
+        getDocs(query(collection(db, 'messages'), where('chatId', '==', variant))).then(snap => {
+          const toDelete: Promise<any>[] = [];
+          snap.forEach(d => {
+            const data = d.data();
+            if (d.id === messageId || data.id === messageId || `${data.senderId}-${data.message}-${data.createdAt}` === messageId) {
+              toDelete.push(deleteDoc(d.ref).catch(() => null));
+            }
+          });
+          return Promise.all(toDelete);
+        }).catch(() => null)
+      );
+    });
+
+    await Promise.all(queryDeletes);
+
+    // 3. Update parent ticket documents (filter out the deleted message from embedded messages array)
+    const parentUpdates = idVariants.flatMap(variant => [
+      (async () => {
+        try {
+          const ticketRef = doc(db, 'support_tickets', variant);
+          let msgsToKeep = remainingMessages;
+          if (!msgsToKeep) {
+            const docSnap = await getDoc(ticketRef);
+            if (docSnap.exists()) {
+              const rawMsgs = docSnap.data().messages || [];
+              msgsToKeep = rawMsgs.filter((m: any) => 
+                m && m.id !== messageId && `${m.senderId}-${m.message}-${m.createdAt}` !== messageId
+              );
+            }
+          }
+          if (msgsToKeep) {
+            const lastMsg = msgsToKeep.length > 0 ? (msgsToKeep[msgsToKeep.length - 1].message || 'Attached image') : '';
+            await setDoc(ticketRef, {
+              messages: msgsToKeep,
+              lastMessage: lastMsg,
+              updatedAt: new Date().toISOString()
+            }, { merge: true });
+          }
+        } catch (e) {}
+      })(),
+
+      (async () => {
+        try {
+          const chatRef = doc(db, 'chats', variant);
+          let msgsToKeep = remainingMessages;
+          if (!msgsToKeep) {
+            const docSnap = await getDoc(chatRef);
+            if (docSnap.exists()) {
+              const rawMsgs = docSnap.data().messages || [];
+              msgsToKeep = rawMsgs.filter((m: any) => 
+                m && m.id !== messageId && `${m.senderId}-${m.message}-${m.createdAt}` !== messageId
+              );
+            }
+          }
+          if (msgsToKeep) {
+            const lastMsg = msgsToKeep.length > 0 ? (msgsToKeep[msgsToKeep.length - 1].message || 'Attached image') : '';
+            await setDoc(chatRef, {
+              messages: msgsToKeep,
+              lastMessage: lastMsg,
+              updatedAt: new Date().toISOString()
+            }, { merge: true });
+          }
+        } catch (e) {}
+      })()
+    ]);
+
+    await Promise.all(parentUpdates);
+  } catch (err) {
+    console.warn('deleteSupportMessageFromFirestore error:', err);
+  }
+}
+
+/**
  * Get Support Tickets / Chat Conversations from Firestore with Subcollection message hydration
  */
 export async function getSupportTicketsFromFirestore(userId?: string, isAdmin?: boolean): Promise<SupportTicket[]> {
@@ -1079,15 +1212,36 @@ export function subscribeTicketMessagesFromFirestore(ticketId: string, callback:
 
     const processMessageDocs = (snap: any) => {
       if (!snap) return;
-      snap.forEach((d: any) => {
-        if (d.exists()) {
+      if (typeof snap.docChanges === 'function') {
+        snap.docChanges().forEach((change: any) => {
+          const d = change.doc;
           const raw = d.data();
           const norm = normalizeSupportMessage(raw, { id: ticketId });
-          if (norm && norm.id) {
-            msgMap.set(norm.id, norm);
+          const id = norm?.id || d.id;
+          if (change.type === 'removed') {
+            msgMap.delete(id);
+            msgMap.delete(d.id);
+            if (raw) {
+              const compKey = `${raw.senderId}-${raw.message}-${raw.createdAt}`;
+              msgMap.delete(compKey);
+            }
+          } else if (change.type === 'added' || change.type === 'modified') {
+            if (norm && norm.id) {
+              msgMap.set(norm.id, norm);
+            }
           }
-        }
-      });
+        });
+      } else {
+        snap.forEach((d: any) => {
+          if (d.exists()) {
+            const raw = d.data();
+            const norm = normalizeSupportMessage(raw, { id: ticketId });
+            if (norm && norm.id) {
+              msgMap.set(norm.id, norm);
+            }
+          }
+        });
+      }
       emit();
     };
 
