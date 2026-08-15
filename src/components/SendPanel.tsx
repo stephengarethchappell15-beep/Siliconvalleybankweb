@@ -3,6 +3,7 @@ import { User, Transaction } from '../types';
 import { api } from '../services/api';
 import { subscribeCryptoAddressesFromFirestore } from '../lib/firebase';
 import { COUNTRIES_AND_BANKS } from '../data/countriesAndBanks';
+import { maskAccountNumber } from '../utils/masking';
 import { 
   Send, 
   Globe2, 
@@ -306,7 +307,7 @@ export const SendPanel: React.FC<SendPanelProps> = ({ user, onSuccess, onNavigat
             <p className="text-2xl font-mono font-extrabold text-emerald-400 mt-0.5">
               ${user.balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span className="text-xs text-slate-400 font-sans">USD</span>
             </p>
-            <p className="text-[11px] font-mono text-slate-500 mt-0.5">Account #{user.accountNumber}</p>
+            <p className="text-[11px] font-mono text-slate-500 mt-0.5">Account #{maskAccountNumber(user.accountNumber)}</p>
           </div>
         </div>
       </div>

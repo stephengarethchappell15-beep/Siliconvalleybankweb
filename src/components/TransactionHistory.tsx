@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Transaction } from '../types';
+import { maskAccountNumber } from '../utils/masking';
 import { 
   History, 
   Search, 
@@ -167,7 +168,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
                     {isAdmin && (
                       <td className="py-3.5 px-3">
                         <p className="font-semibold text-white">{txn.userEmail}</p>
-                        <p className="font-mono text-[10px] text-slate-400">Acc #{txn.accountNumber}</p>
+                        <p className="font-mono text-[10px] text-slate-400">Acc #{maskAccountNumber(txn.accountNumber)}</p>
                       </td>
                     )}
                     <td className="py-3.5 px-3 text-slate-200 font-medium">

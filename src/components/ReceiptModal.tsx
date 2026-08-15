@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Transaction } from '../types';
+import { maskAccountNumber } from '../utils/masking';
 import { 
   Building2, 
   CheckCircle2, 
@@ -12,7 +13,9 @@ import {
   Globe2, 
   CreditCard, 
   FileCheck2, 
-  Lock 
+  Lock,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 
 interface ReceiptModalProps {
@@ -21,6 +24,7 @@ interface ReceiptModalProps {
 }
 
 export const ReceiptModal: React.FC<ReceiptModalProps> = ({ transaction, onClose }) => {
+  const [showFullAccount, setShowFullAccount] = useState(false);
   if (!transaction) return null;
 
   const handlePrint = () => {
@@ -207,7 +211,21 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ transaction, onClose
             {/* Account Number */}
             <div className="pt-3 flex justify-between items-center">
               <span className="text-slate-400 font-medium">Account Number:</span>
-              <span className="font-mono font-bold text-slate-200 print-dark-text">{transaction.accountNumber || transaction.senderAccountNumber || transaction.recipientAccountNumber || 'SVB-1084920148'}</span>
+              <div className="flex items-center gap-2">
+                <span className="font-mono font-bold text-slate-200 print-dark-text">
+                  {showFullAccount
+                    ? (transaction.accountNumber || transaction.senderAccountNumber || transaction.recipientAccountNumber || 'SVB-1084920148')
+                    : maskAccountNumber(transaction.accountNumber || transaction.senderAccountNumber || transaction.recipientAccountNumber || 'SVB-1084920148')}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowFullAccount(!showFullAccount)}
+                  className="text-slate-400 hover:text-emerald-400 p-0.5 no-print transition-colors"
+                  title={showFullAccount ? "Mask account number" : "Reveal account number"}
+                >
+                  {showFullAccount ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                </button>
+              </div>
             </div>
 
             {/* Transfer Classification */}
@@ -236,7 +254,9 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ transaction, onClose
             {transaction.recipientAccountNumber && (
               <div className="pt-3 flex justify-between items-center">
                 <span className="text-slate-400 font-medium">Recipient Account / IBAN:</span>
-                <span className="font-mono font-bold text-white print-dark-text">{transaction.recipientAccountNumber}</span>
+                <span className="font-mono font-bold text-white print-dark-text">
+                  {showFullAccount ? transaction.recipientAccountNumber : maskAccountNumber(transaction.recipientAccountNumber)}
+                </span>
               </div>
             )}
 
