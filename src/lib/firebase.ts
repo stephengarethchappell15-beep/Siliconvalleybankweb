@@ -580,6 +580,17 @@ export function getRawTicketId(id?: string): string {
 }
 
 /**
+ * Robust ticket equality checker matching variants with/without TICKET- prefix and case insensitivity
+ */
+export function isSameTicketId(id1?: string, id2?: string): boolean {
+  if (!id1 || !id2) return false;
+  if (id1 === id2) return true;
+  const clean1 = String(id1).replace(/^TICKET-/, '').trim().toLowerCase();
+  const clean2 = String(id2).replace(/^TICKET-/, '').trim().toLowerCase();
+  return clean1 === clean2;
+}
+
+/**
  * Returns all normalized ID variants for a given ticket identifier
  */
 export function getTicketIdVariants(ticketId?: string): string[] {
@@ -842,27 +853,35 @@ export function mergeSupportTickets(existing: SupportTicket, incoming: SupportTi
 
   const addMsg = (m: SupportMessage) => {
     if (!m) return;
-    // Key by exact ID if stable, or content signature to merge optimistic temp messages
+    const msgText = (m.message || '').trim();
+    const msgTime = new Date(m.createdAt || 0).getTime();
     const isTemp = m.id && (m.id.startsWith('msg-opt-') || m.id.startsWith('msg-temp-'));
-    const contentKey = `${m.senderId}_${(m.message || '').trim()}_${m.createdAt ? m.createdAt.slice(0, 16) : ''}`;
     
     if (isTemp) {
-      // Look if non-temp already exists with same content
-      const existingMatch = Array.from(msgMap.values()).find(
-        ex => `${ex.senderId}_${(ex.message || '').trim()}_${ex.createdAt ? ex.createdAt.slice(0, 16) : ''}` === contentKey
-      );
+      // Look if non-temp already exists with same sender and content within a 2-minute window
+      const existingMatch = Array.from(msgMap.values()).find(ex => {
+        if (ex.id && (ex.id.startsWith('msg-opt-') || ex.id.startsWith('msg-temp-'))) return false;
+        if (ex.senderId !== m.senderId) return false;
+        if ((ex.message || '').trim() !== msgText) return false;
+        const exTime = new Date(ex.createdAt || 0).getTime();
+        return Math.abs(exTime - msgTime) < 120000;
+      });
       if (!existingMatch) {
         msgMap.set(m.id, m);
       }
     } else {
       // Real ID: remove any matching temp message
       for (const [k, v] of msgMap.entries()) {
-        if ((v.id.startsWith('msg-opt-') || v.id.startsWith('msg-temp-')) && 
-            `${v.senderId}_${(v.message || '').trim()}_${v.createdAt ? v.createdAt.slice(0, 16) : ''}` === contentKey) {
-          msgMap.delete(k);
+        if (v.id && (v.id.startsWith('msg-opt-') || v.id.startsWith('msg-temp-'))) {
+          if (v.senderId === m.senderId && (v.message || '').trim() === msgText) {
+            const vTime = new Date(v.createdAt || 0).getTime();
+            if (Math.abs(vTime - msgTime) < 120000) {
+              msgMap.delete(k);
+            }
+          }
         }
       }
-      msgMap.set(m.id || contentKey, m);
+      msgMap.set(m.id || `msg-${m.senderId}-${msgTime}`, m);
     }
   };
 
@@ -1204,15 +1223,33 @@ export async function getSupportTicketsFromFirestore(userId?: string, isAdmin?: 
  */
 export function subscribeSupportTicketsFromFirestore(userId: string | undefined, isAdmin: boolean, callback: (tickets: SupportTicket[]) => void): () => void {
   try {
-    const ticketMap = new Map<string, SupportTicket>();
+    const supportMap = new Map<string, SupportTicket>();
+    const chatMap = new Map<string, SupportTicket>();
 
     const emit = () => {
-      const list = Array.from(ticketMap.values());
-      list.sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime());
+      const combinedMap = new Map<string, SupportTicket>();
+
+      const processTicket = (t: SupportTicket) => {
+        const canonicalId = getCanonicalTicketId(t.id);
+        const existing = combinedMap.get(canonicalId);
+        if (!existing) {
+          combinedMap.set(canonicalId, t);
+        } else {
+          combinedMap.set(canonicalId, mergeSupportTickets(existing, t));
+        }
+      };
+
+      supportMap.forEach(processTicket);
+      chatMap.forEach(processTicket);
+
+      const list = Array.from(combinedMap.values()).sort(
+        (a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime()
+      );
       callback(list);
     };
 
-    const processSnapshot = (snap: any) => {
+    const handleSnapshot = (snap: any, targetMap: Map<string, SupportTicket>) => {
+      targetMap.clear();
       snap.forEach((d: any) => {
         if (d.exists()) {
           const raw = d.data();
@@ -1223,20 +1260,15 @@ export function subscribeSupportTicketsFromFirestore(userId: string | undefined,
             (normalizedTicket.userEmail && userId.includes('@') && normalizedTicket.userEmail.toLowerCase() === userId.toLowerCase());
 
           if (isMatch) {
-            const existing = ticketMap.get(canonicalId);
-            if (!existing) {
-              ticketMap.set(canonicalId, normalizedTicket);
-            } else {
-              ticketMap.set(canonicalId, mergeSupportTickets(existing, normalizedTicket));
-            }
+            targetMap.set(canonicalId, normalizedTicket);
           }
         }
       });
       emit();
     };
 
-    const unsubSupport = onSnapshot(collection(db, 'support_tickets'), processSnapshot, (err) => console.warn('Support Tickets snapshot error:', err));
-    const unsubChats = onSnapshot(collection(db, 'chats'), processSnapshot, (err) => console.warn('Chats snapshot error:', err));
+    const unsubSupport = onSnapshot(collection(db, 'support_tickets'), (snap) => handleSnapshot(snap, supportMap), (err) => console.warn('Support Tickets snapshot error:', err));
+    const unsubChats = onSnapshot(collection(db, 'chats'), (snap) => handleSnapshot(snap, chatMap), (err) => console.warn('Chats snapshot error:', err));
 
     return () => {
       unsubSupport();

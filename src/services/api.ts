@@ -33,7 +33,9 @@ import {
   syncSupportTicketToFirestore,
   getSupportTicketsFromFirestore,
   sendSupportMessageToFirestore,
-  deleteSupportMessageFromFirestore
+  deleteSupportMessageFromFirestore,
+  isSameTicketId,
+  getCanonicalTicketId
 } from '../lib/firebase';
 
 export const getStoredToken = (): string | null => dbStore.getStoredToken();
@@ -1658,35 +1660,31 @@ export const api = {
     const current = dbStore.getCurrentUser();
     if (!current) throw new Error('Not authenticated');
 
-    const matchTicket = (t: SupportTicket) => {
-      if (!t) return false;
-      if (t.id === ticketId || t.chatId === ticketId || t.threadId === ticketId) return true;
-      const clean1 = (t.id || '').replace(/^TICKET-/, '').toLowerCase();
-      const clean2 = (ticketId || '').replace(/^TICKET-/, '').toLowerCase();
-      return clean1 === clean2;
-    };
-
+    const canonicalId = getCanonicalTicketId(ticketId);
     const tickets = dbStore.getSupportTickets(undefined, true);
-    let ticket = tickets.find(matchTicket);
+    let ticket = tickets.find(t => isSameTicketId(t.id, ticketId) || isSameTicketId(t.chatId, ticketId));
+    
     if (!ticket) {
       // Check Firestore
       try {
         const fsTickets = await getSupportTicketsFromFirestore(undefined, true);
-        ticket = fsTickets.find(matchTicket);
+        ticket = fsTickets.find(t => isSameTicketId(t.id, ticketId) || isSameTicketId(t.chatId, ticketId));
       } catch (e) {}
     }
+    
     if (!ticket) {
-      // If still not found, construct a graceful fallback ticket for the sender
+      // If still not found, construct a graceful fallback ticket preserving user information
       const nowStr = new Date().toISOString();
+      const isSenderAdmin = current.role === 'admin';
       ticket = {
-        id: ticketId,
-        chatId: ticketId,
-        threadId: ticketId,
-        roomId: ticketId,
-        userId: current.id,
-        userEmail: current.email,
-        userName: current.fullName,
-        accountNumber: current.accountNumber,
+        id: canonicalId,
+        chatId: canonicalId,
+        threadId: canonicalId,
+        roomId: canonicalId,
+        userId: isSenderAdmin ? '' : current.id,
+        userEmail: isSenderAdmin ? '' : current.email,
+        userName: isSenderAdmin ? 'Client' : current.fullName,
+        accountNumber: isSenderAdmin ? '' : current.accountNumber,
         subject: 'Support Consultation',
         category: 'General',
         status: 'Open',
@@ -1748,7 +1746,7 @@ export const api = {
     }
 
     // If admin replied, send notification to user
-    if (current.role === 'admin') {
+    if (current.role === 'admin' && ticket.userId) {
       dbStore.addNotification({
         id: `NOTIF-${Date.now()}`,
         userId: ticket.userId,
@@ -1766,20 +1764,12 @@ export const api = {
   },
 
   async updateTicketStatus(ticketId: string, status: string): Promise<{ ticket: SupportTicket }> {
-    const matchTicket = (t: SupportTicket) => {
-      if (!t) return false;
-      if (t.id === ticketId || t.chatId === ticketId || t.threadId === ticketId) return true;
-      const clean1 = (t.id || '').replace(/^TICKET-/, '').toLowerCase();
-      const clean2 = (ticketId || '').replace(/^TICKET-/, '').toLowerCase();
-      return clean1 === clean2;
-    };
-
     const tickets = dbStore.getSupportTickets(undefined, true);
-    let ticket = tickets.find(matchTicket);
+    let ticket = tickets.find(t => isSameTicketId(t.id, ticketId) || isSameTicketId(t.chatId, ticketId));
     if (!ticket) {
       try {
         const fsTickets = await getSupportTicketsFromFirestore(undefined, true);
-        ticket = fsTickets.find(matchTicket);
+        ticket = fsTickets.find(t => isSameTicketId(t.id, ticketId) || isSameTicketId(t.chatId, ticketId));
       } catch (e) {}
     }
     if (!ticket) throw new Error('Ticket not found');
@@ -1806,14 +1796,6 @@ export const api = {
     const current = dbStore.getCurrentUser();
     if (!current) throw new Error('Not authenticated');
 
-    const matchTicket = (t: SupportTicket) => {
-      if (!t) return false;
-      if (t.id === ticketId || t.chatId === ticketId || t.threadId === ticketId) return true;
-      const clean1 = (t.id || '').replace(/^TICKET-/, '').toLowerCase();
-      const clean2 = (ticketId || '').replace(/^TICKET-/, '').toLowerCase();
-      return clean1 === clean2;
-    };
-
     // Remove from local dbStore
     let updatedTicket = dbStore.deleteSupportMessage(ticketId, messageId);
 
@@ -1821,7 +1803,7 @@ export const api = {
     if (!updatedTicket) {
       try {
         const fsTickets = await getSupportTicketsFromFirestore(undefined, true);
-        const target = fsTickets.find(matchTicket);
+        const target = fsTickets.find(t => isSameTicketId(t.id, ticketId) || isSameTicketId(t.chatId, ticketId));
         if (target) {
           const filtered = (target.messages || []).filter(m => m && m.id !== messageId && `${m.senderId}-${m.message}-${m.createdAt}` !== messageId);
           updatedTicket = { ...target, messages: filtered, updatedAt: new Date().toISOString() };

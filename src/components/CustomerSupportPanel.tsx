@@ -6,7 +6,9 @@ import {
   subscribeTicketMessagesFromFirestore, 
   getTicketMessagesFromFirestore, 
   normalizeSupportMessage,
-  mergeSupportTickets 
+  mergeSupportTickets,
+  isSameTicketId,
+  getCanonicalTicketId
 } from '../lib/firebase';
 import { dbStore } from '../services/dbStore';
 import { subscribeRealtimeUpdates } from '../services/realtimeBus';
@@ -44,14 +46,6 @@ interface CustomerSupportPanelProps {
   initialUserEmail?: string;
 }
 
-const isSameTicketId = (id1?: string, id2?: string): boolean => {
-  if (!id1 || !id2) return false;
-  if (id1 === id2) return true;
-  const clean1 = id1.replace(/^TICKET-/, '').trim().toLowerCase();
-  const clean2 = id2.replace(/^TICKET-/, '').trim().toLowerCase();
-  return clean1 === clean2;
-};
-
 export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({ 
   user, 
   initialTicketId,
@@ -61,11 +55,17 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(initialTicketId || null);
   const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
+  const selectedTicketIdRef = useRef<string | null>(initialTicketId || null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchFilter, setSearchFilter] = useState(initialUserEmail || '');
   const [statusFilter, setStatusFilter] = useState<'All' | 'Open' | 'In Progress' | 'Resolved'>('All');
   const [mobileView, setMobileView] = useState<'list' | 'chat'>(initialTicketId || initialUserEmail ? 'chat' : 'list');
+
+  // Keep ref in sync
+  useEffect(() => {
+    selectedTicketIdRef.current = selectedTicketId;
+  }, [selectedTicketId]);
 
   // New Ticket Form State
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -146,7 +146,7 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({
       setTickets(freshTickets);
       
       setSelectedTicket(prev => {
-        const targetId = selectedTicketId || prev?.id || initialTicketId;
+        const targetId = selectedTicketIdRef.current || prev?.id || initialTicketId;
         if (targetId) {
           const updated = freshTickets.find(t => isSameTicketId(t.id, targetId) || isSameTicketId(t.chatId, targetId));
           if (updated) {
@@ -171,12 +171,15 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({
     }
     if (initialTicketId) {
       setSelectedTicketId(initialTicketId);
+      selectedTicketIdRef.current = initialTicketId;
     }
   }, [initialUserEmail, initialTicketId]);
 
   useEffect(() => {
+    // Initial fetch from local store & backend
     fetchTickets(false);
 
+    // Real-time Firestore snapshot listener
     const unsubFirestore = subscribeSupportTicketsFromFirestore(
       user.role === 'admin' ? undefined : user.id,
       user.role === 'admin',
@@ -185,7 +188,7 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({
           fsTickets.forEach(t => dbStore.addSupportTicket(t));
           setTickets(fsTickets);
           setSelectedTicket(prev => {
-            const targetId = selectedTicketId || prev?.id || initialTicketId;
+            const targetId = selectedTicketIdRef.current || prev?.id || initialTicketId;
             if (targetId) {
               const updated = fsTickets.find(t => isSameTicketId(t.id, targetId) || isSameTicketId(t.chatId, targetId));
               if (updated) {
@@ -201,22 +204,31 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({
       }
     );
 
+    // Cross-tab real-time event bus listener
     const unsubRealtimeBus = subscribeRealtimeUpdates((event) => {
       if (event.type.includes('SUPPORT') || event.type.includes('TICKET')) {
-        fetchTickets(true);
+        const localTickets = dbStore.getSupportTickets(user.role === 'admin' ? undefined : user.id, user.role === 'admin');
+        if (localTickets && localTickets.length > 0) {
+          setTickets(localTickets);
+          setSelectedTicket(prev => {
+            const targetId = selectedTicketIdRef.current || prev?.id || initialTicketId;
+            if (targetId) {
+              const updated = localTickets.find(t => isSameTicketId(t.id, targetId) || isSameTicketId(t.chatId, targetId));
+              if (updated) {
+                return prev ? mergeSupportTickets(prev, updated) : updated;
+              }
+            }
+            return prev;
+          });
+        }
       }
     });
-
-    const interval = setInterval(() => {
-      fetchTickets(true);
-    }, 10000);
 
     return () => {
       unsubFirestore();
       unsubRealtimeBus();
-      clearInterval(interval);
     };
-  }, [user.id, user.role, selectedTicketId, initialTicketId, initialUserEmail, initialUserId]);
+  }, [user.id, user.role, initialTicketId, initialUserEmail, initialUserId]);
 
   // Live real-time subcollection and query listener for the currently selected active ticket
   useEffect(() => {
@@ -224,7 +236,7 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({
 
     const currentTicketId = selectedTicket.id;
 
-    // Instant proactive hydration from Firestore
+    // Proactive hydration of full messages from Firestore subcollections and parent docs
     getTicketMessagesFromFirestore(currentTicketId).then((fetchedMsgs) => {
       if (fetchedMsgs && fetchedMsgs.length > 0) {
         setSelectedTicket(prev => {
@@ -241,7 +253,7 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({
           return mergeSupportTickets(prev, { ...prev, messages: liveMsgs });
         });
 
-        // Also update in dbStore and tickets list state
+        // Also update in tickets list state
         setTickets(prevList => prevList.map(t => {
           if (isSameTicketId(t.id, currentTicketId)) {
             return mergeSupportTickets(t, { ...t, messages: liveMsgs });
@@ -255,6 +267,13 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({
       unsubTicketMessages();
     };
   }, [selectedTicket?.id]);
+
+  const handleSelectTicket = (t: SupportTicket) => {
+    setSelectedTicketId(t.id);
+    selectedTicketIdRef.current = t.id;
+    setSelectedTicket(prev => (prev && isSameTicketId(prev.id, t.id) ? mergeSupportTickets(prev, t) : t));
+    setMobileView('chat');
+  };
 
   const handleImageFile = (e: React.ChangeEvent<HTMLInputElement>, isReply: boolean) => {
     const file = e.target.files?.[0];
@@ -296,9 +315,10 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({
         setSubject('');
         setMessage('');
         setCreateImage('');
-        await fetchTickets();
         setSelectedTicketId(res.ticket.id);
+        selectedTicketIdRef.current = res.ticket.id;
         setSelectedTicket(res.ticket);
+        setTickets(prev => [res.ticket, ...prev.filter(t => !isSameTicketId(t.id, res.ticket.id))]);
       } else {
         const res = await api.createSupportTicket({
           subject: subject.trim(),
@@ -311,9 +331,10 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({
         setSubject('');
         setMessage('');
         setCreateImage('');
-        await fetchTickets();
         setSelectedTicketId(res.ticket.id);
+        selectedTicketIdRef.current = res.ticket.id;
         setSelectedTicket(res.ticket);
+        setTickets(prev => [res.ticket, ...prev.filter(t => !isSameTicketId(t.id, res.ticket.id))]);
       }
     } catch (err: any) {
       alert(err.message || 'Failed to submit ticket.');
@@ -348,6 +369,7 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({
       createdAt: nowIso
     };
 
+    const targetTicketId = selectedTicket.id;
     setSelectedTicket(prev => prev ? {
       ...prev,
       messages: [...(prev.messages || []), optimisticMsg]
@@ -357,12 +379,12 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({
     try {
       setReplyLoading(true);
       const res = await api.replySupportTicket(
-        selectedTicket.id, 
+        targetTicketId, 
         replyMsg, 
         replyImg
       );
       setSelectedTicket(prev => prev ? mergeSupportTickets(prev, res.ticket) : res.ticket);
-      await fetchTickets(true);
+      setTickets(prev => prev.map(t => isSameTicketId(t.id, res.ticket.id) ? mergeSupportTickets(t, res.ticket) : t));
       scrollToBottom(false);
     } catch (err: any) {
       alert(err.message || 'Failed to send reply.');
@@ -374,8 +396,8 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({
   const handleUpdateStatus = async (ticketId: string, newStatus: any) => {
     try {
       const res = await api.updateTicketStatus(ticketId, newStatus);
-      setSelectedTicket(res.ticket);
-      await fetchTickets(true);
+      setSelectedTicket(prev => prev ? mergeSupportTickets(prev, res.ticket) : res.ticket);
+      setTickets(prev => prev.map(t => isSameTicketId(t.id, res.ticket.id) ? mergeSupportTickets(t, res.ticket) : t));
     } catch (err: any) {
       alert(err.message || 'Failed to update status.');
     }
@@ -415,11 +437,9 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({
 
     try {
       await api.deleteSupportMessage(selectedTicket.id, msgId);
-      await fetchTickets(true);
     } catch (err: any) {
       console.error('Delete message error:', err);
       alert(err.message || 'Failed to delete message from Firebase.');
-      await fetchTickets(true);
     } finally {
       setDeletingMsgId(null);
     }
@@ -517,9 +537,8 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({
     });
 
     if (existingTicket) {
-      setSelectedTicket(existingTicket);
+      handleSelectTicket(existingTicket);
       setSearchFilter(targetUser.email);
-      setMobileView('chat');
     } else {
       // Prompt admin to start a new support conversation or open modal
       setTargetUserEmail(targetUser.email);
@@ -730,11 +749,7 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({
                 return (
                   <button
                     key={t.id}
-                    onClick={() => {
-                      setSelectedTicketId(t.id);
-                      setSelectedTicket(t);
-                      setMobileView('chat');
-                    }}
+                    onClick={() => handleSelectTicket(t)}
                     className={`w-full text-left p-3.5 rounded-2xl border transition-all cursor-pointer ${
                       isSelected
                         ? 'bg-slate-800 border-emerald-500/60 shadow-md ring-1 ring-emerald-500/20'
