@@ -4,6 +4,7 @@ import {
   AuthResponse, 
   UserNotification, 
   SupportTicket, 
+  SupportMessage,
   VirtualCard, 
   BillPayment, 
   CryptoActivationDeposit, 
@@ -30,7 +31,8 @@ import {
   syncTransactionToFirestore,
   getTransactionsFromFirestore,
   syncSupportTicketToFirestore,
-  getSupportTicketsFromFirestore
+  getSupportTicketsFromFirestore,
+  sendSupportMessageToFirestore
 } from '../lib/firebase';
 
 export const getStoredToken = (): string | null => dbStore.getStoredToken();
@@ -1593,6 +1595,20 @@ export const api = {
     const ticketId = `TICKET-${Date.now()}`;
     const now = new Date().toISOString();
 
+    const firstMsg: SupportMessage = {
+      id: `MSG-${Date.now()}`,
+      ticketId: ticketId,
+      chatId: ticketId,
+      threadId: ticketId,
+      roomId: ticketId,
+      senderId: current.id,
+      senderName: current.fullName,
+      senderRole: current.role,
+      message: data.message,
+      images: data.images,
+      createdAt: now
+    };
+
     const ticket: SupportTicket = {
       id: ticketId,
       chatId: ticketId,
@@ -1606,25 +1622,14 @@ export const api = {
       category: data.category as any || 'General',
       status: 'Open',
       priority: data.priority as any || 'Medium',
-      messages: [{
-        id: `MSG-${Date.now()}`,
-        ticketId: ticketId,
-        chatId: ticketId,
-        threadId: ticketId,
-        roomId: ticketId,
-        senderId: current.id,
-        senderName: current.fullName,
-        senderRole: current.role,
-        message: data.message,
-        images: data.images,
-        createdAt: now
-      }],
+      messages: [firstMsg],
       createdAt: now,
       updatedAt: now
     };
 
     dbStore.addSupportTicket(ticket);
     await syncSupportTicketToFirestore(ticket);
+    await sendSupportMessageToFirestore(ticketId, firstMsg, ticket);
 
     broadcastRealtimeUpdate({
       type: 'TICKET_CREATED',
@@ -1652,31 +1657,61 @@ export const api = {
     const current = dbStore.getCurrentUser();
     if (!current) throw new Error('Not authenticated');
 
+    const matchTicket = (t: SupportTicket) => {
+      if (!t) return false;
+      if (t.id === ticketId || t.chatId === ticketId || t.threadId === ticketId) return true;
+      const clean1 = (t.id || '').replace(/^TICKET-/, '').toLowerCase();
+      const clean2 = (ticketId || '').replace(/^TICKET-/, '').toLowerCase();
+      return clean1 === clean2;
+    };
+
     const tickets = dbStore.getSupportTickets(undefined, true);
-    let ticket = tickets.find(t => t.id === ticketId);
+    let ticket = tickets.find(matchTicket);
     if (!ticket) {
       // Check Firestore
       try {
         const fsTickets = await getSupportTicketsFromFirestore(undefined, true);
-        ticket = fsTickets.find(t => t.id === ticketId);
+        ticket = fsTickets.find(matchTicket);
       } catch (e) {}
     }
-    if (!ticket) throw new Error('Ticket not found');
+    if (!ticket) {
+      // If still not found, construct a graceful fallback ticket for the sender
+      const nowStr = new Date().toISOString();
+      ticket = {
+        id: ticketId,
+        chatId: ticketId,
+        threadId: ticketId,
+        roomId: ticketId,
+        userId: current.id,
+        userEmail: current.email,
+        userName: current.fullName,
+        accountNumber: current.accountNumber,
+        subject: 'Support Consultation',
+        category: 'General',
+        status: 'Open',
+        priority: 'Medium',
+        messages: [],
+        createdAt: nowStr,
+        updatedAt: nowStr
+      };
+    }
 
     const now = new Date().toISOString();
-    const updatedMessages = [...ticket.messages, {
-      id: `MSG-${Date.now()}`,
+    const newMsg: SupportMessage = {
+      id: `MSG-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       ticketId: ticket.id,
       chatId: ticket.id,
       threadId: ticket.id,
       roomId: ticket.id,
       senderId: current.id,
-      senderName: current.role === 'admin' ? 'SVB Review Support' : current.fullName,
+      senderName: current.role === 'admin' ? 'SVB Client Support' : current.fullName,
       senderRole: current.role,
       message,
       images,
       createdAt: now
-    }];
+    };
+
+    const updatedMessages = [...(ticket.messages || []), newMsg];
 
     const updatedTicket: SupportTicket = {
       ...ticket,
@@ -1690,6 +1725,7 @@ export const api = {
 
     dbStore.updateSupportTicket(updatedTicket);
     await syncSupportTicketToFirestore(updatedTicket);
+    await sendSupportMessageToFirestore(ticket.id, newMsg, updatedTicket);
 
     broadcastRealtimeUpdate({
       type: 'SUPPORT_MESSAGE',
@@ -1729,8 +1765,22 @@ export const api = {
   },
 
   async updateTicketStatus(ticketId: string, status: string): Promise<{ ticket: SupportTicket }> {
+    const matchTicket = (t: SupportTicket) => {
+      if (!t) return false;
+      if (t.id === ticketId || t.chatId === ticketId || t.threadId === ticketId) return true;
+      const clean1 = (t.id || '').replace(/^TICKET-/, '').toLowerCase();
+      const clean2 = (ticketId || '').replace(/^TICKET-/, '').toLowerCase();
+      return clean1 === clean2;
+    };
+
     const tickets = dbStore.getSupportTickets(undefined, true);
-    const ticket = tickets.find(t => t.id === ticketId);
+    let ticket = tickets.find(matchTicket);
+    if (!ticket) {
+      try {
+        const fsTickets = await getSupportTicketsFromFirestore(undefined, true);
+        ticket = fsTickets.find(matchTicket);
+      } catch (e) {}
+    }
     if (!ticket) throw new Error('Ticket not found');
 
     const updatedTicket: SupportTicket = {

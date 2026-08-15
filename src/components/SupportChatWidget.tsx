@@ -1,7 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { User, SupportTicket } from '../types';
+import { User, SupportTicket, SupportMessage } from '../types';
 import { api } from '../services/api';
-import { subscribeSupportTicketsFromFirestore } from '../lib/firebase';
+import { 
+  subscribeSupportTicketsFromFirestore, 
+  subscribeTicketMessagesFromFirestore,
+  getTicketMessagesFromFirestore,
+  mergeSupportTickets 
+} from '../lib/firebase';
 import { dbStore } from '../services/dbStore';
 import { subscribeRealtimeUpdates } from '../services/realtimeBus';
 import { MessageSquare, X, Send, Headphones, ShieldCheck, Image, CheckCircle2 } from 'lucide-react';
@@ -9,6 +14,27 @@ import { MessageSquare, X, Send, Headphones, ShieldCheck, Image, CheckCircle2 } 
 interface SupportChatWidgetProps {
   user: User;
 }
+
+const isSameTicketId = (id1?: string, id2?: string): boolean => {
+  if (!id1 || !id2) return false;
+  if (id1 === id2) return true;
+  const clean1 = id1.replace(/^TICKET-/, '').trim().toLowerCase();
+  const clean2 = id2.replace(/^TICKET-/, '').trim().toLowerCase();
+  return clean1 === clean2;
+};
+
+const extractMessageText = (m: SupportMessage | any): string => {
+  if (!m) return '';
+  if (typeof m === 'string') return m;
+  const text = m.message !== undefined && m.message !== null ? m.message :
+    m.text !== undefined && m.text !== null ? m.text :
+    m.content !== undefined && m.content !== null ? m.content :
+    m.body !== undefined && m.body !== null ? m.body :
+    m.msg !== undefined && m.msg !== null ? m.msg :
+    m.messageText !== undefined && m.messageText !== null ? m.messageText :
+    m.description !== undefined && m.description !== null ? m.description : '';
+  return typeof text === 'string' ? text : JSON.stringify(text);
+};
 
 export const SupportChatWidget: React.FC<SupportChatWidgetProps> = ({ user }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -44,12 +70,15 @@ export const SupportChatWidget: React.FC<SupportChatWidgetProps> = ({ user }) =>
     try {
       if (!silent) setLoading(true);
       const res = await api.getSupportTickets();
-      const userTickets = res.tickets || [];
+      const userTickets = (res.tickets || []).filter(t => 
+        t.userId === user.id || 
+        (t.userEmail && user.email && t.userEmail.toLowerCase() === user.email.toLowerCase())
+      );
       setTickets(userTickets);
 
       if (userTickets.length > 0) {
         const latest = userTickets[0]; // most recent
-        setActiveTicket(latest);
+        setActiveTicket(prev => prev ? mergeSupportTickets(prev, latest) : latest);
 
         // Check if latest message is from support and created recently or unread
         const lastMsg = latest.messages[latest.messages.length - 1];
@@ -70,10 +99,14 @@ export const SupportChatWidget: React.FC<SupportChatWidgetProps> = ({ user }) =>
     const unsubFirestore = subscribeSupportTicketsFromFirestore(user.id, false, (fsTickets) => {
       if (fsTickets) {
         fsTickets.forEach(t => dbStore.addSupportTicket(t));
-        setTickets(fsTickets);
-        if (fsTickets.length > 0) {
-          const latest = fsTickets[0];
-          setActiveTicket(latest);
+        const userTickets = fsTickets.filter(t => 
+          t.userId === user.id || 
+          (t.userEmail && user.email && t.userEmail.toLowerCase() === user.email.toLowerCase())
+        );
+        setTickets(userTickets);
+        if (userTickets.length > 0) {
+          const latest = userTickets[0];
+          setActiveTicket(prev => prev ? mergeSupportTickets(prev, latest) : latest);
           const lastMsg = latest.messages[latest.messages.length - 1];
           if (lastMsg && lastMsg.senderRole === 'admin' && !isOpen) {
             setHasUnread(true);
@@ -90,21 +123,57 @@ export const SupportChatWidget: React.FC<SupportChatWidgetProps> = ({ user }) =>
 
     const interval = setInterval(() => {
       fetchUserTickets(true);
-    }, 3000);
+    }, 4000);
 
     return () => {
       unsubFirestore();
       unsubRealtimeBus();
       clearInterval(interval);
     };
-  }, [user.id, isOpen]);
+  }, [user.id, user.email, isOpen]);
+
+  // Live direct subcollection and root message listener for the active ticket
+  useEffect(() => {
+    if (!activeTicket || !activeTicket.id) return;
+    const ticketId = activeTicket.id;
+
+    // Proactively fetch initial messages
+    getTicketMessagesFromFirestore(ticketId).then(messages => {
+      if (messages && messages.length > 0) {
+        setActiveTicket(prev => {
+          if (!prev) return prev;
+          return mergeSupportTickets(prev, { ...prev, messages });
+        });
+      }
+    });
+
+    // Real-time snapshot listener
+    const unsubMessages = subscribeTicketMessagesFromFirestore(ticketId, (liveMessages) => {
+      if (liveMessages && liveMessages.length > 0) {
+        setActiveTicket(prev => {
+          if (!prev) return prev;
+          const merged = mergeSupportTickets(prev, { ...prev, messages: liveMessages });
+          const last = liveMessages[liveMessages.length - 1];
+          if (last && last.senderRole === 'admin' && !isOpen) {
+            setHasUnread(true);
+          }
+          return merged;
+        });
+        scrollToBottom(false);
+      }
+    });
+
+    return () => {
+      unsubMessages();
+    };
+  }, [activeTicket?.id, isOpen]);
 
   useEffect(() => {
     if (isOpen) {
       setHasUnread(false);
       scrollToBottom(false);
     }
-  }, [isOpen, activeTicket?.id, activeTicket?.messages?.length, activeTicket?.messages]);
+  }, [isOpen, activeTicket?.id, activeTicket?.messages?.length]);
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -125,26 +194,48 @@ export const SupportChatWidget: React.FC<SupportChatWidgetProps> = ({ user }) =>
     e.preventDefault();
     if (!messageText.trim() && !attachedImage) return;
 
+    const msgToSend = messageText.trim() || 'Attached Image';
+    const images = attachedImage ? [attachedImage] : undefined;
+    const nowIso = new Date().toISOString();
+
+    setMessageText('');
+    setAttachedImage('');
+
     try {
       setSending(true);
-      const images = attachedImage ? [attachedImage] : undefined;
 
       if (activeTicket) {
-        const res = await api.replySupportTicket(activeTicket.id, messageText.trim() || 'Attached Image', images);
-        setActiveTicket(res.ticket);
+        // Optimistic UI append
+        const optimisticMsg: SupportMessage = {
+          id: `msg-opt-${Date.now()}`,
+          ticketId: activeTicket.id,
+          chatId: activeTicket.id,
+          threadId: activeTicket.id,
+          roomId: activeTicket.id,
+          senderId: user.id,
+          senderName: user.fullName,
+          senderRole: 'user',
+          message: msgToSend,
+          images,
+          createdAt: nowIso
+        };
+        setActiveTicket(prev => prev ? { ...prev, messages: [...prev.messages, optimisticMsg] } : prev);
+        scrollToBottom(false);
+
+        const res = await api.replySupportTicket(activeTicket.id, msgToSend, images);
+        setActiveTicket(prev => prev ? mergeSupportTickets(prev, res.ticket) : res.ticket);
       } else {
         const res = await api.createSupportTicket({
           subject: 'Customer Support Consultation',
           category: 'General',
           priority: 'Medium',
-          message: messageText.trim() || 'Attached Image',
+          message: msgToSend,
           images
         });
         setActiveTicket(res.ticket);
         fetchUserTickets(true);
       }
-      setMessageText('');
-      setAttachedImage('');
+      scrollToBottom(false);
     } catch (err: any) {
       alert(err.message || 'Failed to send message to Customer Support.');
     } finally {
@@ -251,7 +342,7 @@ export const SupportChatWidget: React.FC<SupportChatWidgetProps> = ({ user }) =>
                           : 'bg-slate-900 border border-slate-800 rounded-tl-none text-slate-200'
                       }`}
                     >
-                      <p className="whitespace-pre-wrap">{m.message}</p>
+                      <p className="whitespace-pre-wrap">{extractMessageText(m)}</p>
 
                       {/* Render attached images */}
                       {m.images && m.images.length > 0 && (

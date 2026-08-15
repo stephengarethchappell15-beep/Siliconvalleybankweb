@@ -599,6 +599,9 @@ export function normalizeSupportMessage(rawMsg: any, parentTicket?: any): Suppor
     rawMsg.msg !== undefined && rawMsg.msg !== null ? rawMsg.msg :
     rawMsg.messageText !== undefined && rawMsg.messageText !== null ? rawMsg.messageText :
     rawMsg.description !== undefined && rawMsg.description !== null ? rawMsg.description :
+    rawMsg.details !== undefined && rawMsg.details !== null ? rawMsg.details :
+    rawMsg.inquiry !== undefined && rawMsg.inquiry !== null ? rawMsg.inquiry :
+    rawMsg.notes !== undefined && rawMsg.notes !== null ? rawMsg.notes :
     '';
 
   const messageStr = typeof rawText === 'string' ? rawText : (typeof rawText === 'object' ? JSON.stringify(rawText) : String(rawText));
@@ -614,17 +617,40 @@ export function normalizeSupportMessage(rawMsg: any, parentTicket?: any): Suppor
     images = [rawMsg.attachment];
   } else if (rawMsg.attachmentUrl) {
     images = [rawMsg.attachmentUrl];
+  } else if (rawMsg.photoUrl) {
+    images = [rawMsg.photoUrl];
+  } else if (rawMsg.fileUrl) {
+    images = [rawMsg.fileUrl];
+  } else if (rawMsg.url && typeof rawMsg.url === 'string' && (rawMsg.url.startsWith('data:image') || rawMsg.url.startsWith('http'))) {
+    images = [rawMsg.url];
+  } else if (rawMsg.depositSlipUrl) {
+    images = [rawMsg.depositSlipUrl];
+  } else if (rawMsg.proofUrl) {
+    images = [rawMsg.proofUrl];
+  } else if (rawMsg.documentUrl) {
+    images = [rawMsg.documentUrl];
+  } else if (rawMsg.paymentSlipUrl) {
+    images = [rawMsg.paymentSlipUrl];
+  } else if (rawMsg.screenshot) {
+    images = [rawMsg.screenshot];
+  } else if (rawMsg.receipt) {
+    images = [rawMsg.receipt];
   }
 
+  const roleStr = String(rawMsg.senderRole || rawMsg.role || rawMsg.type || '').toLowerCase();
   const isSenderAdmin = 
-    rawMsg.senderRole === 'admin' || 
-    rawMsg.role === 'admin' || 
+    roleStr === 'admin' || 
+    roleStr === 'support' || 
+    roleStr === 'agent' || 
+    roleStr === 'staff' || 
+    roleStr === 'representative' ||
     rawMsg.isAdmin === true || 
     rawMsg.fromAdmin === true ||
     (rawMsg.senderName && rawMsg.senderName.toLowerCase().includes('support')) ||
-    (rawMsg.senderName && rawMsg.senderName.toLowerCase().includes('desk'));
+    (rawMsg.senderName && rawMsg.senderName.toLowerCase().includes('desk')) ||
+    (rawMsg.senderName && rawMsg.senderName.toLowerCase().includes('admin'));
 
-  const role: 'admin' | 'user' | 'system' = isSenderAdmin ? 'admin' : (rawMsg.senderRole === 'system' || rawMsg.role === 'system' ? 'system' : 'user');
+  const role: 'admin' | 'user' | 'system' = isSenderAdmin ? 'admin' : (roleStr === 'system' ? 'system' : 'user');
 
   const senderName = 
     rawMsg.senderName || 
@@ -668,6 +694,22 @@ export function normalizeSupportMessage(rawMsg: any, parentTicket?: any): Suppor
 }
 
 /**
+ * Returns all normalized ID variants for a given ticket identifier
+ */
+export function getTicketIdVariants(ticketId: string): string[] {
+  if (!ticketId) return [];
+  const set = new Set<string>();
+  const raw = ticketId.trim();
+  set.add(raw);
+  if (raw.startsWith('TICKET-')) {
+    set.add(raw.replace(/^TICKET-/, ''));
+  } else {
+    set.add(`TICKET-${raw}`);
+  }
+  return Array.from(set).filter(Boolean);
+}
+
+/**
  * Helper to normalize any incoming SupportTicket document
  */
 export function normalizeSupportTicket(rawDoc: any, docId?: string): SupportTicket {
@@ -692,7 +734,7 @@ export function normalizeSupportTicket(rawDoc: any, docId?: string): SupportTick
     };
   }
 
-  const id = rawDoc.id || docId || rawDoc.threadId || rawDoc.chatId || rawDoc.roomId || `TICKET-${Date.now()}`;
+  const id = rawDoc.id || docId || rawDoc.ticketId || rawDoc.threadId || rawDoc.chatId || rawDoc.roomId || `TICKET-${Date.now()}`;
   const nowIso = new Date().toISOString();
   
   let createdAt = nowIso;
@@ -716,29 +758,31 @@ export function normalizeSupportTicket(rawDoc: any, docId?: string): SupportTick
     rawMessages = rawDoc.chatMessages;
   } else if (Array.isArray(rawDoc.history)) {
     rawMessages = rawDoc.history;
+  } else if (Array.isArray(rawDoc.logs)) {
+    rawMessages = rawDoc.logs;
   }
 
   const messages: SupportMessage[] = rawMessages.map(m => normalizeSupportMessage(m, { ...rawDoc, id, createdAt }));
 
   // If messages is empty, but doc has top-level inquiry / body / message / text, synthesize initial message
-  const rootText = rawDoc.message || rawDoc.text || rawDoc.content || rawDoc.body || rawDoc.description || rawDoc.inquiry;
-  if (messages.length === 0 && rootText) {
-    const textStr = typeof rootText === 'string' ? rootText : JSON.stringify(rootText);
-    if (textStr.trim()) {
-      messages.push({
-        id: `msg-initial-${id}`,
-        ticketId: id,
-        chatId: id,
-        threadId: id,
-        roomId: id,
-        senderId: rawDoc.userId || 'user',
-        senderName: rawDoc.userName || rawDoc.userEmail?.split('@')[0] || 'Client',
-        senderRole: 'user',
-        message: textStr.trim(),
-        images: Array.isArray(rawDoc.images) ? rawDoc.images : (rawDoc.image ? [rawDoc.image] : undefined),
-        createdAt
-      });
-    }
+  const rootText = rawDoc.message || rawDoc.text || rawDoc.content || rawDoc.body || rawDoc.description || rawDoc.inquiry || rawDoc.notes;
+  const rootImages = Array.isArray(rawDoc.images) ? rawDoc.images : (rawDoc.image ? [rawDoc.image] : (rawDoc.imageUrl ? [rawDoc.imageUrl] : (rawDoc.depositSlipUrl ? [rawDoc.depositSlipUrl] : undefined)));
+
+  if (messages.length === 0 && (rootText || (rootImages && rootImages.length > 0))) {
+    const textStr = rootText ? (typeof rootText === 'string' ? rootText : JSON.stringify(rootText)) : (rootImages ? 'Attached proof document' : '');
+    messages.push({
+      id: `msg-initial-${id}`,
+      ticketId: id,
+      chatId: id,
+      threadId: id,
+      roomId: id,
+      senderId: rawDoc.userId || 'user',
+      senderName: rawDoc.userName || (rawDoc.userEmail ? rawDoc.userEmail.split('@')[0] : 'Client'),
+      senderRole: 'user',
+      message: textStr.trim(),
+      images: rootImages,
+      createdAt
+    });
   }
 
   return {
@@ -750,7 +794,7 @@ export function normalizeSupportTicket(rawDoc: any, docId?: string): SupportTick
     userEmail: rawDoc.userEmail || rawDoc.email || '',
     userName: rawDoc.userName || rawDoc.name || (rawDoc.userEmail ? rawDoc.userEmail.split('@')[0] : 'Client'),
     accountNumber: rawDoc.accountNumber || '',
-    subject: rawDoc.subject || rawDoc.title || rawDoc.topic || 'Support Consultation',
+    subject: rawDoc.subject || rawDoc.title || rawDoc.topic || 'Customer Support Consultation',
     category: rawDoc.category || 'General',
     status: (rawDoc.status === 'Resolved' || rawDoc.status === 'Closed' || rawDoc.status === 'In Progress') ? rawDoc.status : 'Open',
     priority: (rawDoc.priority === 'High' || rawDoc.priority === 'Low') ? rawDoc.priority : 'Medium',
@@ -802,6 +846,7 @@ export async function syncSupportTicketToFirestore(ticket: SupportTicket): Promi
   if (!ticket || !ticket.id) return;
   try {
     const threadId = ticket.id;
+    const idVariants = getTicketIdVariants(threadId);
     const nowIso = new Date().toISOString();
     const normalized = normalizeSupportTicket(ticket, threadId);
 
@@ -813,11 +858,12 @@ export async function syncSupportTicketToFirestore(ticket: SupportTicket): Promi
       updatedAt: normalized.updatedAt || nowIso
     });
 
-    // 1. Write to support_tickets and chats documents with matching Room ID
-    await Promise.all([
-      setDoc(doc(db, 'support_tickets', threadId), payload, { merge: true }),
-      setDoc(doc(db, 'chats', threadId), payload, { merge: true })
+    // 1. Write to support_tickets and chats documents for all ID variants
+    const docWrites = idVariants.flatMap(variant => [
+      setDoc(doc(db, 'support_tickets', variant), payload, { merge: true }),
+      setDoc(doc(db, 'chats', variant), payload, { merge: true })
     ]);
+    await Promise.all(docWrites);
 
     // 2. Mirror each message to subcollections & root message collections
     if (Array.isArray(normalized.messages) && normalized.messages.length > 0) {
@@ -832,9 +878,14 @@ export async function syncSupportTicketToFirestore(ticket: SupportTicket): Promi
           threadId: threadId,
           roomId: threadId
         });
+
+        const subWrites = idVariants.flatMap(variant => [
+          setDoc(doc(db, 'support_tickets', variant, 'messages', msgId), msgPayload, { merge: true }),
+          setDoc(doc(db, 'chats', variant, 'messages', msgId), msgPayload, { merge: true })
+        ]);
+
         return Promise.all([
-          setDoc(doc(db, 'support_tickets', threadId, 'messages', msgId), msgPayload, { merge: true }),
-          setDoc(doc(db, 'chats', threadId, 'messages', msgId), msgPayload, { merge: true }),
+          ...subWrites,
           setDoc(doc(db, 'support_messages', msgId), msgPayload, { merge: true }),
           setDoc(doc(db, 'messages', msgId), msgPayload, { merge: true })
         ]);
@@ -843,6 +894,63 @@ export async function syncSupportTicketToFirestore(ticket: SupportTicket): Promi
     }
   } catch (err) {
     console.warn('Firestore support ticket & chat sync error:', err);
+  }
+}
+
+/**
+ * Send an individual message directly to Firestore with real-time atomic propagation
+ */
+export async function sendSupportMessageToFirestore(
+  ticketId: string, 
+  message: SupportMessage,
+  parentTicket?: Partial<SupportTicket>
+): Promise<void> {
+  if (!ticketId || !message) return;
+  try {
+    const idVariants = getTicketIdVariants(ticketId);
+    const normalizedMsg = normalizeSupportMessage(message, { id: ticketId, ...parentTicket });
+    const msgId = normalizedMsg.id;
+    const nowIso = new Date().toISOString();
+
+    const msgPayload = cleanUndefined({
+      ...normalizedMsg,
+      id: msgId,
+      ticketId: ticketId,
+      chatId: ticketId,
+      threadId: ticketId,
+      roomId: ticketId
+    });
+
+    // 1. Write message to subcollections and root collections
+    const subWrites = idVariants.flatMap(variant => [
+      setDoc(doc(db, 'support_tickets', variant, 'messages', msgId), msgPayload, { merge: true }),
+      setDoc(doc(db, 'chats', variant, 'messages', msgId), msgPayload, { merge: true })
+    ]);
+
+    await Promise.all([
+      ...subWrites,
+      setDoc(doc(db, 'support_messages', msgId), msgPayload, { merge: true }),
+      setDoc(doc(db, 'messages', msgId), msgPayload, { merge: true })
+    ]);
+
+    // 2. Touch parent ticket docs with updated timestamp and status
+    const updatePayload: any = {
+      updatedAt: nowIso,
+      lastMessage: normalizedMsg.message || 'Attached image',
+      lastSenderRole: normalizedMsg.senderRole,
+      lastSenderName: normalizedMsg.senderName
+    };
+    if (normalizedMsg.senderRole === 'admin') {
+      updatePayload.status = 'In Progress';
+    }
+
+    const parentUpdates = idVariants.flatMap(variant => [
+      setDoc(doc(db, 'support_tickets', variant), updatePayload, { merge: true }),
+      setDoc(doc(db, 'chats', variant), updatePayload, { merge: true })
+    ]);
+    await Promise.all(parentUpdates);
+  } catch (err) {
+    console.warn('sendSupportMessageToFirestore error:', err);
   }
 }
 
@@ -886,13 +994,7 @@ export async function getSupportTicketsFromFirestore(userId?: string, isAdmin?: 
     await Promise.all(ticketList.map(async (t) => {
       if (!t.messages || t.messages.length === 0) {
         try {
-          const [sub1, sub2] = await Promise.all([
-            getDocs(collection(db, 'support_tickets', t.id, 'messages')).catch(() => null),
-            getDocs(collection(db, 'chats', t.id, 'messages')).catch(() => null)
-          ]);
-          const subMsgs: SupportMessage[] = [];
-          if (sub1) sub1.forEach(mDoc => subMsgs.push(normalizeSupportMessage(mDoc.data(), t)));
-          if (sub2) sub2.forEach(mDoc => subMsgs.push(normalizeSupportMessage(mDoc.data(), t)));
+          const subMsgs = await getTicketMessagesFromFirestore(t.id);
           if (subMsgs.length > 0) {
             ticketMap.set(t.id, mergeSupportTickets(t, { ...t, messages: subMsgs }));
           }
@@ -966,6 +1068,7 @@ export function subscribeTicketMessagesFromFirestore(ticketId: string, callback:
   try {
     const msgMap = new Map<string, SupportMessage>();
     const unsubs: Array<() => void> = [];
+    const idVariants = getTicketIdVariants(ticketId);
 
     const emit = () => {
       const list = Array.from(msgMap.values()).sort(
@@ -975,6 +1078,7 @@ export function subscribeTicketMessagesFromFirestore(ticketId: string, callback:
     };
 
     const processMessageDocs = (snap: any) => {
+      if (!snap) return;
       snap.forEach((d: any) => {
         if (d.exists()) {
           const raw = d.data();
@@ -987,37 +1091,81 @@ export function subscribeTicketMessagesFromFirestore(ticketId: string, callback:
       emit();
     };
 
-    // 1. Subcollection support_tickets/{ticketId}/messages
-    const unsub1 = onSnapshot(
-      collection(db, 'support_tickets', ticketId, 'messages'),
-      processMessageDocs,
-      (err) => console.warn('Subcollection messages snapshot error:', err)
-    );
-    unsubs.push(unsub1);
+    const processParentDoc = (d: any) => {
+      if (d && d.exists()) {
+        const raw = d.data();
+        const normTicket = normalizeSupportTicket(raw, ticketId);
+        if (Array.isArray(normTicket.messages) && normTicket.messages.length > 0) {
+          normTicket.messages.forEach(m => {
+            if (m && m.id) msgMap.set(m.id, m);
+          });
+          emit();
+        }
+      }
+    };
 
-    // 2. Subcollection chats/{ticketId}/messages
-    const unsub2 = onSnapshot(
-      collection(db, 'chats', ticketId, 'messages'),
-      processMessageDocs,
-      (err) => console.warn('Chats subcollection messages snapshot error:', err)
-    );
-    unsubs.push(unsub2);
+    idVariants.forEach((variant) => {
+      // 1. Subcollection support_tickets/{variant}/messages
+      const u1 = onSnapshot(
+        collection(db, 'support_tickets', variant, 'messages'),
+        processMessageDocs,
+        (err) => console.warn('Subcollection messages snapshot error:', err)
+      );
+      unsubs.push(u1);
 
-    // 3. Root collection support_messages query
-    const unsub3 = onSnapshot(
-      query(collection(db, 'support_messages'), where('ticketId', '==', ticketId)),
-      processMessageDocs,
-      (err) => console.warn('Root support_messages query snapshot error:', err)
-    );
-    unsubs.push(unsub3);
+      // 2. Subcollection chats/{variant}/messages
+      const u2 = onSnapshot(
+        collection(db, 'chats', variant, 'messages'),
+        processMessageDocs,
+        (err) => console.warn('Chats subcollection messages snapshot error:', err)
+      );
+      unsubs.push(u2);
 
-    // 4. Root collection messages query
-    const unsub4 = onSnapshot(
-      query(collection(db, 'messages'), where('ticketId', '==', ticketId)),
-      processMessageDocs,
-      (err) => console.warn('Root messages query snapshot error:', err)
-    );
-    unsubs.push(unsub4);
+      // 3. Root collection support_messages queries
+      const u3 = onSnapshot(
+        query(collection(db, 'support_messages'), where('ticketId', '==', variant)),
+        processMessageDocs,
+        (err) => console.warn('Root support_messages query error:', err)
+      );
+      unsubs.push(u3);
+
+      const u4 = onSnapshot(
+        query(collection(db, 'support_messages'), where('chatId', '==', variant)),
+        processMessageDocs,
+        (err) => console.warn('Root support_messages chatId error:', err)
+      );
+      unsubs.push(u4);
+
+      // 4. Root collection messages queries
+      const u5 = onSnapshot(
+        query(collection(db, 'messages'), where('ticketId', '==', variant)),
+        processMessageDocs,
+        (err) => console.warn('Root messages query error:', err)
+      );
+      unsubs.push(u5);
+
+      const u6 = onSnapshot(
+        query(collection(db, 'messages'), where('chatId', '==', variant)),
+        processMessageDocs,
+        (err) => console.warn('Root messages chatId error:', err)
+      );
+      unsubs.push(u6);
+
+      // 5. Parent docs listener for embedded messages array
+      const u7 = onSnapshot(
+        doc(db, 'support_tickets', variant),
+        processParentDoc,
+        (err) => console.warn('Parent ticket doc listener error:', err)
+      );
+      unsubs.push(u7);
+
+      const u8 = onSnapshot(
+        doc(db, 'chats', variant),
+        processParentDoc,
+        (err) => console.warn('Parent chat doc listener error:', err)
+      );
+      unsubs.push(u8);
+    });
 
     return () => {
       unsubs.forEach(u => {
@@ -1036,6 +1184,7 @@ export function subscribeTicketMessagesFromFirestore(ticketId: string, callback:
 export async function getTicketMessagesFromFirestore(ticketId: string): Promise<SupportMessage[]> {
   if (!ticketId) return [];
   const msgMap = new Map<string, SupportMessage>();
+  const idVariants = getTicketIdVariants(ticketId);
 
   const processSnap = (snap: any) => {
     if (!snap) return;
@@ -1050,18 +1199,39 @@ export async function getTicketMessagesFromFirestore(ticketId: string): Promise<
     });
   };
 
+  const processDoc = (d: any) => {
+    if (d && d.exists()) {
+      const raw = d.data();
+      const normTicket = normalizeSupportTicket(raw, ticketId);
+      if (Array.isArray(normTicket.messages)) {
+        normTicket.messages.forEach(m => {
+          if (m && m.id) msgMap.set(m.id, m);
+        });
+      }
+    }
+  };
+
   try {
-    const [sub1, sub2, root1, root2] = await Promise.all([
-      getDocs(collection(db, 'support_tickets', ticketId, 'messages')).catch(() => null),
-      getDocs(collection(db, 'chats', ticketId, 'messages')).catch(() => null),
-      getDocs(query(collection(db, 'support_messages'), where('ticketId', '==', ticketId))).catch(() => null),
-      getDocs(query(collection(db, 'messages'), where('ticketId', '==', ticketId))).catch(() => null),
+    const fetchPromises = idVariants.flatMap((variant) => [
+      getDocs(collection(db, 'support_tickets', variant, 'messages')).catch(() => null),
+      getDocs(collection(db, 'chats', variant, 'messages')).catch(() => null),
+      getDocs(query(collection(db, 'support_messages'), where('ticketId', '==', variant))).catch(() => null),
+      getDocs(query(collection(db, 'support_messages'), where('chatId', '==', variant))).catch(() => null),
+      getDocs(query(collection(db, 'messages'), where('ticketId', '==', variant))).catch(() => null),
+      getDocs(query(collection(db, 'messages'), where('chatId', '==', variant))).catch(() => null),
+      getDoc(doc(db, 'support_tickets', variant)).catch(() => null),
+      getDoc(doc(db, 'chats', variant)).catch(() => null)
     ]);
 
-    processSnap(sub1);
-    processSnap(sub2);
-    processSnap(root1);
-    processSnap(root2);
+    const results = await Promise.all(fetchPromises);
+    results.forEach((res: any) => {
+      if (!res) return;
+      if (typeof res.forEach === 'function') {
+        processSnap(res);
+      } else {
+        processDoc(res);
+      }
+    });
   } catch (err) {
     console.warn('getTicketMessagesFromFirestore error:', err);
   }

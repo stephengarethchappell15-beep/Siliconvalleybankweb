@@ -1,7 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { User, SupportTicket, SupportMessage } from '../types';
 import { api } from '../services/api';
-import { subscribeSupportTicketsFromFirestore, subscribeTicketMessagesFromFirestore, getTicketMessagesFromFirestore, normalizeSupportMessage } from '../lib/firebase';
+import { 
+  subscribeSupportTicketsFromFirestore, 
+  subscribeTicketMessagesFromFirestore, 
+  getTicketMessagesFromFirestore, 
+  normalizeSupportMessage,
+  mergeSupportTickets 
+} from '../lib/firebase';
 import { dbStore } from '../services/dbStore';
 import { subscribeRealtimeUpdates } from '../services/realtimeBus';
 import { 
@@ -37,6 +43,14 @@ interface CustomerSupportPanelProps {
   initialUserEmail?: string;
 }
 
+const isSameTicketId = (id1?: string, id2?: string): boolean => {
+  if (!id1 || !id2) return false;
+  if (id1 === id2) return true;
+  const clean1 = id1.replace(/^TICKET-/, '').trim().toLowerCase();
+  const clean2 = id2.replace(/^TICKET-/, '').trim().toLowerCase();
+  return clean1 === clean2;
+};
+
 export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({ 
   user, 
   initialTicketId,
@@ -44,6 +58,7 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({
   initialUserEmail 
 }) => {
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
+  const [selectedTicketId, setSelectedTicketId] = useState<string | null>(initialTicketId || null);
   const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -101,7 +116,7 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({
     
     // 1. Direct ticketId match
     if (preferId) {
-      const match = allTickets.find(t => t.id === preferId || t.chatId === preferId);
+      const match = allTickets.find(t => isSameTicketId(t.id, preferId) || isSameTicketId(t.chatId, preferId));
       if (match) return match;
     }
 
@@ -129,22 +144,15 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({
       setTickets(freshTickets);
       
       setSelectedTicket(prev => {
-        if (prev) {
-          const updated = freshTickets.find(t => t.id === prev.id);
+        const targetId = selectedTicketId || prev?.id || initialTicketId;
+        if (targetId) {
+          const updated = freshTickets.find(t => isSameTicketId(t.id, targetId) || isSameTicketId(t.chatId, targetId));
           if (updated) {
-            // Keep any live messages merged
-            const currentMsgs = prev.messages || [];
-            const freshMsgs = updated.messages || [];
-            const msgMap = new Map<string, any>();
-            freshMsgs.forEach(m => msgMap.set(m.id || `${m.senderId}-${m.message}-${m.createdAt}`, m));
-            currentMsgs.forEach(m => msgMap.set(m.id || `${m.senderId}-${m.message}-${m.createdAt}`, m));
-            return {
-              ...updated,
-              messages: Array.from(msgMap.values()).sort(
-                (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-              )
-            };
+            return prev ? mergeSupportTickets(prev, updated) : updated;
           }
+        }
+        if (prev) {
+          return prev;
         }
         return selectBestTicket(freshTickets, initialTicketId, initialUserEmail, initialUserId);
       });
@@ -159,7 +167,10 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({
     if (initialUserEmail) {
       setSearchFilter(initialUserEmail);
     }
-  }, [initialUserEmail]);
+    if (initialTicketId) {
+      setSelectedTicketId(initialTicketId);
+    }
+  }, [initialUserEmail, initialTicketId]);
 
   useEffect(() => {
     fetchTickets(false);
@@ -172,24 +183,17 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({
           fsTickets.forEach(t => dbStore.addSupportTicket(t));
           setTickets(fsTickets);
           setSelectedTicket(prev => {
-            if (!prev) {
-              return selectBestTicket(fsTickets, initialTicketId, initialUserEmail, initialUserId);
+            const targetId = selectedTicketId || prev?.id || initialTicketId;
+            if (targetId) {
+              const updated = fsTickets.find(t => isSameTicketId(t.id, targetId) || isSameTicketId(t.chatId, targetId));
+              if (updated) {
+                return prev ? mergeSupportTickets(prev, updated) : updated;
+              }
             }
-            const updated = fsTickets.find(t => t.id === prev.id);
-            if (updated) {
-              const currentMsgs = prev.messages || [];
-              const freshMsgs = updated.messages || [];
-              const msgMap = new Map<string, any>();
-              freshMsgs.forEach(m => msgMap.set(m.id || `${m.senderId}-${m.message}-${m.createdAt}`, m));
-              currentMsgs.forEach(m => msgMap.set(m.id || `${m.senderId}-${m.message}-${m.createdAt}`, m));
-              return {
-                ...updated,
-                messages: Array.from(msgMap.values()).sort(
-                  (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-                )
-              };
+            if (prev) {
+              return prev;
             }
-            return fsTickets[0];
+            return selectBestTicket(fsTickets, initialTicketId, initialUserEmail, initialUserId);
           });
         }
       }
@@ -203,14 +207,14 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({
 
     const interval = setInterval(() => {
       fetchTickets(true);
-    }, 15000);
+    }, 10000);
 
     return () => {
       unsubFirestore();
       unsubRealtimeBus();
       clearInterval(interval);
     };
-  }, [user.id, user.role, initialTicketId, initialUserEmail, initialUserId]);
+  }, [user.id, user.role, selectedTicketId, initialTicketId, initialUserEmail, initialUserId]);
 
   // Live real-time subcollection and query listener for the currently selected active ticket
   useEffect(() => {
@@ -222,14 +226,8 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({
     getTicketMessagesFromFirestore(currentTicketId).then((fetchedMsgs) => {
       if (fetchedMsgs && fetchedMsgs.length > 0) {
         setSelectedTicket(prev => {
-          if (!prev || prev.id !== currentTicketId) return prev;
-          const msgMap = new Map<string, SupportMessage>();
-          (prev.messages || []).forEach(m => msgMap.set(m.id || `${m.senderId}-${m.message}-${m.createdAt}`, m));
-          fetchedMsgs.forEach(m => msgMap.set(m.id || `${m.senderId}-${m.message}-${m.createdAt}`, m));
-          const merged = Array.from(msgMap.values()).sort(
-            (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-          );
-          return { ...prev, messages: merged };
+          if (!prev || !isSameTicketId(prev.id, currentTicketId)) return prev;
+          return mergeSupportTickets(prev, { ...prev, messages: fetchedMsgs });
         });
       }
     }).catch((e) => console.warn('Instant ticket messages hydration warning:', e));
@@ -237,29 +235,14 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({
     const unsubTicketMessages = subscribeTicketMessagesFromFirestore(currentTicketId, (liveMsgs) => {
       if (liveMsgs && liveMsgs.length > 0) {
         setSelectedTicket(prev => {
-          if (!prev || prev.id !== currentTicketId) return prev;
-          const msgMap = new Map<string, SupportMessage>();
-          (prev.messages || []).forEach(m => msgMap.set(m.id || `${m.senderId}-${m.message}-${m.createdAt}`, m));
-          liveMsgs.forEach(m => msgMap.set(m.id || `${m.senderId}-${m.message}-${m.createdAt}`, m));
-          const merged = Array.from(msgMap.values()).sort(
-            (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-          );
-          return {
-            ...prev,
-            messages: merged
-          };
+          if (!prev || !isSameTicketId(prev.id, currentTicketId)) return prev;
+          return mergeSupportTickets(prev, { ...prev, messages: liveMsgs });
         });
 
         // Also update in dbStore and tickets list state
         setTickets(prevList => prevList.map(t => {
-          if (t.id === currentTicketId) {
-            const msgMap = new Map<string, SupportMessage>();
-            (t.messages || []).forEach(m => msgMap.set(m.id || `${m.senderId}-${m.message}-${m.createdAt}`, m));
-            liveMsgs.forEach(m => msgMap.set(m.id || `${m.senderId}-${m.message}-${m.createdAt}`, m));
-            const merged = Array.from(msgMap.values()).sort(
-              (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-            );
-            return { ...t, messages: merged };
+          if (isSameTicketId(t.id, currentTicketId)) {
+            return mergeSupportTickets(t, { ...t, messages: liveMsgs });
           }
           return t;
         }));
@@ -312,6 +295,7 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({
         setMessage('');
         setCreateImage('');
         await fetchTickets();
+        setSelectedTicketId(res.ticket.id);
         setSelectedTicket(res.ticket);
       } else {
         const res = await api.createSupportTicket({
@@ -326,6 +310,7 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({
         setMessage('');
         setCreateImage('');
         await fetchTickets();
+        setSelectedTicketId(res.ticket.id);
         setSelectedTicket(res.ticket);
       }
     } catch (err: any) {
@@ -339,17 +324,44 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({
     e.preventDefault();
     if (!selectedTicket || (!replyText.trim() && !replyImage)) return;
 
+    const replyMsg = replyText.trim() || 'Attached image';
+    const replyImg = replyImage ? [replyImage] : undefined;
+    const nowIso = new Date().toISOString();
+
+    setReplyText('');
+    setReplyImage('');
+
+    // Optimistic UI response
+    const optimisticMsg: SupportMessage = {
+      id: `msg-opt-${Date.now()}`,
+      ticketId: selectedTicket.id,
+      chatId: selectedTicket.id,
+      threadId: selectedTicket.id,
+      roomId: selectedTicket.id,
+      senderId: user.id,
+      senderName: user.role === 'admin' ? 'SVB Client Support' : user.fullName,
+      senderRole: user.role === 'admin' ? 'admin' : 'user',
+      message: replyMsg,
+      images: replyImg,
+      createdAt: nowIso
+    };
+
+    setSelectedTicket(prev => prev ? {
+      ...prev,
+      messages: [...(prev.messages || []), optimisticMsg]
+    } : prev);
+    scrollToBottom(false);
+
     try {
       setReplyLoading(true);
       const res = await api.replySupportTicket(
         selectedTicket.id, 
-        replyText.trim() || 'Attached image', 
-        replyImage ? [replyImage] : undefined
+        replyMsg, 
+        replyImg
       );
-      setSelectedTicket(res.ticket);
-      setReplyText('');
-      setReplyImage('');
-      await fetchTickets();
+      setSelectedTicket(prev => prev ? mergeSupportTickets(prev, res.ticket) : res.ticket);
+      await fetchTickets(true);
+      scrollToBottom(false);
     } catch (err: any) {
       alert(err.message || 'Failed to send reply.');
     } finally {
@@ -361,7 +373,7 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({
     try {
       const res = await api.updateTicketStatus(ticketId, newStatus);
       setSelectedTicket(res.ticket);
-      await fetchTickets();
+      await fetchTickets(true);
     } catch (err: any) {
       alert(err.message || 'Failed to update status.');
     }
@@ -636,7 +648,7 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({
             ) : (
               filteredTickets.map((t) => {
                 const userDet = getUserDetails(t);
-                const isSelected = selectedTicket?.id === t.id;
+                const isSelected = isSameTicketId(selectedTicket?.id, t.id) || isSameTicketId(selectedTicketId || undefined, t.id);
                 const messageCount = (t.messages || []).length;
                 const lastMsg = messageCount > 0 ? t.messages[messageCount - 1] : null;
                 const lastMsgText = lastMsg ? extractMessageText(lastMsg) : '';
@@ -645,6 +657,7 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({
                   <button
                     key={t.id}
                     onClick={() => {
+                      setSelectedTicketId(t.id);
                       setSelectedTicket(t);
                       setMobileView('chat');
                     }}
