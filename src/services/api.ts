@@ -1579,15 +1579,16 @@ export const api = {
     const current = dbStore.getCurrentUser();
     if (!current) return { tickets: [] };
     const isAdmin = current.role === 'admin';
+    const userIdentifier = isAdmin ? undefined : { id: current.id, email: current.email };
     try {
-      const fsTickets = await getSupportTicketsFromFirestore(isAdmin ? undefined : current.id, isAdmin);
+      const fsTickets = await getSupportTicketsFromFirestore(userIdentifier, isAdmin);
       if (fsTickets && fsTickets.length > 0) {
         fsTickets.forEach(t => dbStore.addSupportTicket(t));
       }
     } catch (e) {
       console.warn('Firestore getSupportTickets fallback:', e);
     }
-    const finalTickets = dbStore.getSupportTickets(isAdmin ? undefined : current.id, isAdmin);
+    const finalTickets = dbStore.getSupportTickets(userIdentifier, isAdmin);
     return { tickets: finalTickets };
   },
 
@@ -1834,8 +1835,38 @@ export const api = {
     if (!current || current.role !== 'admin') throw new Error('Admin authorization required');
 
     const allUsers = dbStore.getUsers();
-    const targetUser = allUsers.find(u => u.email.toLowerCase() === targetUserEmail.trim().toLowerCase());
-    if (!targetUser) throw new Error(`Registered user with email "${targetUserEmail}" was not found.`);
+    let targetUser = allUsers.find(u => u.email.toLowerCase() === targetUserEmail.trim().toLowerCase());
+    
+    if (!targetUser) {
+      try {
+        const fsUsers = await getAllUsersFromFirestore();
+        targetUser = fsUsers.find(u => u.email.toLowerCase() === targetUserEmail.trim().toLowerCase());
+        if (targetUser) {
+          dbStore.saveUser(targetUser);
+        }
+      } catch (e) {}
+    }
+
+    if (!targetUser) {
+      const cleanEmail = targetUserEmail.trim().toLowerCase();
+      const generatedName = cleanEmail.split('@')[0].replace(/[._-]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+      targetUser = {
+        id: `usr-${cleanEmail.replace(/[^a-z0-9]/gi, '') || Date.now()}`,
+        fullName: generatedName || 'Client',
+        email: cleanEmail,
+        phone: '+1 (555) 019-3829',
+        accountNumber: `${Math.floor(1000000000 + Math.random() * 9000000000)}`,
+        role: 'user',
+        balance: 0,
+        ledgerBalance: 0,
+        currency: 'USD',
+        status: 'Active',
+        verificationTier: 'Tier 1',
+        createdAt: new Date().toISOString()
+      };
+      dbStore.saveUser(targetUser);
+      syncUserToFirestore(targetUser).catch(() => {});
+    }
 
     const ticketId = `TICKET-${Date.now()}`;
     const now = new Date().toISOString();

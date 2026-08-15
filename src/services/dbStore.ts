@@ -149,6 +149,25 @@ const DEFAULT_USERS: User[] = [
     fourDigitCode: '8842',
     transferCodeApproved: true,
     createdAt: new Date('2024-03-01').toISOString()
+  },
+  {
+    id: 'usr-deep-singh',
+    fullName: 'Deep Singh',
+    email: 'deepsingh9003@gmail.com',
+    phone: '+1 (555) 019-3829',
+    accountNumber: '1089204918',
+    role: 'user',
+    balance: 0.00,
+    ledgerBalance: 0.00,
+    currency: 'USD',
+    address: 'Silicon Valley, CA',
+    country: 'United States',
+    verificationTier: 'Tier 1',
+    status: 'Active',
+    accountPin: '1234',
+    fourDigitCode: '8842',
+    transferCodeApproved: true,
+    createdAt: new Date('2024-03-01').toISOString()
   }
 ];
 
@@ -570,7 +589,7 @@ class LocalDBStore {
   }
 
   // Support Tickets
-  getSupportTickets(userId?: string, isAdmin?: boolean): SupportTicket[] {
+  getSupportTickets(userIdentifier?: { id?: string; email?: string } | string, isAdmin?: boolean): SupportTicket[] {
     this.refresh();
     const enrich = (t: SupportTicket): SupportTicket => {
       const user = this.db.users.find(u => 
@@ -634,8 +653,21 @@ class LocalDBStore {
     if (isAdmin) {
       return dedupedList.sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime());
     }
+
+    const targetId = typeof userIdentifier === 'string' ? userIdentifier.trim().toLowerCase() : (userIdentifier?.id || '').trim().toLowerCase();
+    const targetEmail = typeof userIdentifier === 'string' ? (userIdentifier.includes('@') ? userIdentifier.trim().toLowerCase() : '') : (userIdentifier?.email || '').trim().toLowerCase();
+
     return dedupedList
-      .filter(t => t.userId === userId || (userId && t.userEmail && t.userEmail.toLowerCase() === userId.toLowerCase()))
+      .filter(t => {
+        if (!userIdentifier) return true;
+        const ticketUid = (t.userId || '').trim().toLowerCase();
+        const ticketEmail = (t.userEmail || '').trim().toLowerCase();
+        if (targetId && ticketUid === targetId) return true;
+        if (targetEmail && ticketEmail === targetEmail) return true;
+        if (targetId && ticketEmail === targetId) return true;
+        if (targetEmail && ticketUid === targetEmail) return true;
+        return false;
+      })
       .sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime());
   }
 

@@ -5,6 +5,8 @@ import {
   subscribeSupportTicketsFromFirestore, 
   subscribeTicketMessagesFromFirestore, 
   getTicketMessagesFromFirestore, 
+  getAllUsersFromFirestore,
+  subscribeAllUsersFromFirestore,
   normalizeSupportMessage,
   mergeSupportTickets,
   isSameTicketId,
@@ -53,6 +55,7 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({
   initialUserEmail 
 }) => {
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
+  const [registeredUsers, setRegisteredUsers] = useState<User[]>([]);
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(initialTicketId || null);
   const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
   const selectedTicketIdRef = useRef<string | null>(initialTicketId || null);
@@ -179,9 +182,24 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({
     // Initial fetch from local store & backend
     fetchTickets(false);
 
+    // Subscribe to registered users from Firestore to ensure all client records (such as deepsingh9003@gmail.com) are instantly available
+    const unsubUsers = subscribeAllUsersFromFirestore((liveUsers) => {
+      if (liveUsers && liveUsers.length > 0) {
+        liveUsers.forEach(u => dbStore.saveUser(u));
+        setRegisteredUsers(liveUsers);
+      }
+    });
+    getAllUsersFromFirestore().then(users => {
+      if (users && users.length > 0) {
+        users.forEach(u => dbStore.saveUser(u));
+        setRegisteredUsers(users);
+      }
+    }).catch(() => {});
+
     // Real-time Firestore snapshot listener
+    const userIdentifier = user.role === 'admin' ? undefined : { id: user.id, email: user.email };
     const unsubFirestore = subscribeSupportTicketsFromFirestore(
-      user.role === 'admin' ? undefined : user.id,
+      userIdentifier,
       user.role === 'admin',
       (fsTickets) => {
         if (fsTickets && fsTickets.length > 0) {
@@ -207,7 +225,7 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({
     // Cross-tab real-time event bus listener
     const unsubRealtimeBus = subscribeRealtimeUpdates((event) => {
       if (event.type.includes('SUPPORT') || event.type.includes('TICKET')) {
-        const localTickets = dbStore.getSupportTickets(user.role === 'admin' ? undefined : user.id, user.role === 'admin');
+        const localTickets = dbStore.getSupportTickets(userIdentifier, user.role === 'admin');
         if (localTickets && localTickets.length > 0) {
           setTickets(localTickets);
           setSelectedTicket(prev => {
@@ -225,10 +243,11 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({
     });
 
     return () => {
+      unsubUsers();
       unsubFirestore();
       unsubRealtimeBus();
     };
-  }, [user.id, user.role, initialTicketId, initialUserEmail, initialUserId]);
+  }, [user.id, user.email, user.role, initialTicketId, initialUserEmail, initialUserId]);
 
   // Live real-time subcollection and query listener for the currently selected active ticket
   useEffect(() => {
@@ -474,16 +493,21 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({
   };
 
   const getUserDetails = (t: SupportTicket) => {
-    const allUsers = dbStore.getUsers();
+    const allUsers = registeredUsers.length > 0 ? registeredUsers : dbStore.getUsers();
+    const cleanUid = (t.userId || '').trim().toLowerCase();
+    const cleanEmail = (t.userEmail || '').trim().toLowerCase();
+    const cleanAcc = (t.accountNumber || '').trim();
+    const cleanName = (t.userName || '').trim().toLowerCase();
+
     const matchedUser = allUsers.find(u => 
-      (t.userId && u.id === t.userId) || 
-      (t.userEmail && u.email && u.email.toLowerCase() === t.userEmail.toLowerCase()) ||
-      (t.accountNumber && u.accountNumber === t.accountNumber) ||
-      (t.userName && u.fullName && u.fullName.toLowerCase() === t.userName.toLowerCase())
+      (cleanUid && u.id && u.id.toLowerCase() === cleanUid) || 
+      (cleanEmail && u.email && u.email.toLowerCase() === cleanEmail) ||
+      (cleanAcc && u.accountNumber === cleanAcc) ||
+      (cleanName && u.fullName && u.fullName.toLowerCase() === cleanName)
     );
 
     return {
-      userName: matchedUser?.fullName || t.userName || 'Client',
+      userName: matchedUser?.fullName || t.userName || (t.userEmail ? t.userEmail.split('@')[0] : 'Client'),
       userEmail: matchedUser?.email || t.userEmail || '',
       accountNumber: matchedUser?.accountNumber || t.accountNumber || ''
     };
@@ -507,13 +531,13 @@ export const CustomerSupportPanel: React.FC<CustomerSupportPanelProps> = ({
   const matchingRegisteredUsers = React.useMemo(() => {
     if (user.role !== 'admin' || !searchFilter.trim()) return [];
     const query = searchFilter.toLowerCase().trim();
-    const allUsers = dbStore.getUsers();
+    const allUsers = registeredUsers.length > 0 ? registeredUsers : dbStore.getUsers();
     return allUsers.filter(u => 
-      u.email.toLowerCase().includes(query) || 
-      u.fullName.toLowerCase().includes(query) ||
+      (u.email && u.email.toLowerCase().includes(query)) || 
+      (u.fullName && u.fullName.toLowerCase().includes(query)) ||
       (u.accountNumber && u.accountNumber.includes(query))
     );
-  }, [user.role, searchFilter]);
+  }, [user.role, searchFilter, registeredUsers]);
 
   const filteredTickets = tickets.filter(t => {
     const details = getUserDetails(t);

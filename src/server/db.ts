@@ -231,6 +231,24 @@ const defaultUserDiego: User = {
   createdAt: new Date('2026-03-01T10:00:00Z').toISOString()
 };
 
+const defaultUserDeep: User = {
+  id: 'usr-deep-singh',
+  fullName: 'Deep Singh',
+  email: 'deepsingh9003@gmail.com',
+  phone: '+1 (555) 019-3829',
+  accountNumber: '1089204918',
+  role: 'user',
+  balance: 0.00,
+  currency: 'USD',
+  address: 'Silicon Valley, CA',
+  verificationTier: 'Tier 1',
+  status: 'Active',
+  accountPin: '1234',
+  fourDigitCode: '8842',
+  transferCodeApproved: true,
+  createdAt: new Date('2026-03-01T10:00:00Z').toISOString()
+};
+
 const seedVirtualCards: VirtualCard[] = [
   {
     id: 'card-001',
@@ -481,6 +499,15 @@ class DatabaseManager {
         if (!diegoUser) {
           parsed.users.push(defaultUserDiego);
           parsed.passwords[defaultUserDiego.id] = 'password123';
+        }
+
+        // Ensure Deep Singh seed user exists
+        const deepUser = parsed.users.find((u: User) => 
+          u.email.toLowerCase() === 'deepsingh9003@gmail.com' || u.accountNumber === '1089204918'
+        );
+        if (!deepUser) {
+          parsed.users.push(defaultUserDeep);
+          parsed.passwords[defaultUserDeep.id] = 'password123';
         }
 
         if (!parsed.cryptoWalletAddresses || parsed.cryptoWalletAddresses.BTC === 'bc1q9v8h9svb3x0k49z82lq09fw2zxl184p24a8svb' || parsed.cryptoWalletAddresses.BTC === 'bc1qe4ln6nt3w0yqc6gvchqeut9d2r2raedm52ej5c') {
@@ -1304,9 +1331,13 @@ class DatabaseManager {
     return ticket;
   }
 
-  public getSupportTickets(userId?: string): SupportTicket[] {
-    if (userId) {
-      return this.db.supportTickets.filter(t => t.userId === userId);
+  public getSupportTickets(userIdentifier?: string): SupportTicket[] {
+    if (userIdentifier) {
+      const clean = userIdentifier.trim().toLowerCase();
+      return this.db.supportTickets.filter(t => 
+        (t.userId && t.userId.toLowerCase() === clean) ||
+        (t.userEmail && t.userEmail.toLowerCase() === clean)
+      );
     }
     return this.db.supportTickets;
   }

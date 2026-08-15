@@ -816,6 +816,31 @@ export function normalizeSupportTicket(rawDoc: any, docId?: string): SupportTick
     (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
   );
 
+  let userEmail = rawDoc.userEmail || rawDoc.email || rawDoc.senderEmail || rawDoc.clientEmail || rawDoc.targetEmail || rawDoc.user_email || rawDoc.from || '';
+  let userName = rawDoc.userName || rawDoc.name || rawDoc.senderName || rawDoc.clientName || '';
+  let userId = rawDoc.userId || rawDoc.uid || rawDoc.user_id || '';
+  let accountNumber = rawDoc.accountNumber || rawDoc.account_number || '';
+
+  // Extract user email / name from messages if missing on root document
+  if (!userEmail && Array.isArray(messages)) {
+    for (const m of messages) {
+      if (m && m.senderRole !== 'admin' && m.senderRole !== 'system') {
+        if (m.senderId && m.senderId.includes('@')) {
+          userEmail = m.senderId;
+          break;
+        }
+        if (m.senderName && m.senderName.includes('@')) {
+          userEmail = m.senderName;
+          break;
+        }
+      }
+    }
+  }
+
+  if (!userName) {
+    userName = userEmail ? userEmail.split('@')[0] : 'Client';
+  }
+
   let status: 'Open' | 'In Progress' | 'Resolved' | 'Closed' = 'Open';
   if (rawDoc.status === 'Resolved' || rawDoc.status === 'Closed' || rawDoc.status === 'In Progress') {
     status = rawDoc.status;
@@ -830,10 +855,10 @@ export function normalizeSupportTicket(rawDoc: any, docId?: string): SupportTick
     chatId: canonicalId,
     threadId: canonicalId,
     roomId: canonicalId,
-    userId: rawDoc.userId || '',
-    userEmail: rawDoc.userEmail || rawDoc.email || '',
-    userName: rawDoc.userName || rawDoc.name || (rawDoc.userEmail ? rawDoc.userEmail.split('@')[0] : 'Client'),
-    accountNumber: rawDoc.accountNumber || '',
+    userId,
+    userEmail,
+    userName,
+    accountNumber,
     subject: rawDoc.subject || rawDoc.title || rawDoc.topic || 'Customer Support Consultation',
     category: rawDoc.category || 'General',
     status,
@@ -881,7 +906,8 @@ export function mergeSupportTickets(existing: SupportTicket, incoming: SupportTi
           }
         }
       }
-      msgMap.set(m.id || `msg-${m.senderId}-${msgTime}`, m);
+      const key = m.id || `${m.senderId || 'user'}_${msgText}_${m.createdAt || msgTime}`;
+      msgMap.set(key, m);
     }
   };
 
@@ -903,9 +929,10 @@ export function mergeSupportTickets(existing: SupportTicket, incoming: SupportTi
     threadId: canonicalId,
     roomId: canonicalId,
     status: mostRecentStatus || incoming.status || existing.status || 'Open',
-    userEmail: incoming.userEmail || existing.userEmail,
-    userName: incoming.userName || existing.userName,
-    accountNumber: incoming.accountNumber || existing.accountNumber,
+    userId: incoming.userId || existing.userId || '',
+    userEmail: incoming.userEmail || existing.userEmail || '',
+    userName: incoming.userName || existing.userName || 'Client',
+    accountNumber: incoming.accountNumber || existing.accountNumber || '',
     messages: mergedMessages,
     updatedAt: isIncomingNewer ? (incoming.updatedAt || new Date().toISOString()) : existing.updatedAt
   };
@@ -1165,7 +1192,10 @@ export async function deleteSupportMessageFromFirestore(
 /**
  * Get Support Tickets / Chat Conversations from Firestore with Subcollection message hydration
  */
-export async function getSupportTicketsFromFirestore(userId?: string, isAdmin?: boolean): Promise<SupportTicket[]> {
+export async function getSupportTicketsFromFirestore(
+  userIdentifier?: { id?: string; email?: string } | string, 
+  isAdmin?: boolean
+): Promise<SupportTicket[]> {
   try {
     const ticketMap = new Map<string, SupportTicket>();
 
@@ -1174,16 +1204,29 @@ export async function getSupportTicketsFromFirestore(userId?: string, isAdmin?: 
       getDocs(collection(db, 'chats')).catch(() => null)
     ]);
 
+    const targetId = typeof userIdentifier === 'string' ? userIdentifier.trim().toLowerCase() : (userIdentifier?.id || '').trim().toLowerCase();
+    const targetEmail = typeof userIdentifier === 'string' ? (userIdentifier.includes('@') ? userIdentifier.trim().toLowerCase() : '') : (userIdentifier?.email || '').trim().toLowerCase();
+
+    const checkMatch = (t: SupportTicket) => {
+      if (isAdmin) return true;
+      if (!userIdentifier) return true;
+      const ticketUserId = (t.userId || '').trim().toLowerCase();
+      const ticketUserEmail = (t.userEmail || '').trim().toLowerCase();
+
+      if (targetId && ticketUserId === targetId) return true;
+      if (targetEmail && ticketUserEmail === targetEmail) return true;
+      if (targetId && ticketUserEmail === targetId) return true;
+      if (targetEmail && ticketUserId === targetEmail) return true;
+      return false;
+    };
+
     const processDoc = (d: any) => {
       if (d && d.exists()) {
         const raw = d.data();
         const canonicalId = getCanonicalTicketId(raw.id || d.id);
         const normalizedTicket = normalizeSupportTicket(raw, canonicalId);
         
-        const isMatch = isAdmin || !userId || normalizedTicket.userId === userId || 
-          (normalizedTicket.userEmail && userId.includes('@') && normalizedTicket.userEmail.toLowerCase() === userId.toLowerCase());
-        
-        if (isMatch) {
+        if (checkMatch(normalizedTicket)) {
           const existing = ticketMap.get(canonicalId);
           if (!existing) {
             ticketMap.set(canonicalId, normalizedTicket);
@@ -1221,10 +1264,30 @@ export async function getSupportTicketsFromFirestore(userId?: string, isAdmin?: 
 /**
  * Subscribe to real-time Support Tickets and Chat snapshot updates from Firestore
  */
-export function subscribeSupportTicketsFromFirestore(userId: string | undefined, isAdmin: boolean, callback: (tickets: SupportTicket[]) => void): () => void {
+export function subscribeSupportTicketsFromFirestore(
+  userIdentifier: { id?: string; email?: string } | string | undefined, 
+  isAdmin: boolean, 
+  callback: (tickets: SupportTicket[]) => void
+): () => void {
   try {
     const supportMap = new Map<string, SupportTicket>();
     const chatMap = new Map<string, SupportTicket>();
+
+    const targetId = typeof userIdentifier === 'string' ? userIdentifier.trim().toLowerCase() : (userIdentifier?.id || '').trim().toLowerCase();
+    const targetEmail = typeof userIdentifier === 'string' ? (userIdentifier.includes('@') ? userIdentifier.trim().toLowerCase() : '') : (userIdentifier?.email || '').trim().toLowerCase();
+
+    const checkMatch = (t: SupportTicket) => {
+      if (isAdmin) return true;
+      if (!userIdentifier) return true;
+      const ticketUserId = (t.userId || '').trim().toLowerCase();
+      const ticketUserEmail = (t.userEmail || '').trim().toLowerCase();
+
+      if (targetId && ticketUserId === targetId) return true;
+      if (targetEmail && ticketUserEmail === targetEmail) return true;
+      if (targetId && ticketUserEmail === targetId) return true;
+      if (targetEmail && ticketUserId === targetEmail) return true;
+      return false;
+    };
 
     const emit = () => {
       const combinedMap = new Map<string, SupportTicket>();
@@ -1249,18 +1312,15 @@ export function subscribeSupportTicketsFromFirestore(userId: string | undefined,
     };
 
     const handleSnapshot = (snap: any, targetMap: Map<string, SupportTicket>) => {
-      targetMap.clear();
       snap.forEach((d: any) => {
         if (d.exists()) {
           const raw = d.data();
           const canonicalId = getCanonicalTicketId(raw.id || d.id);
           const normalizedTicket = normalizeSupportTicket(raw, canonicalId);
           
-          const isMatch = isAdmin || !userId || normalizedTicket.userId === userId || 
-            (normalizedTicket.userEmail && userId.includes('@') && normalizedTicket.userEmail.toLowerCase() === userId.toLowerCase());
-
-          if (isMatch) {
-            targetMap.set(canonicalId, normalizedTicket);
+          if (checkMatch(normalizedTicket)) {
+            const existing = targetMap.get(canonicalId);
+            targetMap.set(canonicalId, existing ? mergeSupportTickets(existing, normalizedTicket) : normalizedTicket);
           }
         }
       });
