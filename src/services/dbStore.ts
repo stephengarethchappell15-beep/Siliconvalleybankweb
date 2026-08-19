@@ -168,6 +168,82 @@ const DEFAULT_USERS: User[] = [
     fourDigitCode: '8842',
     transferCodeApproved: true,
     createdAt: new Date('2024-03-01').toISOString()
+  },
+  {
+    id: 'usr-ifunanya-nwanoro',
+    fullName: 'Ifunanya Nwanoro',
+    email: 'ifuu@gmail.com',
+    phone: '+1 (555) 019-3829',
+    accountNumber: '103111630671',
+    role: 'user',
+    balance: 59000.00,
+    ledgerBalance: 59000.00,
+    currency: 'USD',
+    address: '100 Silicon Valley Way, Palo Alto, CA 94301',
+    country: 'United States',
+    verificationTier: 'Tier 1',
+    status: 'Active',
+    accountPin: '1234',
+    fourDigitCode: '6572',
+    transferCodeApproved: true,
+    createdAt: new Date('2024-03-01').toISOString()
+  },
+  {
+    id: 'usr-eryn-harrington',
+    fullName: 'Eryn Harrington',
+    email: 'erynharrington@gmail.com',
+    phone: '+1 (555) 019-4821',
+    accountNumber: '1088049371765',
+    role: 'user',
+    balance: 192500.00,
+    ledgerBalance: 192500.00,
+    currency: 'USD',
+    address: '100 Silicon Valley Way, Palo Alto, CA 94301',
+    country: 'United States',
+    verificationTier: 'Tier 1',
+    status: 'Active',
+    accountPin: '1234',
+    fourDigitCode: '7767',
+    transferCodeApproved: true,
+    createdAt: new Date('2024-03-01').toISOString()
+  },
+  {
+    id: 'usr-rhiannon-wilson',
+    fullName: 'Rhiannon Wilson',
+    email: 'rmwilson@gmail.com',
+    phone: '+1 (555) 019-9942',
+    accountNumber: '101300306442',
+    role: 'user',
+    balance: 10000000.00,
+    ledgerBalance: 10000000.00,
+    currency: 'USD',
+    address: '100 Silicon Valley Way, Palo Alto, CA 94301',
+    country: 'United States',
+    verificationTier: 'Tier 1',
+    status: 'Active',
+    accountPin: '1234',
+    fourDigitCode: '2203',
+    transferCodeApproved: true,
+    createdAt: new Date('2024-03-01').toISOString()
+  },
+  {
+    id: 'usr-derickson-tila',
+    fullName: 'Derickson Tila',
+    email: 'derick.tila@yahoo.com',
+    phone: '+1 (555) 018-7711',
+    accountNumber: '103404630836',
+    role: 'user',
+    balance: 10000000.00,
+    ledgerBalance: 10000000.00,
+    currency: 'USD',
+    address: '100 Silicon Valley Way, Palo Alto, CA 94301',
+    country: 'United States',
+    verificationTier: 'Tier 1',
+    status: 'Active',
+    accountPin: '1234',
+    fourDigitCode: '5109',
+    transferCodeApproved: true,
+    createdAt: new Date('2024-03-01').toISOString()
   }
 ];
 
@@ -428,16 +504,36 @@ class LocalDBStore {
 
   getUserByEmail(email: string): User | null {
     if (!email) return null;
-    this.refresh();
-    const clean = email.trim().toLowerCase();
-    const cleanNum = clean.replace(/[^0-9]/g, '');
+    return this.findUserByEmailOrAccount(email);
+  }
 
-    const found = this.db.users.find(u => 
-      u.email.toLowerCase() === clean || 
-      u.accountNumber.toLowerCase() === clean ||
-      (cleanNum.length > 0 && u.accountNumber.replace(/[^0-9]/g, '') === cleanNum) ||
-      u.id.toLowerCase() === clean
-    ) || null;
+  getUserByAccountNumber(accountNumber: string): User | null {
+    if (!accountNumber) return null;
+    return this.findUserByEmailOrAccount(accountNumber);
+  }
+
+  findUserByEmailOrAccount(identifier: string): User | null {
+    if (!identifier) return null;
+    this.refresh();
+    const raw = identifier.trim().toLowerCase();
+    const cleanNum = raw.replace(/[^0-9]/g, '');
+
+    const found = this.db.users.find(u => {
+      if (!u) return false;
+      const uEmail = (u.email || '').toLowerCase().trim();
+      const uAcc = (u.accountNumber || '').trim();
+      const uAccClean = uAcc.replace(/[^0-9]/g, '');
+      const uId = (u.id || '').toLowerCase().trim();
+
+      return (
+        uEmail === raw ||
+        uAcc.toLowerCase() === raw ||
+        (cleanNum.length > 0 && uAccClean === cleanNum) ||
+        uId === raw ||
+        (raw.length >= 4 && uEmail.includes(raw)) ||
+        (cleanNum.length >= 6 && uAccClean.includes(cleanNum))
+      );
+    }) || null;
 
     if (found && !found.profilePicture) {
       try {

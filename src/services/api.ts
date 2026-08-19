@@ -171,7 +171,9 @@ export const api = {
   },
 
   async login(data: { email: string; password?: string }): Promise<AuthResponse> {
-    const identifier = data.email.trim().toLowerCase();
+    const rawIdentifier = (data.email || '').trim();
+    const identifier = rawIdentifier.toLowerCase();
+    const cleanNum = identifier.replace(/[^0-9]/g, '');
     let finalUser: User | null = null;
     let tokenStr = '';
 
@@ -179,7 +181,7 @@ export const api = {
     try {
       const backendRes = await requestApi<{ user: User; token: string }>('/auth/login', {
         method: 'POST',
-        body: JSON.stringify({ email: identifier, password: data.password || 'password123' }),
+        body: JSON.stringify({ email: rawIdentifier, password: data.password || 'password123' }),
       });
 
       if (backendRes && backendRes.user) {
@@ -190,18 +192,56 @@ export const api = {
       console.warn('Backend login endpoint call fallback:', err);
     }
 
-    // 2. Check Firestore SDK
+    // 2. Check Firestore SDK direct lookups
     if (!finalUser) {
-      const fsUser = await getUserFromFirestore(identifier);
+      const fsUser = await getUserFromFirestore(rawIdentifier);
       if (fsUser) {
         finalUser = fsUser;
         tokenStr = fsUser.id;
       }
     }
 
-    // 3. Check local dbStore fallback
+    if (!finalUser && cleanNum) {
+      const fsUserNum = await getUserFromFirestore(cleanNum);
+      if (fsUserNum) {
+        finalUser = fsUserNum;
+        tokenStr = fsUserNum.id;
+      }
+    }
+
+    // 3. Check Firestore full collection scan fallback
     if (!finalUser) {
-      let localUser = dbStore.getUserByEmail(identifier) || dbStore.getUserById(identifier);
+      try {
+        const allFs = await getAllUsersFromFirestore();
+        const matched = allFs.find(u => {
+          if (!u) return false;
+          const uEmail = (u.email || '').toLowerCase().trim();
+          const uAcc = (u.accountNumber || '').trim();
+          const uAccClean = uAcc.replace(/[^0-9]/g, '');
+          const uId = (u.id || '').toLowerCase().trim();
+
+          return (
+            uEmail === identifier ||
+            uAcc.toLowerCase() === identifier ||
+            (cleanNum.length > 0 && uAccClean === cleanNum) ||
+            uId === identifier ||
+            (identifier.length >= 4 && uEmail.includes(identifier)) ||
+            (cleanNum.length >= 6 && uAccClean.includes(cleanNum))
+          );
+        });
+
+        if (matched) {
+          finalUser = matched;
+          tokenStr = matched.id;
+        }
+      } catch (e) {
+        console.warn('Firestore all users scan error in api.login:', e);
+      }
+    }
+
+    // 4. Check local dbStore fallback
+    if (!finalUser) {
+      let localUser = dbStore.findUserByEmailOrAccount(rawIdentifier) || dbStore.getUserByEmail(rawIdentifier) || dbStore.getUserById(rawIdentifier);
       if (localUser) {
         finalUser = localUser;
         tokenStr = localUser.id;
@@ -215,7 +255,7 @@ export const api = {
     dbStore.saveUser(finalUser);
     dbStore.setStoredToken(tokenStr || finalUser.id);
 
-    // Sync to Firestore SDK
+    // Sync to Firestore SDK asynchronously
     syncUserToFirestore(finalUser, data.password || 'password123');
 
     return { user: finalUser, token: tokenStr || finalUser.id };

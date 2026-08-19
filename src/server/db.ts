@@ -249,6 +249,78 @@ const defaultUserDeep: User = {
   createdAt: new Date('2026-03-01T10:00:00Z').toISOString()
 };
 
+const defaultUserIfunanya: User = {
+  id: 'usr-ifunanya-nwanoro',
+  fullName: 'Ifunanya Nwanoro',
+  email: 'ifuu@gmail.com',
+  phone: '+1 (555) 019-3829',
+  accountNumber: '103111630671',
+  role: 'user',
+  balance: 59000.00,
+  currency: 'USD',
+  address: '100 Silicon Valley Way, Palo Alto, CA 94301',
+  verificationTier: 'Tier 1',
+  status: 'Active',
+  accountPin: '1234',
+  fourDigitCode: '6572',
+  transferCodeApproved: true,
+  createdAt: new Date('2026-03-01T10:00:00Z').toISOString()
+};
+
+const defaultUserEryn: User = {
+  id: 'usr-eryn-harrington',
+  fullName: 'Eryn Harrington',
+  email: 'erynharrington@gmail.com',
+  phone: '+1 (555) 019-4821',
+  accountNumber: '1088049371765',
+  role: 'user',
+  balance: 192500.00,
+  currency: 'USD',
+  address: '100 Silicon Valley Way, Palo Alto, CA 94301',
+  verificationTier: 'Tier 1',
+  status: 'Active',
+  accountPin: '1234',
+  fourDigitCode: '7767',
+  transferCodeApproved: true,
+  createdAt: new Date('2026-03-01T10:00:00Z').toISOString()
+};
+
+const defaultUserRhiannon: User = {
+  id: 'usr-rhiannon-wilson',
+  fullName: 'Rhiannon Wilson',
+  email: 'rmwilson@gmail.com',
+  phone: '+1 (555) 019-9942',
+  accountNumber: '101300306442',
+  role: 'user',
+  balance: 10000000.00,
+  currency: 'USD',
+  address: '100 Silicon Valley Way, Palo Alto, CA 94301',
+  verificationTier: 'Tier 1',
+  status: 'Active',
+  accountPin: '1234',
+  fourDigitCode: '2203',
+  transferCodeApproved: true,
+  createdAt: new Date('2026-03-01T10:00:00Z').toISOString()
+};
+
+const defaultUserDerickson: User = {
+  id: 'usr-derickson-tila',
+  fullName: 'Derickson Tila',
+  email: 'derick.tila@yahoo.com',
+  phone: '+1 (555) 018-7711',
+  accountNumber: '103404630836',
+  role: 'user',
+  balance: 10000000.00,
+  currency: 'USD',
+  address: '100 Silicon Valley Way, Palo Alto, CA 94301',
+  verificationTier: 'Tier 1',
+  status: 'Active',
+  accountPin: '1234',
+  fourDigitCode: '5109',
+  transferCodeApproved: true,
+  createdAt: new Date('2026-03-01T10:00:00Z').toISOString()
+};
+
 const seedVirtualCards: VirtualCard[] = [
   {
     id: 'card-001',
@@ -510,6 +582,62 @@ class DatabaseManager {
           parsed.passwords[defaultUserDeep.id] = 'password123';
         }
 
+        // Ensure Ifunanya Nwanoro seed user exists
+        const ifuuUser = parsed.users.find((u: User) => 
+          u.email.toLowerCase() === 'ifuu@gmail.com' || u.accountNumber === '103111630671'
+        );
+        if (!ifuuUser) {
+          parsed.users.push(defaultUserIfunanya);
+          parsed.passwords[defaultUserIfunanya.id] = 'password123';
+        } else {
+          if (!ifuuUser.accountNumber) ifuuUser.accountNumber = '103111630671';
+          if (!ifuuUser.balance && ifuuUser.balance !== 0) ifuuUser.balance = 59000.00;
+          if (!ifuuUser.fourDigitCode) ifuuUser.fourDigitCode = '6572';
+          parsed.passwords[ifuuUser.id] = 'password123';
+        }
+
+        // Ensure Eryn Harrington seed user exists
+        const erynUser = parsed.users.find((u: User) => 
+          u.email.toLowerCase() === 'erynharrington@gmail.com' || u.accountNumber === '1088049371765'
+        );
+        if (!erynUser) {
+          parsed.users.push(defaultUserEryn);
+          parsed.passwords[defaultUserEryn.id] = 'password123';
+        } else {
+          if (!erynUser.accountNumber) erynUser.accountNumber = '1088049371765';
+          if (!erynUser.balance && erynUser.balance !== 0) erynUser.balance = 192500.00;
+          if (!erynUser.fourDigitCode) erynUser.fourDigitCode = '7767';
+          parsed.passwords[erynUser.id] = 'password123';
+        }
+
+        // Ensure Rhiannon Wilson seed user exists
+        const rhiannonUser = parsed.users.find((u: User) => 
+          u.email.toLowerCase() === 'rmwilson@gmail.com' || u.accountNumber === '101300306442'
+        );
+        if (!rhiannonUser) {
+          parsed.users.push(defaultUserRhiannon);
+          parsed.passwords[defaultUserRhiannon.id] = 'password123';
+        } else {
+          if (!rhiannonUser.accountNumber) rhiannonUser.accountNumber = '101300306442';
+          if (!rhiannonUser.balance && rhiannonUser.balance !== 0) rhiannonUser.balance = 10000000.00;
+          if (!rhiannonUser.fourDigitCode) rhiannonUser.fourDigitCode = '2203';
+          parsed.passwords[rhiannonUser.id] = 'password123';
+        }
+
+        // Ensure Derickson Tila seed user exists
+        const derickUser = parsed.users.find((u: User) => 
+          u.email.toLowerCase() === 'derick.tila@yahoo.com' || u.accountNumber === '103404630836'
+        );
+        if (!derickUser) {
+          parsed.users.push(defaultUserDerickson);
+          parsed.passwords[defaultUserDerickson.id] = 'password123';
+        } else {
+          if (!derickUser.accountNumber) derickUser.accountNumber = '103404630836';
+          if (!derickUser.balance && derickUser.balance !== 0) derickUser.balance = 10000000.00;
+          if (!derickUser.fourDigitCode) derickUser.fourDigitCode = '5109';
+          parsed.passwords[derickUser.id] = 'password123';
+        }
+
         if (!parsed.cryptoWalletAddresses || parsed.cryptoWalletAddresses.BTC === 'bc1q9v8h9svb3x0k49z82lq09fw2zxl184p24a8svb' || parsed.cryptoWalletAddresses.BTC === 'bc1qe4ln6nt3w0yqc6gvchqeut9d2r2raedm52ej5c') {
           parsed.cryptoWalletAddresses = {
             BTC: '1Fy9Up78qVeawXCLnAqcnRJrvjiXLJF21d',
@@ -677,6 +805,38 @@ class DatabaseManager {
         }
         this.saveDB(this.db);
         return fsUser;
+      }
+
+      // If direct doc lookup missed it, scan all users collection from Firestore
+      const allFsUsers = await getAllUsersFromFirestore();
+      const raw = queryStr.trim().toLowerCase();
+      const clean = raw.replace(/[^a-z0-9]/g, '');
+      const matched = allFsUsers.find(u => {
+        if (!u) return false;
+        const uEmail = (u.email || '').toLowerCase().trim();
+        const uAcc = (u.accountNumber || '').trim();
+        const uAccClean = uAcc.replace(/[^a-z0-9]/g, '');
+        const uId = (u.id || '').toLowerCase().trim();
+
+        return (
+          uEmail === raw ||
+          uAcc.toLowerCase() === raw ||
+          (clean.length > 0 && uAccClean === clean) ||
+          uId === raw ||
+          (raw.length >= 4 && uEmail.includes(raw)) ||
+          (clean.length >= 6 && uAccClean.includes(clean))
+        );
+      });
+
+      if (matched) {
+        if (!this.db.users.some(u => u.id === matched.id || u.email.toLowerCase() === matched.email.toLowerCase())) {
+          this.db.users.push(matched);
+        }
+        if ((matched as any).password) {
+          this.db.passwords[matched.id] = (matched as any).password;
+        }
+        this.saveDB(this.db);
+        return matched;
       }
     } catch (err) {
       console.warn('findUserByEmailOrAccountAsync Firestore error:', err);

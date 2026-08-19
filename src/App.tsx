@@ -21,7 +21,7 @@ import { SupportChatWidget } from './components/SupportChatWidget';
 import { api, getStoredToken, removeStoredToken } from './services/api';
 import { dbStore } from './services/dbStore';
 import { subscribeRealtimeUpdates } from './services/realtimeBus';
-import { subscribeUserFromFirestore, subscribeTransactionsFromFirestore } from './lib/firebase';
+import { subscribeUserFromFirestore, subscribeTransactionsFromFirestore, subscribeAllUsersFromFirestore } from './lib/firebase';
 import { subscribeAdminAlerts, AdminAlert } from './services/adminAlerts';
 import { User, Transaction, UserNotification } from './types';
 import { ShieldCheck, Building2, ShieldAlert, Bell, ArrowUpRight, X } from 'lucide-react';
@@ -108,6 +108,14 @@ export default function App() {
 
   useEffect(() => {
     initSession();
+    const unsubAllUsers = subscribeAllUsersFromFirestore((allFsUsers) => {
+      allFsUsers.forEach(u => {
+        if (u && u.email) {
+          dbStore.saveUser(u);
+        }
+      });
+    });
+    return () => unsubAllUsers();
   }, []);
 
   const refreshUser = async () => {
