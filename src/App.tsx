@@ -23,6 +23,7 @@ import { dbStore } from './services/dbStore';
 import { subscribeRealtimeUpdates } from './services/realtimeBus';
 import { subscribeUserFromFirestore, subscribeTransactionsFromFirestore, subscribeAllUsersFromFirestore } from './lib/firebase';
 import { subscribeAdminAlerts, AdminAlert } from './services/adminAlerts';
+import { calculateUserBalance } from './utils/balance';
 import { User, Transaction, UserNotification } from './types';
 import { ShieldCheck, Building2, ShieldAlert, Bell, ArrowUpRight, X } from 'lucide-react';
 
@@ -170,7 +171,13 @@ export default function App() {
     const unsubUser = subscribeUserFromFirestore(user.id, user.email, (updatedUser) => {
       setUser(prev => {
         if (!prev) return updatedUser;
-        const merged = { ...prev, ...updatedUser };
+        const { availableBalance, ledgerBalance } = calculateUserBalance(updatedUser, transactions);
+        const merged = { 
+          ...prev, 
+          ...updatedUser,
+          balance: availableBalance > 0 ? availableBalance : (updatedUser.balance || prev.balance),
+          ledgerBalance: ledgerBalance > 0 ? ledgerBalance : (updatedUser.ledgerBalance || prev.ledgerBalance)
+        };
         dbStore.saveUser(merged);
         return merged;
       });
@@ -181,6 +188,18 @@ export default function App() {
       (fsTxns) => {
         setTransactions(fsTxns);
         fsTxns.forEach(t => dbStore.addTransaction(t));
+        
+        // Reconcile user balance whenever new transactions are received
+        setUser(prevUser => {
+          if (!prevUser) return prevUser;
+          const { availableBalance, ledgerBalance } = calculateUserBalance(prevUser, fsTxns);
+          if (prevUser.balance !== availableBalance || prevUser.ledgerBalance !== ledgerBalance) {
+            const reconciled = { ...prevUser, balance: availableBalance, ledgerBalance: ledgerBalance };
+            dbStore.saveUser(reconciled);
+            return reconciled;
+          }
+          return prevUser;
+        });
       }
     );
 
@@ -188,7 +207,7 @@ export default function App() {
       unsubUser();
       unsubTxns();
     };
-  }, [user?.id, user?.email, user?.role]);
+  }, [user?.id, user?.email, user?.role, transactions.length]);
 
   const handleLogout = async () => {
     await api.logout();

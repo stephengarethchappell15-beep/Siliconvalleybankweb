@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { User, Transaction, UserNotification, VirtualCard } from '../types';
 import { api } from '../services/api';
 import { maskAccountNumber, maskRoutingNumber, maskBalance } from '../utils/masking';
+import { calculateUserBalance } from '../utils/balance';
 import { 
   CreditCard, 
   Copy, 
@@ -71,6 +72,16 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   const [cardsLoading, setCardsLoading] = useState(true);
   const [copiedCardNum, setCopiedCardNum] = useState(false);
 
+  // Reconcile user balance with approved transactions
+  const { availableBalance, ledgerBalance } = calculateUserBalance(user, transactions);
+
+  // Self-heal and sync user balance if out of sync
+  useEffect(() => {
+    if (user && user.balance !== availableBalance && availableBalance > 0 && onUserUpdated) {
+      onUserUpdated({ ...user, balance: availableBalance, ledgerBalance: ledgerBalance });
+    }
+  }, [user?.balance, availableBalance, ledgerBalance, onUserUpdated]);
+
   // Load Virtual Cards for main dashboard view
   useEffect(() => {
     let isMounted = true;
@@ -117,7 +128,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   const rawFormattedBalance = new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: user.currency || 'USD'
-  }).format(user.balance);
+  }).format(availableBalance);
 
   const displayBalance = maskBalance(rawFormattedBalance, showBalanceDetails);
 
@@ -670,14 +681,14 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                   <Plane className="w-4 h-4 text-slate-600 shrink-0" />
                   <div>
                     <p className="text-[9px] text-slate-500 font-semibold">Runway</p>
-                    <p className="font-bold text-slate-900">{user.balance > 0 ? 'N/A' : '0 Months'}</p>
+                    <p className="font-bold text-slate-900">{availableBalance > 0 ? 'N/A' : '0 Months'}</p>
                   </div>
                 </div>
               </div>
 
               {/* Historical Balance Baseline */}
               <div className="relative h-20 w-full mt-2 flex flex-col justify-end">
-                {user.balance > 0 ? (
+                {availableBalance > 0 ? (
                   <svg className="w-full h-16" viewBox="0 0 300 90" preserveAspectRatio="none">
                     <defs>
                       <linearGradient id="softSlateGradient" x1="0" y1="0" x2="0" y2="1">

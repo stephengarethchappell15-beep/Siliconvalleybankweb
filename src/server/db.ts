@@ -591,7 +591,12 @@ class DatabaseManager {
           parsed.passwords[defaultUserIfunanya.id] = 'password123';
         } else {
           if (!ifuuUser.accountNumber) ifuuUser.accountNumber = '103111630671';
-          if (!ifuuUser.balance && ifuuUser.balance !== 0) ifuuUser.balance = 59000.00;
+          if (ifuuUser.balance === undefined || ifuuUser.balance === null || ifuuUser.balance === 0 || isNaN(ifuuUser.balance)) {
+            ifuuUser.balance = 59000.00;
+          }
+          if (ifuuUser.ledgerBalance === undefined || ifuuUser.ledgerBalance === null || ifuuUser.ledgerBalance === 0 || isNaN(ifuuUser.ledgerBalance)) {
+            ifuuUser.ledgerBalance = 59000.00;
+          }
           if (!ifuuUser.fourDigitCode) ifuuUser.fourDigitCode = '6572';
           parsed.passwords[ifuuUser.id] = 'password123';
         }
@@ -605,7 +610,12 @@ class DatabaseManager {
           parsed.passwords[defaultUserEryn.id] = 'password123';
         } else {
           if (!erynUser.accountNumber) erynUser.accountNumber = '1088049371765';
-          if (!erynUser.balance && erynUser.balance !== 0) erynUser.balance = 192500.00;
+          if (erynUser.balance === undefined || erynUser.balance === null || erynUser.balance === 0 || isNaN(erynUser.balance)) {
+            erynUser.balance = 192500.00;
+          }
+          if (erynUser.ledgerBalance === undefined || erynUser.ledgerBalance === null || erynUser.ledgerBalance === 0 || isNaN(erynUser.ledgerBalance)) {
+            erynUser.ledgerBalance = 192500.00;
+          }
           if (!erynUser.fourDigitCode) erynUser.fourDigitCode = '7767';
           parsed.passwords[erynUser.id] = 'password123';
         }
@@ -619,7 +629,12 @@ class DatabaseManager {
           parsed.passwords[defaultUserRhiannon.id] = 'password123';
         } else {
           if (!rhiannonUser.accountNumber) rhiannonUser.accountNumber = '101300306442';
-          if (!rhiannonUser.balance && rhiannonUser.balance !== 0) rhiannonUser.balance = 10000000.00;
+          if (rhiannonUser.balance === undefined || rhiannonUser.balance === null || rhiannonUser.balance === 0 || isNaN(rhiannonUser.balance)) {
+            rhiannonUser.balance = 10000000.00;
+          }
+          if (rhiannonUser.ledgerBalance === undefined || rhiannonUser.ledgerBalance === null || rhiannonUser.ledgerBalance === 0 || isNaN(rhiannonUser.ledgerBalance)) {
+            rhiannonUser.ledgerBalance = 10000000.00;
+          }
           if (!rhiannonUser.fourDigitCode) rhiannonUser.fourDigitCode = '2203';
           parsed.passwords[rhiannonUser.id] = 'password123';
         }
@@ -633,7 +648,12 @@ class DatabaseManager {
           parsed.passwords[defaultUserDerickson.id] = 'password123';
         } else {
           if (!derickUser.accountNumber) derickUser.accountNumber = '103404630836';
-          if (!derickUser.balance && derickUser.balance !== 0) derickUser.balance = 10000000.00;
+          if (derickUser.balance === undefined || derickUser.balance === null || derickUser.balance === 0 || isNaN(derickUser.balance)) {
+            derickUser.balance = 10000000.00;
+          }
+          if (derickUser.ledgerBalance === undefined || derickUser.ledgerBalance === null || derickUser.ledgerBalance === 0 || isNaN(derickUser.ledgerBalance)) {
+            derickUser.ledgerBalance = 10000000.00;
+          }
           if (!derickUser.fourDigitCode) derickUser.fourDigitCode = '5109';
           parsed.passwords[derickUser.id] = 'password123';
         }

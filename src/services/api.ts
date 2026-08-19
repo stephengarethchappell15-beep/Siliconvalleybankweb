@@ -37,6 +37,7 @@ import {
   isSameTicketId,
   getCanonicalTicketId
 } from '../lib/firebase';
+import { calculateUserBalance } from '../utils/balance';
 
 export const getStoredToken = (): string | null => dbStore.getStoredToken();
 export const setStoredToken = (token: string): void => dbStore.setStoredToken(token);
@@ -269,17 +270,24 @@ export const api = {
     // 1. Try Express backend API
     const backendRes = await requestApi<{ user: User }>('/auth/me');
     if (backendRes && backendRes.user) {
-      if (!backendRes.user.profilePicture) {
+      const u = backendRes.user;
+      const txns = dbStore.getTransactions(u.id);
+      const { availableBalance, ledgerBalance } = calculateUserBalance(u, txns);
+      if (availableBalance > 0 && (u.balance === 0 || !u.balance)) {
+        u.balance = availableBalance;
+        u.ledgerBalance = ledgerBalance;
+      }
+      if (!u.profilePicture) {
         try {
-          const cachedAvatar = localStorage.getItem(`svb_avatar_${backendRes.user.id}`);
-          if (cachedAvatar) backendRes.user.profilePicture = cachedAvatar;
+          const cachedAvatar = localStorage.getItem(`svb_avatar_${u.id}`);
+          if (cachedAvatar) u.profilePicture = cachedAvatar;
         } catch (e) {}
       } else {
-        try { localStorage.setItem(`svb_avatar_${backendRes.user.id}`, backendRes.user.profilePicture); } catch (e) {}
+        try { localStorage.setItem(`svb_avatar_${u.id}`, u.profilePicture); } catch (e) {}
       }
-      dbStore.saveUser(backendRes.user);
-      syncUserToFirestore(backendRes.user);
-      return { user: backendRes.user };
+      dbStore.saveUser(u);
+      syncUserToFirestore(u);
+      return { user: u };
     }
 
     // 2. Local dbStore session restoration
@@ -299,6 +307,15 @@ export const api = {
 
     if (!user) {
       throw new Error('Not authenticated');
+    }
+
+    // Reconcile user balance
+    const txns = dbStore.getTransactions(user.id);
+    const { availableBalance, ledgerBalance } = calculateUserBalance(user, txns);
+    if (availableBalance > 0 && (user.balance === 0 || !user.balance)) {
+      user.balance = availableBalance;
+      user.ledgerBalance = ledgerBalance;
+      dbStore.saveUser(user);
     }
 
     if (!user.profilePicture) {

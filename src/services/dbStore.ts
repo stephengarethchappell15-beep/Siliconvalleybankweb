@@ -331,14 +331,30 @@ function getInitialDB(): DBStructure {
         // Merge users from main storage
         for (const u of parsed.users) {
           if (u && u.email) {
-            userMap.set(u.email.toLowerCase(), { ...userMap.get(u.email.toLowerCase()), ...u });
+            const def = userMap.get(u.email.toLowerCase());
+            const mergedBal = (typeof u.balance === 'number' && u.balance > 0) ? u.balance : (def?.balance ?? u.balance ?? 0);
+            const mergedLedger = (typeof u.ledgerBalance === 'number' && u.ledgerBalance > 0) ? u.ledgerBalance : (def?.ledgerBalance ?? mergedBal);
+            userMap.set(u.email.toLowerCase(), { 
+              ...def, 
+              ...u, 
+              balance: mergedBal, 
+              ledgerBalance: mergedLedger 
+            });
           }
         }
 
         // Merge users from extra registered backup
         for (const u of loadedUsers) {
           if (u && u.email) {
-            userMap.set(u.email.toLowerCase(), { ...userMap.get(u.email.toLowerCase()), ...u });
+            const def = userMap.get(u.email.toLowerCase());
+            const mergedBal = (typeof u.balance === 'number' && u.balance > 0) ? u.balance : (def?.balance ?? u.balance ?? 0);
+            const mergedLedger = (typeof u.ledgerBalance === 'number' && u.ledgerBalance > 0) ? u.ledgerBalance : (def?.ledgerBalance ?? mergedBal);
+            userMap.set(u.email.toLowerCase(), { 
+              ...def, 
+              ...u, 
+              balance: mergedBal, 
+              ledgerBalance: mergedLedger 
+            });
           }
         }
 
