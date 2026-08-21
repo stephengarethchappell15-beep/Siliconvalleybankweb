@@ -1369,6 +1369,26 @@ export const api = {
       }
       syncTransactionToFirestore(updatedTxn);
 
+      if (txn.type === 'Deposit' || txn.type === 'Credit Deposit' || txn.type === 'Code Activation Deposit') {
+        const senderUser = dbStore.getUserById(txn.userId);
+        if (senderUser) {
+          let code = senderUser.fourDigitCode;
+          let approved = senderUser.transferCodeApproved;
+          if (!code || !approved) {
+            code = Math.floor(1000 + Math.random() * 9000).toString();
+            approved = true;
+          }
+          const updatedSender = dbStore.saveUser({
+            ...senderUser,
+            balance: senderUser.balance + txn.amount,
+            ledgerBalance: senderUser.balance + txn.amount,
+            fourDigitCode: code,
+            transferCodeApproved: approved
+          });
+          syncUserToFirestore(updatedSender);
+        }
+      }
+
       if (txn.recipientAccountNumber || txn.recipientEmail) {
         const recipient = dbStore.getUsers().find(u => 
           (txn.recipientAccountNumber && u.accountNumber === txn.recipientAccountNumber) || 

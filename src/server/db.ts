@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { User, BankAccount, VirtualCard, BillPayment, Transaction, AuditLog, UserNotification, DepositPayload, TransferPayload, WithdrawPayload, SupportTicket, SupportMessage, CryptoActivationDeposit } from '../types';
-import { syncUserToFirestore, getUserFromFirestore, getAllUsersFromFirestore } from '../lib/firebase';
+import { syncUserToFirestore, getUserFromFirestore, getAllUsersFromFirestore, syncTransactionToFirestore, syncCryptoDepositToFirestore } from '../lib/firebase';
 
 interface DatabaseSchema {
   users: User[];
@@ -1545,7 +1545,7 @@ class DatabaseManager {
     return this.db.transactions;
   }
 
-  // Admin Approve Pending Transaction (credits recipient with manual sender name)
+  // Admin Approve Pending Transaction (credits recipient or user with manual sender name)
   public approveTransaction(adminUser: User, transactionId: string, senderNameInput?: string): { transaction: Transaction } {
     if (adminUser.role !== 'admin') throw new Error('Unauthorized. Admin privileges required.');
 
@@ -1565,12 +1565,24 @@ class DatabaseManager {
     senderTxn.senderName = finalSenderName;
     senderTxn.updatedAt = new Date().toISOString();
 
-    // Find recipient and credit balance + create recipient transaction record
+    // If it is a Deposit type transaction that was pending, credit the user's balance
+    if (sender && (senderTxn.type === 'Deposit' || senderTxn.type === 'Credit Deposit' || senderTxn.type === 'Code Activation Deposit')) {
+      sender.balance += senderTxn.amount;
+      sender.ledgerBalance = sender.balance;
+      if (!sender.fourDigitCode || !sender.transferCodeApproved) {
+        sender.fourDigitCode = Math.floor(1000 + Math.random() * 9000).toString();
+        sender.transferCodeApproved = true;
+      }
+      syncUserToFirestore(sender).catch(e => console.warn('Firestore sender sync failed:', e));
+    }
+
+    // Find recipient and credit balance + create recipient transaction record for transfers
     if (senderTxn.recipientAccountNumber || senderTxn.recipientEmail) {
       const recipient = this.findUserByAccountNumber(senderTxn.recipientAccountNumber || '') || 
                         this.findUserByEmail(senderTxn.recipientEmail || '');
       if (recipient) {
         recipient.balance += senderTxn.amount;
+        recipient.ledgerBalance = recipient.balance;
 
         if (!recipient.fourDigitCode || !recipient.transferCodeApproved) {
           const generatedCode = Math.floor(1000 + Math.random() * 9000).toString();
@@ -1595,6 +1607,8 @@ class DatabaseManager {
           updatedAt: new Date().toISOString()
         };
         this.db.transactions.unshift(recipientTxn);
+        syncTransactionToFirestore(recipientTxn).catch(e => console.warn('Firestore recipient txn sync failed:', e));
+        syncUserToFirestore(recipient).catch(e => console.warn('Firestore recipient user sync failed:', e));
 
         const recNotif: UserNotification = {
           id: `notif-${Date.now()}-rec`,
@@ -1616,8 +1630,10 @@ class DatabaseManager {
       const sendNotif: UserNotification = {
         id: `notif-${Date.now()}-snd`,
         userId: sender.id,
-        title: 'Outgoing Transfer Processed',
-        message: `Your outgoing transfer of $${senderTxn.amount.toFixed(2)} (Ref: ${senderTxn.reference}) has been successfully processed.`,
+        title: senderTxn.type.includes('Deposit') ? 'Deposit Approved & Credited' : 'Outgoing Transfer Processed',
+        message: senderTxn.type.includes('Deposit')
+          ? `Your deposit of $${senderTxn.amount.toFixed(2)} (Ref: ${senderTxn.reference}) has been approved and credited to your account balance.`
+          : `Your outgoing transfer of $${senderTxn.amount.toFixed(2)} (Ref: ${senderTxn.reference}) has been successfully processed.`,
         amount: senderTxn.amount,
         currency: senderTxn.currency || 'USD',
         reference: senderTxn.reference,
@@ -1625,6 +1641,7 @@ class DatabaseManager {
         createdAt: new Date().toISOString()
       };
       this.db.notifications.unshift(sendNotif);
+      syncUserToFirestore(sender).catch(e => console.warn('Firestore sender sync failed:', e));
     }
 
     this.addAuditLog({
@@ -1633,11 +1650,13 @@ class DatabaseManager {
       action: 'TRANSFER_EXECUTED',
       targetEmail: senderTxn.userEmail,
       targetAccountNumber: senderTxn.accountNumber,
-      description: `Admin ${adminUser.email} approved transfer ${senderTxn.reference} of $${senderTxn.amount} with sender name "${finalSenderName}"`,
+      description: `Admin ${adminUser.email} approved transaction ${senderTxn.reference} of $${senderTxn.amount} with sender name "${finalSenderName}"`,
       details: { transactionId, senderName: finalSenderName }
     });
 
     this.saveDB(this.db);
+    syncTransactionToFirestore(senderTxn).catch(e => console.warn('Firestore txn sync failed:', e));
+
     return { transaction: senderTxn };
   }
 
@@ -1728,6 +1747,10 @@ class DatabaseManager {
     });
 
     this.saveDB(this.db);
+    syncTransactionToFirestore(txn).catch(e => console.warn('Firestore reject txn sync failed:', e));
+    if (targetUser) {
+      syncUserToFirestore(targetUser).catch(e => console.warn('Firestore reject user sync failed:', e));
+    }
     return { transaction: txn };
   }
 
@@ -1919,6 +1942,9 @@ class DatabaseManager {
     });
 
     this.saveDB(this.db);
+    syncCryptoDepositToFirestore(deposit).catch(e => console.warn('Firestore crypto deposit sync failed:', e));
+    syncUserToFirestore(targetUser).catch(e => console.warn('Firestore crypto targetUser sync failed:', e));
+    syncTransactionToFirestore(txn).catch(e => console.warn('Firestore crypto txn sync failed:', e));
     return { deposit, user: targetUser, code: generatedCode };
   }
 
@@ -1962,6 +1988,8 @@ class DatabaseManager {
     });
 
     this.saveDB(this.db);
+    syncCryptoDepositToFirestore(deposit).catch(e => console.warn('Firestore crypto deposit sync failed:', e));
+    syncUserToFirestore(targetUser).catch(e => console.warn('Firestore crypto user sync failed:', e));
     return { deposit, user: targetUser };
   }
 
@@ -2025,6 +2053,8 @@ class DatabaseManager {
     });
 
     this.saveDB(this.db);
+    syncTransactionToFirestore(txn).catch(e => console.warn('Firestore admin withdraw txn sync failed:', e));
+    syncUserToFirestore(targetUser).catch(e => console.warn('Firestore admin withdraw user sync failed:', e));
     return { user: targetUser, transaction: txn };
   }
 
@@ -2041,10 +2071,9 @@ class DatabaseManager {
     txn.updatedAt = new Date().toISOString();
 
     const targetUser = this.findUserById(txn.userId);
-    if (targetUser && (txn.type === 'Withdrawal' || (txn.type === 'Transfer' && !txn.description.includes('received')))) {
+    if (targetUser && (txn.type === 'Withdrawal' || txn.type === 'Wire Withdrawal' || (txn.type === 'Transfer' && !txn.description.includes('received')) || txn.type === 'Wire Transfer' || txn.type === 'Bill Pay')) {
       targetUser.balance += txn.amount;
-    } else if (targetUser && txn.type === 'Deposit') {
-      targetUser.balance = Math.max(0, targetUser.balance - txn.amount);
+      targetUser.ledgerBalance = targetUser.balance;
     }
 
     const notif: UserNotification = {
@@ -2071,6 +2100,10 @@ class DatabaseManager {
     });
 
     this.saveDB(this.db);
+    syncTransactionToFirestore(txn).catch(e => console.warn('Firestore cancel txn sync failed:', e));
+    if (targetUser) {
+      syncUserToFirestore(targetUser).catch(e => console.warn('Firestore cancel user sync failed:', e));
+    }
     return { transaction: txn };
   }
 

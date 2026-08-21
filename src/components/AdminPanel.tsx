@@ -20,7 +20,7 @@ import {
   playAdminAlertChime, 
   requestAdminNotificationPermission 
 } from '../services/adminAlerts';
-import { ShieldAlert, Users, Sparkles, FileText, Headphones, Search, UserCheck, Shield, DollarSign, ArrowUpRight, CheckCircle2, XCircle, Clock, Key, ArrowDownRight, Ban, ShieldCheck, UserPlus, X, Plus, Bell, Volume2, VolumeX, Radio, Zap, Check } from 'lucide-react';
+import { ShieldAlert, Users, Sparkles, FileText, Headphones, Search, UserCheck, Shield, DollarSign, ArrowUpRight, CheckCircle2, XCircle, Clock, Key, ArrowDownRight, Ban, ShieldCheck, UserPlus, X, Plus, Bell, Volume2, VolumeX, Radio, Zap, Check, Filter, AlertCircle, RefreshCw, Send, CheckSquare, Eye } from 'lucide-react';
 
 interface AdminPanelProps {
   adminUser: User;
@@ -144,6 +144,42 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
   // All System Transactions for Admin Cancel
   const [sysTxns, setSysTxns] = useState<Transaction[]>([]);
   const [loadingTxns, setLoadingTxns] = useState(false);
+
+  // Instant Queue Filter & Search State
+  const [queueFilter, setQueueFilter] = useState<'pending' | 'completed' | 'rejected' | 'all'>('pending');
+  const [queueSearchQuery, setQueueSearchQuery] = useState<string>('');
+
+  // Queue Action Modals State
+  const [approveModalTxn, setApproveModalTxn] = useState<Transaction | null>(null);
+  const [approveSenderName, setApproveSenderName] = useState<string>('');
+  const [isApproving, setIsApproving] = useState<boolean>(false);
+
+  const [rejectModalTxn, setRejectModalTxn] = useState<Transaction | null>(null);
+  const [rejectReason, setRejectReason] = useState<string>('');
+  const [isRejecting, setIsRejecting] = useState<boolean>(false);
+
+  // Crypto & Verification Modals State
+  const [approveCryptoModal, setApproveCryptoModal] = useState<CryptoActivationDeposit | null>(null);
+  const [isApprovingCrypto, setIsApprovingCrypto] = useState<boolean>(false);
+
+  const [approveVerifModal, setApproveVerifModal] = useState<Tier3VerificationRequest | null>(null);
+  const [verifNotes, setVerifNotes] = useState<string>('');
+  const [isApprovingVerif, setIsApprovingVerif] = useState<boolean>(false);
+
+  const [rejectVerifModal, setRejectVerifModal] = useState<Tier3VerificationRequest | null>(null);
+  const [verifRejectReason, setVerifRejectReason] = useState<string>('');
+  const [isRejectingVerif, setIsRejectingVerif] = useState<boolean>(false);
+
+  // Non-blocking In-App Toast System
+  const [toastMsg, setToastMsg] = useState<{ id: string; type: 'success' | 'error' | 'info'; title: string; message: string } | null>(null);
+
+  const showToast = (type: 'success' | 'error' | 'info', title: string, message: string) => {
+    const id = `toast-${Date.now()}`;
+    setToastMsg({ id, type, title, message });
+    setTimeout(() => {
+      setToastMsg(prev => (prev && prev.id === id ? null : prev));
+    }, 4000);
+  };
 
   // Real-Time Admin Alerts & Sound State
   const [liveAlerts, setLiveAlerts] = useState<AdminAlert[]>([]);
@@ -306,29 +342,59 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
     if (subTab === 'verifications') fetchVerifications();
   }, [subTab]);
 
-  const handleApproveVerif = async (verifId: string) => {
-    const notes = prompt('Enter compliance approval notes (optional):');
-    if (notes === null) return;
+  const handleApproveVerif = (verif: Tier3VerificationRequest) => {
+    setApproveVerifModal(verif);
+    setVerifNotes('Verified against government database and KYC tier 3 requirements.');
+  };
+
+  const handleConfirmApproveVerif = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!approveVerifModal) return;
+    const v = approveVerifModal;
+    const notes = verifNotes.trim() || 'Tier 3 Identity Verified';
+
+    // Optimistic Update
+    setVerifications(prev => prev.map(item => item.id === v.id ? { ...item, status: 'Approved', adminNotes: notes } : item));
+    showToast('success', 'Tier 3 Verified', `Approved identity verification for ${v.userName}.`);
+    setApproveVerifModal(null);
+
     try {
-      await api.approveVerification(verifId, notes);
-      alert('Tier 3 Identity Verification approved successfully!');
+      setIsApprovingVerif(true);
+      await api.approveVerification(v.id, notes);
       fetchVerifications();
       fetchUsers(searchQuery);
     } catch (err: any) {
-      alert(err.message || 'Approval failed');
+      showToast('error', 'Approval Error', err.message || 'Approval failed on backend.');
+    } finally {
+      setIsApprovingVerif(false);
     }
   };
 
-  const handleRejectVerif = async (verifId: string) => {
-    const notes = prompt('Enter rejection reason (optional):');
-    if (notes === null) return;
+  const handleRejectVerif = (verif: Tier3VerificationRequest) => {
+    setRejectVerifModal(verif);
+    setVerifRejectReason('Document unreadable or compliance criteria not met.');
+  };
+
+  const handleConfirmRejectVerif = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!rejectVerifModal) return;
+    const v = rejectVerifModal;
+    const reason = verifRejectReason.trim() || 'Verification rejected by compliance';
+
+    // Optimistic Update
+    setVerifications(prev => prev.map(item => item.id === v.id ? { ...item, status: 'Rejected', adminNotes: reason } : item));
+    showToast('info', 'Verification Rejected', `Rejected Tier 3 request for ${v.userName}.`);
+    setRejectVerifModal(null);
+
     try {
-      await api.rejectVerification(verifId, notes);
-      alert('Tier 3 Identity Verification rejected.');
+      setIsRejectingVerif(true);
+      await api.rejectVerification(v.id, reason);
       fetchVerifications();
       fetchUsers(searchQuery);
     } catch (err: any) {
-      alert(err.message || 'Rejection failed');
+      showToast('error', 'Rejection Error', err.message || 'Rejection failed.');
+    } finally {
+      setIsRejectingVerif(false);
     }
   };
 
@@ -336,32 +402,58 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
     const nextRole = currentRole === 'admin' ? 'user' : 'admin';
     if (!confirm(`Are you sure you want to change this user's role to ${nextRole.toUpperCase()}?`)) return;
 
+    // Optimistic update
+    setUsers(prev => prev.map(u => u.id === userId ? { ...u, role: nextRole } : u));
+    showToast('success', 'Role Updated', `User role changed to ${nextRole.toUpperCase()}.`);
+
     try {
       await api.toggleRole(userId, nextRole);
       fetchUsers(searchQuery);
     } catch (err: any) {
-      alert(err.message || 'Failed to update role');
+      showToast('error', 'Role Update Failed', err.message || 'Failed to update role');
+      fetchUsers(searchQuery);
     }
   };
 
-  const handleApproveCrypto = async (depId: string) => {
+  const handleApproveCrypto = (dep: CryptoActivationDeposit) => {
+    setApproveCryptoModal(dep);
+  };
+
+  const handleConfirmApproveCrypto = async () => {
+    if (!approveCryptoModal) return;
+    const dep = approveCryptoModal;
+
+    // Optimistic update
+    setCryptoDeposits(prev => prev.map(d => d.id === dep.id ? { ...d, status: 'Approved', amountUSD: 2500 } : d));
+    setUsers(prev => prev.map(u => u.id === dep.userId ? { ...u, transferCodeApproved: true, balance: (u.balance || 0) + 2500 } : u));
+    showToast('success', 'Crypto Deposit Approved', `Issued 4-Digit Code and credited $2,500 to ${dep.userName}.`);
+    setApproveCryptoModal(null);
+
     try {
-      const res = await api.approveCryptoActivationDeposit(depId);
-      alert(`Approved! 4-Digit Security Code [ ${res.code} ] has been issued to ${res.user.fullName}. $2,500 credited to balance.`);
+      setIsApprovingCrypto(true);
+      const res = await api.approveCryptoActivationDeposit(dep.id);
+      showToast('success', 'Code Activated', `Security Code: [ ${res.code} ] assigned to ${res.user.fullName}.`);
       fetchCryptoDeposits();
       fetchUsers(searchQuery);
     } catch (err: any) {
-      alert(err.message || 'Approval failed');
+      showToast('error', 'Crypto Approval Failed', err.message || 'Approval failed');
+      fetchCryptoDeposits();
+    } finally {
+      setIsApprovingCrypto(false);
     }
   };
 
   const handleRejectCrypto = async (depId: string) => {
+    // Optimistic update
+    setCryptoDeposits(prev => prev.map(d => d.id === depId ? { ...d, status: 'Rejected' } : d));
+    showToast('info', 'Deposit Rejected', 'Crypto activation deposit was rejected.');
+
     try {
       await api.rejectCryptoActivationDeposit(depId);
-      alert('Deposit rejected. User will not receive 4-digit code.');
       fetchCryptoDeposits();
     } catch (err: any) {
-      alert(err.message || 'Rejection failed');
+      showToast('error', 'Rejection Failed', err.message || 'Rejection failed');
+      fetchCryptoDeposits();
     }
   };
 
@@ -380,58 +472,117 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
         note: withdrawNote.trim() || 'SVB Review initiated debit'
       });
       setWithdrawMsg({ type: 'success', text: `Successfully debited $${Number(withdrawAmount).toFixed(2)} from user ${res.updatedUser.fullName}.` });
+      showToast('success', 'Withdrawal Complete', `Debited $${Number(withdrawAmount).toFixed(2)} from ${res.updatedUser.fullName}.`);
       setWithdrawAmount('');
       setWithdrawNote('');
       fetchUsers(searchQuery);
     } catch (err: any) {
       setWithdrawMsg({ type: 'error', text: err.message || 'Withdrawal failed.' });
+      showToast('error', 'Withdrawal Failed', err.message || 'Withdrawal failed.');
     } finally {
       setWithdrawLoading(false);
     }
   };
 
-  const handleApproveTxn = async (txnId: string, defaultSenderName?: string) => {
-    const senderName = prompt("Enter Sender's Full Name (required before crediting recipient account):", defaultSenderName || "Federal Wire Transfer / SVB Treasury");
-    if (senderName === null) return; // user cancelled prompt
-    if (!senderName.trim()) {
-      alert("Sender's name is required before crediting funds.");
-      return;
-    }
+  const handleOpenApproveModal = (t: Transaction) => {
+    setApproveModalTxn(t);
+    setApproveSenderName(t.senderName || 'Federal Wire Transfer / SVB Treasury');
+  };
+
+  const handleConfirmApproveTxn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!approveModalTxn) return;
+    const txn = approveModalTxn;
+    const finalSenderName = approveSenderName.trim() || 'Federal Wire Transfer / SVB Treasury';
+
+    // 1. Instant Optimistic UI Update in Queue & State
+    setSysTxns(prev => prev.map(t => 
+      (t.id === txn.id || t.reference === txn.reference)
+        ? { ...t, status: 'Completed', senderName: finalSenderName, updatedAt: new Date().toISOString() }
+        : t
+    ));
+
+    // Optimistically update user balance if relevant
+    setUsers(prev => prev.map(u => {
+      if (u.accountNumber === txn.recipientAccountNumber || u.email === txn.userEmail) {
+        return { ...u, balance: (u.balance || 0) + (txn.amount || 0) };
+      }
+      return u;
+    }));
+
+    showToast('success', 'Transaction Approved', `Ref #${txn.reference} ($${txn.amount.toLocaleString()}) approved and funds credited.`);
+    setApproveModalTxn(null);
+
+    // 2. Async Non-blocking Backend & Firestore Dispatch
     try {
-      await api.approveTransaction(txnId, senderName.trim());
-      setSysTxns(prev => prev.map(t => (t.id === txnId || t.reference === txnId) ? { ...t, status: 'Completed', senderName: senderName.trim(), updatedAt: new Date().toISOString() } : t));
-      alert('Transaction approved successfully! Recipient account has been credited.');
-      await fetchSysTxns();
-      await fetchUsers(searchQuery);
+      setIsApproving(true);
+      await api.approveTransaction(txn.id, finalSenderName);
+      fetchSysTxns();
+      fetchUsers(searchQuery);
     } catch (err: any) {
-      alert(err.message || 'Approval failed.');
+      showToast('error', 'Approval Error', err.message || 'Failed to approve transaction.');
+      fetchSysTxns();
+    } finally {
+      setIsApproving(false);
+    }
+  };
+
+  const handleOpenRejectModal = (t: Transaction) => {
+    setRejectModalTxn(t);
+    setRejectReason('SVB Compliance & Treasury Risk Clearance');
+  };
+
+  const handleConfirmRejectTxn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!rejectModalTxn) return;
+    const txn = rejectModalTxn;
+    const reason = rejectReason.trim() || 'Declined by Administrator';
+
+    // 1. Instant Optimistic UI Update
+    setSysTxns(prev => prev.map(t => 
+      (t.id === txn.id || t.reference === txn.reference)
+        ? { ...t, status: 'Rejected', updatedAt: new Date().toISOString() }
+        : t
+    ));
+
+    // Optimistically refund sender's balance if it was a debit/transfer
+    setUsers(prev => prev.map(u => {
+      if (u.accountNumber === txn.accountNumber || u.email === txn.userEmail) {
+        return { ...u, balance: (u.balance || 0) + (txn.amount || 0) };
+      }
+      return u;
+    }));
+
+    showToast('info', 'Transaction Rejected', `Ref #${txn.reference} rejected. Funds refunded to client.`);
+    setRejectModalTxn(null);
+
+    // 2. Async Non-blocking Backend & Firestore Dispatch
+    try {
+      setIsRejecting(true);
+      await api.rejectTransaction(txn.id, reason);
+      fetchSysTxns();
+      fetchUsers(searchQuery);
+    } catch (err: any) {
+      showToast('error', 'Rejection Error', err.message || 'Failed to reject transaction.');
+      fetchSysTxns();
+    } finally {
+      setIsRejecting(false);
     }
   };
 
   const handleCancelTxn = async (txnId: string) => {
-    if (!confirm('Are you sure you want to cancel this transfer/transaction? User funds will be adjusted.')) return;
+    const target = sysTxns.find(t => t.id === txnId || t.reference === txnId);
+    // Instant Optimistic Update
+    setSysTxns(prev => prev.map(t => (t.id === txnId || t.reference === txnId) ? { ...t, status: 'Cancelled', updatedAt: new Date().toISOString() } : t));
+    showToast('info', 'Transaction Cancelled', `Transfer ${target?.reference || txnId} has been cancelled.`);
+
     try {
       await api.adminCancelTransaction(txnId);
-      setSysTxns(prev => prev.map(t => (t.id === txnId || t.reference === txnId) ? { ...t, status: 'Cancelled', updatedAt: new Date().toISOString() } : t));
-      alert('Transaction cancelled successfully.');
-      await fetchSysTxns();
-      await fetchUsers(searchQuery);
+      fetchSysTxns();
+      fetchUsers(searchQuery);
     } catch (err: any) {
-      alert(err.message || 'Cancellation failed.');
-    }
-  };
-
-  const handleRejectTxn = async (txnId: string) => {
-    const reason = prompt('Enter rejection reason (optional):');
-    if (reason === null) return; // user cancelled prompt
-    try {
-      await api.rejectTransaction(txnId, reason);
-      setSysTxns(prev => prev.map(t => (t.id === txnId || t.reference === txnId) ? { ...t, status: 'Rejected', updatedAt: new Date().toISOString() } : t));
-      alert('Transaction rejected successfully. Funds returned to user balance.');
-      await fetchSysTxns();
-      await fetchUsers(searchQuery);
-    } catch (err: any) {
-      alert(err.message || 'Rejection failed.');
+      showToast('error', 'Cancellation Error', err.message || 'Cancellation failed.');
+      fetchSysTxns();
     }
   };
 
@@ -439,21 +590,25 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
     if (!confirm(`Regenerate a new 4-Digit Security Code for ${userName}?`)) return;
     try {
       const res = await api.regenerateFourDigitCode(userId);
-      alert(`New 4-Digit Code [ ${res.code} ] successfully generated for ${userName}.`);
+      showToast('success', 'Code Generated', `New 4-Digit Code [ ${res.code} ] generated for ${userName}.`);
       fetchUsers(searchQuery);
     } catch (err: any) {
-      alert(err.message || 'Regeneration failed.');
+      showToast('error', 'Generation Failed', err.message || 'Regeneration failed.');
     }
   };
 
   const handleRevokeCode = async (userId: string, userName: string) => {
     if (!confirm(`Are you sure you want to cancel and revoke the 4-Digit Code authorization for ${userName}?`)) return;
+    // Optimistic Update
+    setUsers(prev => prev.map(u => u.id === userId ? { ...u, transferCodeApproved: false } : u));
+    showToast('info', 'Code Revoked', `4-Digit Security Code authorization revoked for ${userName}.`);
+
     try {
       await api.revokeFourDigitCode(userId);
-      alert(`4-Digit Security Code authorization for ${userName} has been cancelled and revoked.`);
       fetchUsers(searchQuery);
     } catch (err: any) {
-      alert(err.message || 'Revocation failed.');
+      showToast('error', 'Revocation Failed', err.message || 'Revocation failed.');
+      fetchUsers(searchQuery);
     }
   };
 
@@ -670,54 +825,174 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
         </div>
 
       {/* Sub-Tab 0: Pending Transactions Review Queue */}
-      {subTab === 'pending' && (
-        <div className="bg-slate-900 border border-slate-800 rounded-3xl p-4 sm:p-6 shadow-xl space-y-5">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-base font-bold text-white flex items-center gap-2">
-                  <Clock className="w-5 h-5 text-amber-400" />
-                  Pending Transactions SVB Review Queue
-                </h3>
-                <span className="bg-amber-500/20 text-amber-300 text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full border border-amber-500/30">
-                  {sysTxns.filter(t => t.status === 'Pending').length} Pending
+      {subTab === 'pending' && (() => {
+        const pendingCount = sysTxns.filter(t => t.status === 'Pending').length;
+        const completedCount = sysTxns.filter(t => t.status === 'Completed').length;
+        const rejectedCount = sysTxns.filter(t => t.status === 'Rejected' || t.status === 'Cancelled').length;
+        const totalCount = sysTxns.length;
+
+        // Apply filters and search query
+        const filteredTxns = sysTxns.filter(t => {
+          if (queueFilter === 'pending' && t.status !== 'Pending') return false;
+          if (queueFilter === 'completed' && t.status !== 'Completed') return false;
+          if (queueFilter === 'rejected' && t.status !== 'Rejected' && t.status !== 'Cancelled') return false;
+          
+          if (queueSearchQuery.trim()) {
+            const q = queueSearchQuery.toLowerCase().trim();
+            const refMatch = t.reference?.toLowerCase().includes(q);
+            const emailMatch = t.userEmail?.toLowerCase().includes(q);
+            const nameMatch = t.senderName?.toLowerCase().includes(q) || t.recipientName?.toLowerCase().includes(q);
+            const accMatch = t.accountNumber?.includes(q) || t.recipientAccountNumber?.includes(q);
+            const descMatch = t.description?.toLowerCase().includes(q);
+            const amtMatch = t.amount?.toString().includes(q);
+            return refMatch || emailMatch || nameMatch || accMatch || descMatch || amtMatch;
+          }
+          return true;
+        });
+
+        return (
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-4 sm:p-6 shadow-xl space-y-5">
+            <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base font-bold text-white flex items-center gap-2">
+                    <Clock className="w-5 h-5 text-amber-400" />
+                    Transaction Review & Authorization Queue
+                  </h3>
+                  <span className="bg-amber-500/20 text-amber-300 text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full border border-amber-500/30">
+                    {pendingCount} Pending
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 mt-1">
+                  Instantly approve, verify, or decline wire transfers, payments, and deposits. Approved records credit recipient balances immediately.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
+                {/* Instant Search Bar */}
+                <div className="relative flex-1 sm:w-64">
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+                  <input
+                    type="text"
+                    value={queueSearchQuery}
+                    onChange={(e) => setQueueSearchQuery(e.target.value)}
+                    placeholder="Search ref, account, email, amount..."
+                    className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-xl pl-9 pr-3 py-1.5 text-xs text-white placeholder-slate-500 outline-none"
+                  />
+                  {queueSearchQuery && (
+                    <button 
+                      onClick={() => setQueueSearchQuery('')}
+                      className="absolute right-2.5 top-2 text-slate-400 hover:text-white"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                <button
+                  onClick={fetchSysTxns}
+                  disabled={loadingTxns}
+                  className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm cursor-pointer shrink-0"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${loadingTxns ? 'animate-spin text-amber-400' : ''}`} />
+                  <span>Refresh</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Queue Filter Segmented Controls */}
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={() => setQueueFilter('pending')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                  queueFilter === 'pending'
+                    ? 'bg-amber-500 text-slate-950 font-bold shadow-md'
+                    : 'bg-slate-950 text-slate-400 border border-slate-800 hover:text-white'
+                }`}
+              >
+                <Clock className="w-3.5 h-3.5" />
+                <span>Pending Clearance</span>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                  queueFilter === 'pending' ? 'bg-slate-900 text-amber-300' : 'bg-slate-800 text-slate-300'
+                }`}>
+                  {pendingCount}
                 </span>
-              </div>
-              <p className="text-xs text-slate-400 mt-1">
-                Review and manage all pending user transfers, wire withdrawals, bill payments, and code authorizations requiring compliance clearance.
-              </p>
+              </button>
+
+              <button
+                onClick={() => setQueueFilter('completed')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                  queueFilter === 'completed'
+                    ? 'bg-emerald-500 text-slate-950 font-bold shadow-md'
+                    : 'bg-slate-950 text-slate-400 border border-slate-800 hover:text-white'
+                }`}
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>Completed / Approved</span>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                  queueFilter === 'completed' ? 'bg-slate-900 text-emerald-300' : 'bg-slate-800 text-slate-300'
+                }`}>
+                  {completedCount}
+                </span>
+              </button>
+
+              <button
+                onClick={() => setQueueFilter('rejected')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                  queueFilter === 'rejected'
+                    ? 'bg-rose-500 text-white font-bold shadow-md'
+                    : 'bg-slate-950 text-slate-400 border border-slate-800 hover:text-white'
+                }`}
+              >
+                <XCircle className="w-3.5 h-3.5" />
+                <span>Rejected / Cancelled</span>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                  queueFilter === 'rejected' ? 'bg-slate-900 text-rose-300' : 'bg-slate-800 text-slate-300'
+                }`}>
+                  {rejectedCount}
+                </span>
+              </button>
+
+              <button
+                onClick={() => setQueueFilter('all')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                  queueFilter === 'all'
+                    ? 'bg-cyan-500 text-slate-950 font-bold shadow-md'
+                    : 'bg-slate-950 text-slate-400 border border-slate-800 hover:text-white'
+                }`}
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>All Records</span>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                  queueFilter === 'all' ? 'bg-slate-900 text-cyan-300' : 'bg-slate-800 text-slate-300'
+                }`}>
+                  {totalCount}
+                </span>
+              </button>
             </div>
 
-            <button
-              onClick={fetchSysTxns}
-              disabled={loadingTxns}
-              className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
-            >
-              <Clock className={`w-3.5 h-3.5 ${loadingTxns ? 'animate-spin text-amber-400' : ''}`} />
-              <span>Refresh Queue</span>
-            </button>
-          </div>
-
-          {loadingTxns ? (
-            <div className="text-center py-10 text-slate-500 space-y-2">
-              <div className="w-7 h-7 border-2 border-amber-400 border-t-transparent rounded-full animate-spin mx-auto" />
-              <p className="text-xs">Loading pending transactions queue...</p>
-            </div>
-          ) : sysTxns.filter(t => t.status === 'Pending').length === 0 ? (
-            <div className="text-center py-12 text-slate-400">
-              <div className="flex flex-col items-center justify-center space-y-2">
-                <CheckCircle2 className="w-10 h-10 text-emerald-400 opacity-60" />
-                <p className="font-semibold text-slate-300">All caught up! No pending transactions in the queue.</p>
-                <p className="text-[11px] text-slate-500">New user transfers and submissions will automatically appear here for approval.</p>
+            {loadingTxns ? (
+              <div className="text-center py-10 text-slate-500 space-y-2">
+                <div className="w-7 h-7 border-2 border-amber-400 border-t-transparent rounded-full animate-spin mx-auto" />
+                <p className="text-xs">Loading transaction queue...</p>
               </div>
-            </div>
-          ) : (
-            <>
-              {/* Responsive Card Layout for Mobile & Tablets (lg:hidden) */}
-              <div className="block lg:hidden space-y-4">
-                {sysTxns
-                  .filter(t => t.status === 'Pending')
-                  .map((t) => (
+            ) : filteredTxns.length === 0 ? (
+              <div className="text-center py-12 text-slate-400 bg-slate-950/40 rounded-2xl border border-slate-800/60 p-6">
+                <div className="flex flex-col items-center justify-center space-y-2">
+                  <CheckCircle2 className="w-10 h-10 text-emerald-400 opacity-60" />
+                  <p className="font-semibold text-slate-300">
+                    {queueFilter === 'pending' ? 'No pending transactions in the clearance queue.' : 'No transactions matching this filter.'}
+                  </p>
+                  <p className="text-[11px] text-slate-500">
+                    {queueSearchQuery ? 'Try modifying your search criteria.' : 'Transactions will automatically appear here in real-time as users submit transfers.'}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* Responsive Card Layout for Mobile & Tablets (lg:hidden) */}
+                <div className="block lg:hidden space-y-4">
+                  {filteredTxns.map((t) => (
                     <div
                       key={t.id}
                       className="bg-slate-950/80 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-lg space-y-4 transition-all hover:border-slate-700"
@@ -732,22 +1007,35 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
                             {new Date(t.createdAt).toLocaleDateString()} {new Date(t.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </span>
                         </div>
-                        <span className="bg-amber-500/15 text-amber-300 border border-amber-500/30 text-[10px] font-extrabold px-2.5 py-1 rounded-full uppercase flex items-center gap-1.5 shrink-0">
-                          <Clock className="w-3 h-3 animate-spin text-amber-400" /> Pending Review
-                        </span>
+
+                        {t.status === 'Pending' && (
+                          <span className="bg-amber-500/15 text-amber-300 border border-amber-500/30 text-[10px] font-extrabold px-2.5 py-1 rounded-full uppercase flex items-center gap-1.5 shrink-0">
+                            <Clock className="w-3 h-3 animate-spin text-amber-400" /> Pending Review
+                          </span>
+                        )}
+                        {t.status === 'Completed' && (
+                          <span className="bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 text-[10px] font-extrabold px-2.5 py-1 rounded-full uppercase flex items-center gap-1.5 shrink-0">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-400" /> Completed / Approved
+                          </span>
+                        )}
+                        {(t.status === 'Rejected' || t.status === 'Cancelled') && (
+                          <span className="bg-rose-500/15 text-rose-300 border border-rose-500/30 text-[10px] font-extrabold px-2.5 py-1 rounded-full uppercase flex items-center gap-1.5 shrink-0">
+                            <XCircle className="w-3 h-3 text-rose-400" /> {t.status}
+                          </span>
+                        )}
                       </div>
 
                       {/* Transaction Amount & Client Info */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-900/60 p-3.5 rounded-xl border border-slate-800/60">
                         <div>
-                          <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Amount Requested</div>
+                          <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Amount</div>
                           <div className="text-xl font-bold font-mono text-emerald-400 mt-0.5">
                             ${t.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </div>
                         </div>
 
                         <div>
-                          <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Sender Client</div>
+                          <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Client Account</div>
                           <div className="font-semibold text-white text-xs mt-0.5 truncate">{t.senderName || t.userEmail}</div>
                           <div className="text-[11px] text-slate-400 font-mono">Acc #{t.accountNumber}</div>
                         </div>
@@ -761,13 +1049,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
                         </div>
                         {t.description && (
                           <div className="flex items-start justify-between gap-2">
-                            <span className="text-slate-400 shrink-0">Memo/Desc:</span>
+                            <span className="text-slate-400 shrink-0">Description/Memo:</span>
                             <span className="text-slate-300 text-right">{t.description}</span>
                           </div>
                         )}
                         {t.recipientAccountNumber && (
                           <div className="flex items-center justify-between gap-2 bg-emerald-500/5 p-2 rounded-lg border border-emerald-500/15 text-[11px]">
-                            <span className="text-slate-400">Recipient Account:</span>
+                            <span className="text-slate-400">Recipient:</span>
                             <span className="text-emerald-400 font-mono font-semibold">
                               {t.recipientAccountNumber} {t.recipientName ? `(${t.recipientName})` : ''}
                             </span>
@@ -783,48 +1071,48 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
                         )}
                       </div>
 
-                      {/* Cleanly Aligned Action Buttons (No Clipping or Overlap) */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-3 border-t border-slate-800/80">
-                        <button
-                          onClick={() => handleApproveTxn(t.id, t.senderName)}
-                          className="w-full py-2.5 px-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-md shadow-emerald-500/10 cursor-pointer active:scale-[0.98] transition-all"
-                          title="Approve transaction and credit recipient account"
-                        >
-                          <CheckCircle2 className="w-4 h-4 shrink-0" />
-                          <span>Approve & Credit</span>
-                        </button>
+                      {/* Action Buttons for Pending Items */}
+                      {t.status === 'Pending' && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-3 border-t border-slate-800/80">
+                          <button
+                            onClick={() => handleOpenApproveModal(t)}
+                            className="w-full py-2.5 px-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-md shadow-emerald-500/10 cursor-pointer active:scale-[0.98] transition-all"
+                            title="Approve transaction and credit recipient account"
+                          >
+                            <CheckCircle2 className="w-4 h-4 shrink-0" />
+                            <span>Approve & Credit</span>
+                          </button>
 
-                        <button
-                          onClick={() => handleRejectTxn(t.id)}
-                          className="w-full py-2.5 px-3 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 font-semibold rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer active:scale-[0.98] transition-all"
-                          title="Reject transaction and refund user balance"
-                        >
-                          <XCircle className="w-4 h-4 shrink-0" />
-                          <span>Cancel / Reject & Refund</span>
-                        </button>
-                      </div>
+                          <button
+                            onClick={() => handleOpenRejectModal(t)}
+                            className="w-full py-2.5 px-3 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 font-semibold rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer active:scale-[0.98] transition-all"
+                            title="Reject transaction and refund user balance"
+                          >
+                            <XCircle className="w-4 h-4 shrink-0" />
+                            <span>Reject & Refund</span>
+                          </button>
+                        </div>
+                      )}
                     </div>
                   ))}
-              </div>
+                </div>
 
-              {/* Desktop Table View (hidden on mobile, visible on lg) */}
-              <div className="hidden lg:block overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="border-b border-slate-800 text-slate-400 font-semibold uppercase tracking-wider">
-                      <th className="py-3 px-3">Submission Date</th>
-                      <th className="py-3 px-3">Reference / ID</th>
-                      <th className="py-3 px-3">Client User</th>
-                      <th className="py-3 px-3">Type & Details</th>
-                      <th className="py-3 px-3">Amount</th>
-                      <th className="py-3 px-3">Status</th>
-                      <th className="py-3 px-3 text-right">Review Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/60 text-slate-200">
-                    {sysTxns
-                      .filter(t => t.status === 'Pending')
-                      .map((t) => (
+                {/* Desktop Table View (hidden on mobile, visible on lg) */}
+                <div className="hidden lg:block overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="border-b border-slate-800 text-slate-400 font-semibold uppercase tracking-wider">
+                        <th className="py-3 px-3">Date</th>
+                        <th className="py-3 px-3">Reference / ID</th>
+                        <th className="py-3 px-3">Client User</th>
+                        <th className="py-3 px-3">Type & Details</th>
+                        <th className="py-3 px-3">Amount</th>
+                        <th className="py-3 px-3">Status</th>
+                        <th className="py-3 px-3 text-right">Review Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/60 text-slate-200">
+                      {filteredTxns.map((t) => (
                         <tr key={t.id} className="hover:bg-slate-950/50 transition-colors">
                           <td className="py-3.5 px-3 text-slate-400 whitespace-nowrap">
                             {new Date(t.createdAt).toLocaleDateString()} {new Date(t.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -855,39 +1143,56 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
                           </td>
 
                           <td className="py-3.5 px-3 whitespace-nowrap">
-                            <span className="bg-amber-500/10 text-amber-400 border border-amber-500/30 text-[10px] font-extrabold px-2.5 py-1 rounded-full uppercase flex items-center gap-1.5 w-fit">
-                              <Clock className="w-3 h-3 animate-spin text-amber-400" /> Pending Review
-                            </span>
+                            {t.status === 'Pending' && (
+                              <span className="bg-amber-500/10 text-amber-400 border border-amber-500/30 text-[10px] font-extrabold px-2.5 py-1 rounded-full uppercase flex items-center gap-1.5 w-fit">
+                                <Clock className="w-3 h-3 animate-spin text-amber-400" /> Pending Review
+                              </span>
+                            )}
+                            {t.status === 'Completed' && (
+                              <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 text-[10px] font-extrabold px-2.5 py-1 rounded-full uppercase flex items-center gap-1.5 w-fit">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-400" /> Completed
+                              </span>
+                            )}
+                            {(t.status === 'Rejected' || t.status === 'Cancelled') && (
+                              <span className="bg-rose-500/10 text-rose-400 border border-rose-500/30 text-[10px] font-extrabold px-2.5 py-1 rounded-full uppercase flex items-center gap-1.5 w-fit">
+                                <XCircle className="w-3 h-3 text-rose-400" /> {t.status}
+                              </span>
+                            )}
                           </td>
 
                           <td className="py-3.5 px-3 text-right whitespace-nowrap">
-                            <div className="flex items-center justify-end gap-2">
-                              <button
-                                onClick={() => handleApproveTxn(t.id, t.senderName)}
-                                className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 px-3 py-1.5 rounded-xl text-xs font-bold transition-all inline-flex items-center gap-1 shadow-md shadow-emerald-500/10 cursor-pointer shrink-0"
-                                title="Approve transaction and credit recipient account"
-                              >
-                                <CheckCircle2 className="w-4 h-4" /> Approve & Credit
-                              </button>
+                            {t.status === 'Pending' ? (
+                              <div className="flex items-center justify-end gap-2">
+                                <button
+                                  onClick={() => handleOpenApproveModal(t)}
+                                  className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 px-3 py-1.5 rounded-xl text-xs font-bold transition-all inline-flex items-center gap-1 shadow-md shadow-emerald-500/10 cursor-pointer shrink-0"
+                                  title="Approve transaction and credit recipient account"
+                                >
+                                  <CheckCircle2 className="w-4 h-4" /> Approve & Credit
+                                </button>
 
-                              <button
-                                onClick={() => handleRejectTxn(t.id)}
-                                className="bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all inline-flex items-center gap-1 cursor-pointer shrink-0"
-                                title="Reject transaction and refund user balance"
-                              >
-                                <XCircle className="w-4 h-4" /> Cancel / Reject & Refund
-                              </button>
-                            </div>
+                                <button
+                                  onClick={() => handleOpenRejectModal(t)}
+                                  className="bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all inline-flex items-center gap-1 cursor-pointer shrink-0"
+                                  title="Reject transaction and refund user balance"
+                                >
+                                  <XCircle className="w-4 h-4" /> Reject & Refund
+                                </button>
+                              </div>
+                            ) : (
+                              <span className="text-[11px] text-slate-500 italic">No action required</span>
+                            )}
                           </td>
                         </tr>
                       ))}
-                  </tbody>
-                </table>
-              </div>
-            </>
-          )}
-        </div>
-      )}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Sub-Tab 1: User Directory & Search */}
       {subTab === 'users' && (
@@ -1210,7 +1515,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
                         {dep.status === 'Pending' ? (
                           <>
                             <button
-                              onClick={() => handleApproveCrypto(dep.id)}
+                              onClick={() => handleApproveCrypto(dep)}
                               className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 px-3 py-1 rounded-xl text-[11px] font-bold transition-all inline-flex items-center gap-1"
                             >
                               <CheckCircle2 className="w-3.5 h-3.5" /> Approve & Issue Code
@@ -1354,14 +1659,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
                         {t.status === 'Pending' ? (
                           <>
                             <button
-                              onClick={() => handleApproveTxn(t.id, t.senderName)}
-                              className="flex-1 py-2 px-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1 shadow-sm"
+                              onClick={() => handleOpenApproveModal(t)}
+                              className="flex-1 py-2 px-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1 shadow-sm cursor-pointer"
                             >
                               <CheckCircle2 className="w-3.5 h-3.5" /> Approve & Credit
                             </button>
                             <button
-                              onClick={() => handleRejectTxn(t.id)}
-                              className="flex-1 py-2 px-3 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-1"
+                              onClick={() => handleOpenRejectModal(t)}
+                              className="flex-1 py-2 px-3 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-1 cursor-pointer"
                             >
                               <XCircle className="w-3.5 h-3.5" /> Reject & Refund
                             </button>
@@ -1369,14 +1674,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
                         ) : t.status !== 'Cancelled' && t.status !== 'Rejected' ? (
                           <>
                             <button
-                              onClick={() => handleRejectTxn(t.id)}
-                              className="flex-1 py-2 px-3 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-1"
+                              onClick={() => handleOpenRejectModal(t)}
+                              className="flex-1 py-2 px-3 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-1 cursor-pointer"
                             >
                               <XCircle className="w-3.5 h-3.5" /> Reject & Refund
                             </button>
                             <button
                               onClick={() => handleCancelTxn(t.id)}
-                              className="py-2 px-3 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 rounded-xl text-xs font-semibold transition-all"
+                              className="py-2 px-3 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 rounded-xl text-xs font-semibold transition-all cursor-pointer"
                             >
                               Cancel
                             </button>
@@ -1423,15 +1728,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
                             {t.status === 'Pending' ? (
                               <>
                                 <button
-                                  onClick={() => handleApproveTxn(t.id, t.senderName)}
-                                  className="bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 px-2.5 py-1 rounded-xl text-[11px] font-bold transition-colors inline-flex items-center gap-1 shadow-sm"
-                                  title="Approve & Credit Recipient (Requires Sender Name)"
+                                  onClick={() => handleOpenApproveModal(t)}
+                                  className="bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 px-2.5 py-1 rounded-xl text-[11px] font-bold transition-colors inline-flex items-center gap-1 shadow-sm cursor-pointer"
+                                  title="Approve & Credit Recipient"
                                 >
                                   <CheckCircle2 className="w-3.5 h-3.5" /> Approve & Credit
                                 </button>
                                 <button
-                                  onClick={() => handleRejectTxn(t.id)}
-                                  className="bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 px-2.5 py-1 rounded-xl text-[11px] font-semibold transition-colors inline-flex items-center gap-1"
+                                  onClick={() => handleOpenRejectModal(t)}
+                                  className="bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 px-2.5 py-1 rounded-xl text-[11px] font-semibold transition-colors inline-flex items-center gap-1 cursor-pointer"
                                   title="Reject & Refund Sender"
                                 >
                                   <XCircle className="w-3 h-3" /> Reject & Refund
@@ -1440,15 +1745,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
                             ) : t.status !== 'Cancelled' && t.status !== 'Rejected' ? (
                               <>
                                 <button
-                                  onClick={() => handleRejectTxn(t.id)}
-                                  className="bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 px-2.5 py-1 rounded-xl text-[11px] font-semibold transition-colors inline-flex items-center gap-1"
+                                  onClick={() => handleOpenRejectModal(t)}
+                                  className="bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 px-2.5 py-1 rounded-xl text-[11px] font-semibold transition-colors inline-flex items-center gap-1 cursor-pointer"
                                   title="Reject & Refund User"
                                 >
-                                  <XCircle className="w-3 h-3" /> Reject & Refund
+                                  <XCircle className="w-3.5 h-3.5" /> Reject & Refund
                                 </button>
                                 <button
                                   onClick={() => handleCancelTxn(t.id)}
-                                  className="bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 px-2.5 py-1 rounded-xl text-[11px] font-semibold transition-colors"
+                                  className="bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 px-2.5 py-1 rounded-xl text-[11px] font-semibold transition-colors cursor-pointer"
                                 >
                                   Cancel
                                 </button>
@@ -1567,14 +1872,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
                         {v.status === 'Pending' ? (
                           <>
                             <button
-                              onClick={() => handleApproveVerif(v.id)}
-                              className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 px-3 py-1 rounded-xl text-[11px] font-bold transition-all inline-flex items-center gap-1 shadow-sm"
+                              onClick={() => handleApproveVerif(v)}
+                              className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 px-3 py-1 rounded-xl text-[11px] font-bold transition-all inline-flex items-center gap-1 shadow-sm cursor-pointer"
                             >
                               <CheckCircle2 className="w-3.5 h-3.5" /> Approve Tier 3
                             </button>
                             <button
-                              onClick={() => handleRejectVerif(v.id)}
-                              className="bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 px-3 py-1 rounded-xl text-[11px] font-semibold transition-colors inline-flex items-center gap-1"
+                              onClick={() => handleRejectVerif(v)}
+                              className="bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 px-3 py-1 rounded-xl text-[11px] font-semibold transition-colors inline-flex items-center gap-1 cursor-pointer"
                             >
                               <XCircle className="w-3.5 h-3.5" /> Reject
                             </button>
@@ -1710,6 +2015,360 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Approve Transaction Modal */}
+      {approveModalTxn && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-lg w-full shadow-2xl space-y-5">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                <h3 className="text-base font-bold text-white">Approve & Credit Transaction</h3>
+              </div>
+              <button
+                onClick={() => setApproveModalTxn(null)}
+                className="text-slate-400 hover:text-white transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Transaction Overview Card */}
+            <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-slate-400 font-medium">Reference</span>
+                <span className="font-mono text-amber-400 font-bold text-xs">{approveModalTxn.reference}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-slate-400 font-medium">Amount to Credit</span>
+                <span className="font-mono text-emerald-400 font-bold text-base">
+                  ${approveModalTxn.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-slate-400 font-medium">Transfer Type</span>
+                <span className="text-xs font-semibold text-white">{approveModalTxn.type}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-slate-400 font-medium">Client / Sender</span>
+                <span className="text-xs text-slate-300 truncate">{approveModalTxn.senderName || approveModalTxn.userEmail}</span>
+              </div>
+              {approveModalTxn.recipientAccountNumber && (
+                <div className="flex items-center justify-between border-t border-slate-800/80 pt-2">
+                  <span className="text-xs text-slate-400 font-medium">Recipient Account</span>
+                  <span className="font-mono text-emerald-400 font-semibold text-xs">
+                    {approveModalTxn.recipientAccountNumber} {approveModalTxn.recipientName ? `(${approveModalTxn.recipientName})` : ''}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <form onSubmit={handleConfirmApproveTxn} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Sender Legal Name / Remitter Memo *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={approveSenderName}
+                  onChange={(e) => setApproveSenderName(e.target.value)}
+                  placeholder="e.g. Federal Wire Transfer / SVB Treasury"
+                  className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl px-3.5 py-2.5 text-xs text-white outline-none"
+                />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  This remitter name will display on the recipient's transaction statement and ledger.
+                </p>
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setApproveModalTxn(null)}
+                  className="px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-400 hover:text-white transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isApproving}
+                  className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-5 py-2.5 rounded-xl text-xs transition-all shadow-md flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>{isApproving ? 'Authorizing & Crediting...' : 'Confirm & Credit Funds'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Reject Transaction Modal */}
+      {rejectModalTxn && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-lg w-full shadow-2xl space-y-5">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+              <div className="flex items-center gap-2">
+                <XCircle className="w-5 h-5 text-rose-400" />
+                <h3 className="text-base font-bold text-white">Decline / Reject Transaction</h3>
+              </div>
+              <button
+                onClick={() => setRejectModalTxn(null)}
+                className="text-slate-400 hover:text-white transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Transaction Overview Card */}
+            <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-slate-400 font-medium">Reference</span>
+                <span className="font-mono text-amber-400 font-bold text-xs">{rejectModalTxn.reference}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-slate-400 font-medium">Transfer Amount</span>
+                <span className="font-mono text-rose-400 font-bold text-sm">
+                  ${rejectModalTxn.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-slate-400 font-medium">Sender</span>
+                <span className="text-xs text-slate-300">{rejectModalTxn.senderName || rejectModalTxn.userEmail}</span>
+              </div>
+            </div>
+
+            <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-xs text-rose-300 space-y-1">
+              <p className="font-semibold">Refund Policy:</p>
+              <p className="text-[11px] text-rose-300/90">
+                Rejecting this transaction will mark it as Declined and instantly refund the debit balance back to the sender's account.
+              </p>
+            </div>
+
+            <form onSubmit={handleConfirmRejectTxn} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Rejection Reason / Compliance Note
+                </label>
+                <input
+                  type="text"
+                  value={rejectReason}
+                  onChange={(e) => setRejectReason(e.target.value)}
+                  placeholder="e.g. Incomplete beneficiary information, compliance clearance"
+                  className="w-full bg-slate-950 border border-slate-800 focus:border-rose-500 rounded-xl px-3.5 py-2.5 text-xs text-white outline-none"
+                />
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setRejectModalTxn(null)}
+                  className="px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-400 hover:text-white transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isRejecting}
+                  className="bg-rose-500 hover:bg-rose-600 text-white font-bold px-5 py-2.5 rounded-xl text-xs transition-all shadow-md flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+                >
+                  <XCircle className="w-4 h-4" />
+                  <span>{isRejecting ? 'Processing Rejection...' : 'Reject & Refund'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Approve Crypto Deposit Modal */}
+      {approveCryptoModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-lg w-full shadow-2xl space-y-5">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+              <div className="flex items-center gap-2">
+                <Key className="w-5 h-5 text-amber-400" />
+                <h3 className="text-base font-bold text-white">Approve Crypto Activation Deposit</h3>
+              </div>
+              <button
+                onClick={() => setApproveCryptoModal(null)}
+                className="text-slate-400 hover:text-white transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2 text-xs">
+              <div className="flex justify-between"><span className="text-slate-400">Client:</span><span className="font-semibold text-white">{approveCryptoModal.userName}</span></div>
+              <div className="flex justify-between"><span className="text-slate-400">Account:</span><span className="font-mono text-emerald-400">{approveCryptoModal.accountNumber}</span></div>
+              <div className="flex justify-between"><span className="text-slate-400">Method:</span><span className="text-amber-400 font-semibold">{approveCryptoModal.cryptoMethod} ({approveCryptoModal.network || 'Mainnet'})</span></div>
+              <div className="flex justify-between"><span className="text-slate-400">Amount:</span><span className="font-bold text-white font-mono">${approveCryptoModal.amountUSD}.00 USD</span></div>
+              {approveCryptoModal.txHash && (
+                <div className="flex justify-between"><span className="text-slate-400">Tx Hash:</span><span className="font-mono text-[10px] text-slate-300 truncate max-w-xs">{approveCryptoModal.txHash}</span></div>
+              )}
+            </div>
+
+            <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-xs text-emerald-300">
+              Approving this deposit will issue a unique 4-Digit Security Code to <strong>{approveCryptoModal.userName}</strong> and credit <strong>$2,500.00</strong> to their active SVB balance.
+            </div>
+
+            <div className="pt-2 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setApproveCryptoModal(null)}
+                className="px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-400 hover:text-white transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmApproveCrypto}
+                disabled={isApprovingCrypto}
+                className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-5 py-2.5 rounded-xl text-xs transition-all shadow-md flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                <span>{isApprovingCrypto ? 'Issuing Code...' : 'Approve & Issue 4-Digit Code'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Approve Tier 3 Verification Modal */}
+      {approveVerifModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-lg w-full shadow-2xl space-y-5">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-5 h-5 text-cyan-400" />
+                <h3 className="text-base font-bold text-white">Approve Tier 3 Identity Verification</h3>
+              </div>
+              <button
+                onClick={() => setApproveVerifModal(null)}
+                className="text-slate-400 hover:text-white transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2 text-xs">
+              <div className="flex justify-between"><span className="text-slate-400">Client:</span><span className="font-semibold text-white">{approveVerifModal.userName}</span></div>
+              <div className="flex justify-between"><span className="text-slate-400">Account:</span><span className="font-mono text-emerald-400">{approveVerifModal.accountNumber}</span></div>
+              <div className="flex justify-between"><span className="text-slate-400">Document Type:</span><span className="text-cyan-400 font-semibold">{approveVerifModal.documentType} ({approveVerifModal.country})</span></div>
+            </div>
+
+            <form onSubmit={handleConfirmApproveVerif} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">Compliance Verification Notes</label>
+                <input
+                  type="text"
+                  value={verifNotes}
+                  onChange={(e) => setVerifNotes(e.target.value)}
+                  placeholder="e.g. Identity verified against government database"
+                  className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-xl px-3.5 py-2.5 text-xs text-white outline-none"
+                />
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setApproveVerifModal(null)}
+                  className="px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-400 hover:text-white transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isApprovingVerif}
+                  className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-5 py-2.5 rounded-xl text-xs transition-all shadow-md flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>{isApprovingVerif ? 'Verifying...' : 'Confirm Tier 3 Approval'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Reject Tier 3 Verification Modal */}
+      {rejectVerifModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-lg w-full shadow-2xl space-y-5">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+              <div className="flex items-center gap-2">
+                <XCircle className="w-5 h-5 text-rose-400" />
+                <h3 className="text-base font-bold text-white">Decline Tier 3 Identity Verification</h3>
+              </div>
+              <button
+                onClick={() => setRejectVerifModal(null)}
+                className="text-slate-400 hover:text-white transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmRejectVerif} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">Rejection Reason</label>
+                <input
+                  type="text"
+                  value={verifRejectReason}
+                  onChange={(e) => setVerifRejectReason(e.target.value)}
+                  placeholder="e.g. Document expired or unreadable"
+                  className="w-full bg-slate-950 border border-slate-800 focus:border-rose-500 rounded-xl px-3.5 py-2.5 text-xs text-white outline-none"
+                />
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setRejectVerifModal(null)}
+                  className="px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-400 hover:text-white transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isRejectingVerif}
+                  className="bg-rose-500 hover:bg-rose-600 text-white font-bold px-5 py-2.5 rounded-xl text-xs transition-all shadow-md flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+                >
+                  <XCircle className="w-4 h-4" />
+                  <span>{isRejectingVerif ? 'Rejecting...' : 'Reject Verification'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Floating In-App Toast Alert System */}
+      {toastMsg && (
+        <div className="fixed bottom-6 right-6 z-50 max-w-sm w-full animate-in slide-in-from-bottom-5 fade-in duration-300">
+          <div className={`p-4 rounded-2xl shadow-2xl border flex items-start gap-3 backdrop-blur-md ${
+            toastMsg.type === 'success'
+              ? 'bg-slate-900/95 border-emerald-500/40 text-slate-100 shadow-emerald-500/10'
+              : toastMsg.type === 'error'
+              ? 'bg-slate-900/95 border-rose-500/40 text-slate-100 shadow-rose-500/10'
+              : 'bg-slate-900/95 border-amber-500/40 text-slate-100 shadow-amber-500/10'
+          }`}>
+            <div className="shrink-0 mt-0.5">
+              {toastMsg.type === 'success' && <CheckCircle2 className="w-5 h-5 text-emerald-400" />}
+              {toastMsg.type === 'error' && <XCircle className="w-5 h-5 text-rose-400" />}
+              {toastMsg.type === 'info' && <AlertCircle className="w-5 h-5 text-amber-400" />}
+            </div>
+            <div className="flex-1 min-w-0">
+              <h4 className="text-xs font-bold text-white truncate">{toastMsg.title}</h4>
+              <p className="text-[11px] text-slate-300 mt-0.5 leading-relaxed">{toastMsg.message}</p>
+            </div>
+            <button
+              onClick={() => setToastMsg(null)}
+              className="text-slate-400 hover:text-white shrink-0 p-1 cursor-pointer"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
           </div>
         </div>
       )}
