@@ -13,6 +13,7 @@ import {
 } from 'firebase/firestore';
 import config from '../../firebase-applet-config.json';
 import { User, VirtualCard, CryptoActivationDeposit, Tier3VerificationRequest, Transaction, SupportTicket, SupportMessage } from '../types';
+import { deduplicateTransactions, saveFinalizedStatus } from '../utils/transactions';
 
 // Helper to safely get config values across Vite client and Node server
 const getEnvVal = (key: string): string => {
@@ -382,19 +383,22 @@ export async function getAllVerificationsFromFirestore(): Promise<Tier3Verificat
 export async function syncTransactionToFirestore(txn: Transaction): Promise<void> {
   if (!txn || (!txn.id && !txn.reference)) return;
   try {
-    const docId = txn.id || txn.reference;
+    const docId = txn.reference || txn.id;
     const payload = cleanUndefined({
       ...txn,
-      id: docId,
+      id: txn.id || docId,
+      reference: txn.reference || docId,
       updatedAt: txn.updatedAt || new Date().toISOString()
     });
 
-    const writes = [setDoc(doc(db, 'transactions', docId), payload, { merge: true })];
-    if (txn.reference && txn.reference !== docId) {
-      writes.push(setDoc(doc(db, 'transactions', txn.reference), { ...payload, id: txn.reference }, { merge: true }));
+    if (payload.status && payload.status !== 'Pending') {
+      if (txn.id) saveFinalizedStatus(txn.id, payload.status);
+      if (txn.reference) saveFinalizedStatus(txn.reference, payload.status);
     }
+
+    const writes = [setDoc(doc(db, 'transactions', docId), payload, { merge: true })];
     if (txn.id && txn.id !== docId) {
-      writes.push(setDoc(doc(db, 'transactions', txn.id), { ...payload, id: txn.id }, { merge: true }));
+      writes.push(setDoc(doc(db, 'transactions', txn.id), payload, { merge: true }));
     }
     await Promise.all(writes);
   } catch (err) {
@@ -412,6 +416,7 @@ export async function updateTransactionInFirestore(
 ): Promise<void> {
   if (!identifier) return;
   const now = new Date().toISOString();
+  saveFinalizedStatus(identifier, status);
   try {
     const directRef1 = doc(db, 'transactions', identifier);
     const updates = cleanUndefined({
@@ -435,11 +440,17 @@ export async function updateTransactionInFirestore(
 
       if (snap1 && !snap1.empty) {
         snap1.forEach((d) => {
+          const dData = d.data() as any;
+          if (dData?.id) saveFinalizedStatus(dData.id, status);
+          if (dData?.reference) saveFinalizedStatus(dData.reference, status);
           writes.push(setDoc(d.ref, updates, { merge: true }).catch(() => null));
         });
       }
       if (snap2 && !snap2.empty) {
         snap2.forEach((d) => {
+          const dData = d.data() as any;
+          if (dData?.id) saveFinalizedStatus(dData.id, status);
+          if (dData?.reference) saveFinalizedStatus(dData.reference, status);
           writes.push(setDoc(d.ref, updates, { merge: true }).catch(() => null));
         });
       }
@@ -482,7 +493,7 @@ export async function getTransactionsFromFirestore(userId?: string): Promise<Tra
     snap.forEach((d) => {
       if (d.exists()) list.push(d.data() as Transaction);
     });
-    return list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return deduplicateTransactions(list);
   } catch (err) {
     console.warn('Firestore getTransactions error:', err);
     return [];
@@ -542,8 +553,7 @@ export function subscribeTransactionsFromFirestore(userId: string | null | undef
       snap.forEach((d) => {
         if (d.exists()) list.push(d.data() as Transaction);
       });
-      list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-      callback(list);
+      callback(deduplicateTransactions(list));
     }, (err) => console.warn('Transactions snapshot error:', err));
 
     return unsub;

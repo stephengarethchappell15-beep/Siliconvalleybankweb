@@ -20,14 +20,15 @@ import {
   playAdminAlertChime, 
   requestAdminNotificationPermission 
 } from '../services/adminAlerts';
-import { ShieldAlert, Users, Sparkles, FileText, Headphones, Search, UserCheck, Shield, DollarSign, ArrowUpRight, CheckCircle2, XCircle, Clock, Key, ArrowDownRight, Ban, ShieldCheck, UserPlus, X, Plus, Bell, Volume2, VolumeX, Radio, Zap, Check, Filter, AlertCircle, RefreshCw, Send, CheckSquare, Eye } from 'lucide-react';
+import { ShieldAlert, Users, Sparkles, FileText, Headphones, Search, UserCheck, Shield, DollarSign, ArrowUpRight, CheckCircle2, XCircle, Clock, Key, ArrowDownRight, Ban, ShieldCheck, UserPlus, X, Plus, Bell, Volume2, VolumeX, Radio, Zap, Check, Filter, AlertCircle, RefreshCw, Send, CheckSquare, Eye, ArrowLeft } from 'lucide-react';
 
 interface AdminPanelProps {
   adminUser: User;
   onDepositSuccess: (updatedUser: User, transaction: Transaction) => void;
+  onBack?: () => void;
 }
 
-export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSuccess }) => {
+export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSuccess, onBack }) => {
   const [subTab, setSubTab] = useState<'pending' | 'users' | 'funding' | 'crypto' | 'withdraw' | 'audit' | 'support' | 'verifications'>('pending');
   const [users, setUsers] = useState<User[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -663,6 +664,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
 
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
           <div className="flex items-center gap-4">
+            {onBack && (
+              <button
+                onClick={onBack}
+                className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors border border-slate-700 flex items-center gap-1.5 text-xs font-semibold shrink-0"
+                title="Go Back"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span>Back</span>
+              </button>
+            )}
             <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0 shadow-lg shadow-amber-500/10">
               <ShieldAlert className="w-6 h-6" />
             </div>

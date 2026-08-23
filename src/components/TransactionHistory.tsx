@@ -12,19 +12,22 @@ import {
   CheckCircle2,
   Clock,
   XCircle,
-  Tag
+  Tag,
+  ArrowLeft
 } from 'lucide-react';
 
 interface TransactionHistoryProps {
   transactions: Transaction[];
   onOpenReceipt: (txn: Transaction) => void;
   isAdmin: boolean;
+  onBack?: () => void;
 }
 
 export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
   transactions,
   onOpenReceipt,
-  isAdmin
+  isAdmin,
+  onBack
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [currencyFilter, setCurrencyFilter] = useState('ALL');
@@ -75,14 +78,26 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
       
       {/* Header & Controls */}
       <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-lg font-bold text-white flex items-center gap-2">
-            <History className="w-5 h-5 text-emerald-400" />
-            Transaction Records & Audit History
-          </h1>
-          <p className="text-xs text-slate-400 mt-0.5">
-            {isAdmin ? 'System-wide transaction records across all accounts' : 'Deposit history for your account'}
-          </p>
+        <div className="flex items-center gap-3">
+          {onBack && (
+            <button
+              onClick={onBack}
+              className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors border border-slate-700 flex items-center gap-1.5 text-xs font-semibold shrink-0"
+              title="Go Back"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>Back</span>
+            </button>
+          )}
+          <div>
+            <h1 className="text-lg font-bold text-white flex items-center gap-2">
+              <History className="w-5 h-5 text-emerald-400" />
+              Transaction Records & Audit History
+            </h1>
+            <p className="text-xs text-slate-400 mt-0.5">
+              {isAdmin ? 'System-wide transaction records across all accounts' : 'Deposit history for your account'}
+            </p>
+          </div>
         </div>
 
         <button

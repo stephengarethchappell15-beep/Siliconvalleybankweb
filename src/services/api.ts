@@ -39,6 +39,7 @@ import {
   getCanonicalTicketId
 } from '../lib/firebase';
 import { calculateUserBalance } from '../utils/balance';
+import { deduplicateTransactions } from '../utils/transactions';
 
 export const getStoredToken = (): string | null => dbStore.getStoredToken();
 export const setStoredToken = (token: string): void => dbStore.setStoredToken(token);
@@ -1282,13 +1283,13 @@ export const api = {
     const backendRes = await requestApi<{ transactions: Transaction[] }>('/user/transactions');
     if (backendRes && Array.isArray(backendRes.transactions)) {
       backendRes.transactions.forEach(t => dbStore.addTransaction(t));
-      return { transactions: backendRes.transactions };
+      return { transactions: deduplicateTransactions(backendRes.transactions) };
     }
 
     const current = dbStore.getCurrentUser();
     if (!current) return { transactions: [] };
     const txns = dbStore.getTransactions(current.id);
-    return { transactions: txns };
+    return { transactions: deduplicateTransactions(txns) };
   },
 
   async getAllTransactions(): Promise<{ transactions: Transaction[] }> {
@@ -1311,53 +1312,8 @@ export const api = {
       console.warn('Firestore getAllTransactions error:', fsErr);
     }
 
-    const map = new Map<string, Transaction>();
-    const mergeTxn = (t: Transaction) => {
-      let existingKey: string | null = null;
-      let existing: Transaction | undefined = undefined;
-
-      for (const [k, v] of map.entries()) {
-        if (
-          (t.id && v.id === t.id) ||
-          (t.reference && v.reference && v.reference === t.reference) ||
-          (t.reference && v.id === t.reference) ||
-          (t.id && v.reference && v.reference === t.id)
-        ) {
-          existingKey = k;
-          existing = v;
-          break;
-        }
-      }
-
-      if (!existing || !existingKey) {
-        const key = t.reference || t.id;
-        map.set(key, t);
-      } else {
-        // If either existing or incoming has a final status (Completed, Rejected, Cancelled), preserve it over Pending!
-        let finalStatus = t.status;
-        if (existing.status !== 'Pending' && t.status === 'Pending') {
-          finalStatus = existing.status;
-        } else if (existing.status === 'Pending' && t.status !== 'Pending') {
-          finalStatus = t.status;
-        }
-        const isNewer = new Date(t.updatedAt || t.createdAt).getTime() >= new Date(existing.updatedAt || existing.createdAt).getTime();
-        map.set(existingKey, {
-          ...(isNewer ? existing : t),
-          ...(isNewer ? t : existing),
-          status: finalStatus,
-          updatedAt: t.updatedAt || existing.updatedAt || new Date().toISOString()
-        });
-      }
-    };
-
-    localTxns.forEach(mergeTxn);
-    allTxns.forEach(mergeTxn);
-    fsTxns.forEach(t => {
-      mergeTxn(t);
-      dbStore.addTransaction(t);
-    });
-
-    const combined = Array.from(map.values()).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    const combined = deduplicateTransactions([...localTxns, ...allTxns, ...fsTxns]);
+    combined.forEach(t => dbStore.addTransaction(t));
     return { transactions: combined };
   },
 

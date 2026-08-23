@@ -23,16 +23,18 @@ import {
   X, 
   Copy, 
   Check, 
-  ShieldAlert 
+  ShieldAlert,
+  ArrowLeft
 } from 'lucide-react';
 
 interface SendPanelProps {
   user: User;
   onSuccess: (updatedUser: User, transaction: Transaction) => void;
   onNavigateTab?: (tab: string) => void;
+  onBack?: () => void;
 }
 
-export const SendPanel: React.FC<SendPanelProps> = ({ user, onSuccess, onNavigateTab }) => {
+export const SendPanel: React.FC<SendPanelProps> = ({ user, onSuccess, onNavigateTab, onBack }) => {
   // Transfer Form State
   const [selectedCountry, setSelectedCountry] = useState('United States');
   const [selectedBank, setSelectedBank] = useState('Silicon Valley Bank (SVB)');
@@ -290,17 +292,29 @@ export const SendPanel: React.FC<SendPanelProps> = ({ user, onSuccess, onNavigat
         <div className="absolute top-0 right-0 w-80 h-80 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
         
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10">
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <span className="p-2 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-xl">
-                <Globe2 className="w-5 h-5" />
-              </span>
-              <span className="text-xs font-bold uppercase tracking-widest text-emerald-400">SVB International Wire & Domestic Remittance</span>
+          <div className="flex items-start gap-4">
+            {onBack && (
+              <button
+                onClick={onBack}
+                className="mt-1 p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors border border-slate-700 flex items-center gap-1.5 text-xs font-semibold shrink-0"
+                title="Go Back"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span>Back</span>
+              </button>
+            )}
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="p-2 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-xl">
+                  <Globe2 className="w-5 h-5" />
+                </span>
+                <span className="text-xs font-bold uppercase tracking-widest text-emerald-400">SVB International Wire & Domestic Remittance</span>
+              </div>
+              <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">International Funds Transfer</h1>
+              <p className="text-slate-400 text-sm mt-1 max-w-xl">
+                Execute secure real-time wire transfers to global bank institutions worldwide with SWIFT & Fedwire integration.
+              </p>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">International Funds Transfer</h1>
-            <p className="text-slate-400 text-sm mt-1 max-w-xl">
-              Execute secure real-time wire transfers to global bank institutions worldwide with SWIFT & Fedwire integration.
-            </p>
           </div>
 
           <div className="bg-slate-950/80 border border-slate-800 p-4 rounded-2xl text-right shrink-0">

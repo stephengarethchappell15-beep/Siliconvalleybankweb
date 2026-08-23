@@ -1,26 +1,9 @@
 import { User, Transaction, UserNotification, SupportTicket, VirtualCard, BillPayment, CryptoActivationDeposit, Tier3VerificationRequest, AuditLog } from '../types';
+import { deduplicateTransactions, getFinalizedStatuses, saveFinalizedStatus } from '../utils/transactions';
 
 const STORAGE_KEY = 'svb_core_ledger_v2';
 const TOKEN_KEY = 'svb_auth_token_v2';
-const FINALIZED_STATUS_KEY = 'svb_finalized_txns_v2';
 
-function getFinalizedStatuses(): Record<string, string> {
-  try {
-    const raw = localStorage.getItem(FINALIZED_STATUS_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch (e) {
-    return {};
-  }
-}
-
-function saveFinalizedStatus(idOrRef: string, status: string): void {
-  if (!idOrRef || status === 'Pending') return;
-  try {
-    const map = getFinalizedStatuses();
-    map[idOrRef] = status;
-    localStorage.setItem(FINALIZED_STATUS_KEY, JSON.stringify(map));
-  } catch (e) {}
-}
 
 interface DBStructure {
   users: User[];
@@ -605,18 +588,11 @@ class LocalDBStore {
   // Transactions
   getTransactions(userId?: string): Transaction[] {
     this.refresh();
-    const finalized = getFinalizedStatuses();
-    const reconciled = this.db.transactions.map(t => {
-      const fixedStatus = (t.id && finalized[t.id]) || (t.reference && finalized[t.reference]);
-      if (fixedStatus && t.status === 'Pending') {
-        return { ...t, status: fixedStatus as any };
-      }
-      return t;
-    });
+    const deduped = deduplicateTransactions(this.db.transactions);
     if (userId) {
-      return reconciled.filter(t => t.userId === userId);
+      return deduped.filter(t => t.userId === userId);
     }
-    return reconciled;
+    return deduped;
   }
 
   addTransaction(txn: Transaction): Transaction {

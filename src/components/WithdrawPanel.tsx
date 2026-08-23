@@ -2,14 +2,16 @@ import React, { useState } from 'react';
 import { User, Transaction } from '../types';
 import { api } from '../services/api';
 import { subscribeCryptoAddressesFromFirestore } from '../lib/firebase';
-import { ArrowUpRight, Landmark, CreditCard, DollarSign, AlertCircle, CheckCircle2, ShieldCheck, Key, X, ShieldAlert, Clock, Copy, Check, FileText } from 'lucide-react';
+import { ArrowUpRight, Landmark, CreditCard, DollarSign, AlertCircle, CheckCircle2, ShieldCheck, Key, X, ShieldAlert, Clock, Copy, Check, FileText, ArrowLeft } from 'lucide-react';
 
 interface WithdrawPanelProps {
   user: User;
   onSuccess: (updatedUser: User, transaction: Transaction) => void;
+  onBack?: () => void;
+  onNavigateTab?: (tab: string) => void;
 }
 
-export const WithdrawPanel: React.FC<WithdrawPanelProps> = ({ user, onSuccess }) => {
+export const WithdrawPanel: React.FC<WithdrawPanelProps> = ({ user, onSuccess, onBack, onNavigateTab }) => {
   const [bankName, setBankName] = useState('');
   const [routingNumber, setRoutingNumber] = useState('');
   const [accountNumber, setAccountNumber] = useState('');
@@ -180,6 +182,16 @@ export const WithdrawPanel: React.FC<WithdrawPanelProps> = ({ user, onSuccess })
       {/* Header Banner */}
       <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl relative overflow-hidden">
         <div className="flex items-center gap-4">
+          {onBack && (
+            <button
+              onClick={onBack}
+              className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors border border-slate-700 flex items-center gap-1.5 text-xs font-semibold shrink-0"
+              title="Go Back"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>Back</span>
+            </button>
+          )}
           <div className="w-12 h-12 rounded-2xl bg-teal-500/10 border border-teal-500/20 flex items-center justify-center text-teal-400 shrink-0">
             <ArrowUpRight className="w-6 h-6" />
           </div>
