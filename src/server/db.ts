@@ -1719,15 +1719,27 @@ class DatabaseManager {
   public rejectTransaction(adminUser: User, transactionId: string, reason?: string): { transaction: Transaction } {
     if (adminUser.role !== 'admin') throw new Error('Unauthorized. Admin privileges required.');
 
-    const txn = this.db.transactions.find(t => t.id === transactionId || (t.reference && t.reference === transactionId));
-    if (!txn) throw new Error('Transaction not found.');
-
-    if (txn.status === 'Rejected' || txn.status === 'Cancelled') {
-      throw new Error(`Transaction is already ${txn.status.toLowerCase()}.`);
+    let txn = this.db.transactions.find(t => t.id === transactionId || (t.reference && t.reference === transactionId));
+    if (!txn) {
+      txn = {
+        id: transactionId,
+        userId: 'unknown',
+        userEmail: 'unknown',
+        accountNumber: 'unknown',
+        amount: 0,
+        currency: 'USD',
+        type: 'Deposit',
+        status: 'Rejected',
+        reference: transactionId,
+        description: 'Declined Transaction',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      this.db.transactions.unshift(txn);
+    } else {
+      txn.status = 'Rejected';
+      txn.updatedAt = new Date().toISOString();
     }
-
-    txn.status = 'Rejected';
-    txn.updatedAt = new Date().toISOString();
 
     const targetUser = this.findUserById(txn.userId);
     if (targetUser && (
@@ -1744,12 +1756,17 @@ class DatabaseManager {
     // Also update any matching pending cryptoActivationDeposits
     if (this.db.cryptoActivationDeposits) {
       this.db.cryptoActivationDeposits.forEach(d => {
-        if (d.userId === txn.userId && d.status === 'Pending') {
+        if ((d.userId === txn?.userId || d.id === transactionId) && d.status === 'Pending') {
           d.status = 'Rejected';
           d.updatedAt = new Date().toISOString();
           syncCryptoDepositToFirestore(d).catch(e => console.warn('Firestore reject crypto sync failed:', e));
         }
       });
+    }
+
+    if (targetUser?.pendingCryptoDeposit && (targetUser.pendingCryptoDeposit.status === 'Pending')) {
+      targetUser.pendingCryptoDeposit.status = 'Rejected';
+      targetUser.pendingCryptoDeposit.updatedAt = new Date().toISOString();
     }
 
     const notif: UserNotification = {

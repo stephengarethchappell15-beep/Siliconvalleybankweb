@@ -2,6 +2,25 @@ import { User, Transaction, UserNotification, SupportTicket, VirtualCard, BillPa
 
 const STORAGE_KEY = 'svb_core_ledger_v2';
 const TOKEN_KEY = 'svb_auth_token_v2';
+const FINALIZED_STATUS_KEY = 'svb_finalized_txns_v2';
+
+function getFinalizedStatuses(): Record<string, string> {
+  try {
+    const raw = localStorage.getItem(FINALIZED_STATUS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function saveFinalizedStatus(idOrRef: string, status: string): void {
+  if (!idOrRef || status === 'Pending') return;
+  try {
+    const map = getFinalizedStatuses();
+    map[idOrRef] = status;
+    localStorage.setItem(FINALIZED_STATUS_KEY, JSON.stringify(map));
+  } catch (e) {}
+}
 
 interface DBStructure {
   users: User[];
@@ -586,32 +605,59 @@ class LocalDBStore {
   // Transactions
   getTransactions(userId?: string): Transaction[] {
     this.refresh();
+    const finalized = getFinalizedStatuses();
+    const reconciled = this.db.transactions.map(t => {
+      const fixedStatus = (t.id && finalized[t.id]) || (t.reference && finalized[t.reference]);
+      if (fixedStatus && t.status === 'Pending') {
+        return { ...t, status: fixedStatus as any };
+      }
+      return t;
+    });
     if (userId) {
-      return this.db.transactions.filter(t => t.userId === userId);
+      return reconciled.filter(t => t.userId === userId);
     }
-    return this.db.transactions;
+    return reconciled;
   }
 
   addTransaction(txn: Transaction): Transaction {
     this.refresh();
+    const finalized = getFinalizedStatuses();
+    const lockedStatus = (txn.id && finalized[txn.id]) || (txn.reference && finalized[txn.reference]);
+
     const existingIdx = this.db.transactions.findIndex(
       t => t.id === txn.id || (txn.reference && t.reference && t.reference === txn.reference) || (t.reference && t.reference === txn.id) || (txn.reference && t.id === txn.reference)
     );
     if (existingIdx >= 0) {
       const existing = this.db.transactions[existingIdx];
       // Finalized status (Completed, Rejected, Cancelled) must not be reverted to Pending by older snapshots
-      const finalStatus = (existing.status !== 'Pending' && txn.status === 'Pending') 
+      let finalStatus = (existing.status !== 'Pending' && txn.status === 'Pending') 
         ? existing.status 
         : (txn.status || existing.status);
       
+      if (lockedStatus && finalStatus === 'Pending') {
+        finalStatus = lockedStatus as any;
+      }
+
       this.db.transactions[existingIdx] = {
         ...existing,
         ...txn,
         status: finalStatus,
         updatedAt: txn.updatedAt || existing.updatedAt || new Date().toISOString()
       };
+      if (finalStatus !== 'Pending') {
+        if (existing.id) saveFinalizedStatus(existing.id, finalStatus);
+        if (existing.reference) saveFinalizedStatus(existing.reference, finalStatus);
+        if (txn.id) saveFinalizedStatus(txn.id, finalStatus);
+        if (txn.reference) saveFinalizedStatus(txn.reference, finalStatus);
+      }
     } else {
-      this.db.transactions.unshift(txn);
+      const finalStatus = (lockedStatus || txn.status) as any;
+      const toAdd: Transaction = { ...txn, status: finalStatus };
+      this.db.transactions.unshift(toAdd);
+      if (finalStatus !== 'Pending') {
+        if (txn.id) saveFinalizedStatus(txn.id, finalStatus);
+        if (txn.reference) saveFinalizedStatus(txn.reference, finalStatus);
+      }
     }
     this.persist();
     return txn;
@@ -620,8 +666,18 @@ class LocalDBStore {
   updateTransaction(id: string, updates: Partial<Transaction>): Transaction | null {
     this.refresh();
     let updated: Transaction | null = null;
+    if (updates.status && updates.status !== 'Pending') {
+      saveFinalizedStatus(id, updates.status);
+      if (updates.reference) saveFinalizedStatus(updates.reference, updates.status);
+      if (updates.id) saveFinalizedStatus(updates.id, updates.status);
+    }
+
     this.db.transactions = this.db.transactions.map(t => {
       if (t.id === id || (t.reference && t.reference === id) || (updates.reference && t.reference === updates.reference) || (t.id && updates.id && t.id === updates.id)) {
+        if (updates.status && updates.status !== 'Pending') {
+          if (t.id) saveFinalizedStatus(t.id, updates.status);
+          if (t.reference) saveFinalizedStatus(t.reference, updates.status);
+        }
         updated = { 
           ...t, 
           ...updates, 

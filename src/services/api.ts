@@ -29,6 +29,7 @@ import {
   syncVerificationToFirestore,
   getAllVerificationsFromFirestore,
   syncTransactionToFirestore,
+  updateTransactionInFirestore,
   getTransactionsFromFirestore,
   syncSupportTicketToFirestore,
   getSupportTicketsFromFirestore,
@@ -1383,6 +1384,9 @@ export const api = {
         dbStore.updateTransaction(txn.reference, updatedTxn);
       }
       syncTransactionToFirestore(updatedTxn);
+      updateTransactionInFirestore(txnId, 'Completed', { senderName });
+      if (txn.reference) updateTransactionInFirestore(txn.reference, 'Completed', { senderName });
+      if (txn.id) updateTransactionInFirestore(txn.id, 'Completed', { senderName });
 
       if (
         txn.type === 'Deposit' || 
@@ -1404,7 +1408,8 @@ export const api = {
             balance: senderUser.balance + txn.amount,
             ledgerBalance: senderUser.balance + txn.amount,
             fourDigitCode: code,
-            transferCodeApproved: approved
+            transferCodeApproved: approved,
+            pendingCryptoDeposit: senderUser.pendingCryptoDeposit ? { ...senderUser.pendingCryptoDeposit, status: 'Approved' } : null
           });
           syncUserToFirestore(updatedSender);
         }
@@ -1467,6 +1472,8 @@ export const api = {
 
       broadcastRealtimeUpdate('TRANSACTION_UPDATED', updatedTxn, txn.userId, txnId);
       broadcastRealtimeUpdate('USER_UPDATED', undefined, txn.userId);
+    } else {
+      updateTransactionInFirestore(txnId, 'Completed', { senderName });
     }
   },
 
@@ -1488,6 +1495,9 @@ export const api = {
       console.warn('Backend rejectTransaction fallback:', e);
     }
 
+    // Always update Firestore matching documents unconditionally
+    updateTransactionInFirestore(txnId, 'Rejected');
+
     const txn = dbStore.getTransactions().find(t => t.id === txnId || (t.reference && t.reference === txnId));
     if (txn) {
       const updatedTxn: Transaction = {
@@ -1500,15 +1510,20 @@ export const api = {
         dbStore.updateTransaction(txn.reference, updatedTxn);
       }
       syncTransactionToFirestore(updatedTxn);
+      if (txn.reference) updateTransactionInFirestore(txn.reference, 'Rejected');
+      if (txn.id) updateTransactionInFirestore(txn.id, 'Rejected');
 
       // If it's a debit/withdrawal/transfer that was deducted, refund to user balance
       const isDebit = txn.type === 'Wire Withdrawal' || txn.type === 'Wire Transfer' || txn.type === 'Transfer' || txn.type === 'Withdrawal' || txn.type === 'Bill Pay';
       const user = dbStore.getUserById(txn.userId);
-      if (user && isDebit) {
+      if (user) {
+        const isDeposit = txn.type === 'Code Activation Deposit' || txn.type.toLowerCase().includes('deposit');
+        const newBalance = isDebit ? (user.balance + txn.amount) : user.balance;
         const refundedUser = dbStore.saveUser({
           ...user,
-          balance: user.balance + txn.amount,
-          ledgerBalance: user.balance + txn.amount
+          balance: newBalance,
+          ledgerBalance: newBalance,
+          pendingCryptoDeposit: isDeposit ? null : user.pendingCryptoDeposit
         });
         syncUserToFirestore(refundedUser);
       }

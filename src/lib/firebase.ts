@@ -403,6 +403,70 @@ export async function syncTransactionToFirestore(txn: Transaction): Promise<void
 }
 
 /**
+ * Permanently update transaction status across all matching Firestore documents and linked collections
+ */
+export async function updateTransactionInFirestore(
+  identifier: string,
+  status: 'Completed' | 'Rejected' | 'Cancelled' | 'Pending',
+  extraUpdates?: Partial<Transaction>
+): Promise<void> {
+  if (!identifier) return;
+  const now = new Date().toISOString();
+  try {
+    const directRef1 = doc(db, 'transactions', identifier);
+    const updates = cleanUndefined({
+      status,
+      updatedAt: now,
+      ...(extraUpdates || {})
+    });
+
+    const writes: Promise<any>[] = [
+      setDoc(directRef1, updates, { merge: true }).catch(() => null)
+    ];
+
+    // Query transactions collection for any docs matching id or reference
+    try {
+      const q1 = query(collection(db, 'transactions'), where('reference', '==', identifier));
+      const q2 = query(collection(db, 'transactions'), where('id', '==', identifier));
+      const [snap1, snap2] = await Promise.all([
+        getDocs(q1).catch(() => null),
+        getDocs(q2).catch(() => null)
+      ]);
+
+      if (snap1 && !snap1.empty) {
+        snap1.forEach((d) => {
+          writes.push(setDoc(d.ref, updates, { merge: true }).catch(() => null));
+        });
+      }
+      if (snap2 && !snap2.empty) {
+        snap2.forEach((d) => {
+          writes.push(setDoc(d.ref, updates, { merge: true }).catch(() => null));
+        });
+      }
+    } catch (qErr) {
+      console.warn('Query matching transactions error:', qErr);
+    }
+
+    // Also update matching crypto_activation_deposits if applicable
+    try {
+      const c1 = query(collection(db, 'crypto_activation_deposits'), where('id', '==', identifier));
+      const cSnap = await getDocs(c1).catch(() => null);
+      if (cSnap && !cSnap.empty) {
+        cSnap.forEach((d) => {
+          writes.push(setDoc(d.ref, { status, updatedAt: now }, { merge: true }).catch(() => null));
+        });
+      }
+    } catch (cErr) {
+      console.warn('Query crypto deposits error:', cErr);
+    }
+
+    await Promise.all(writes);
+  } catch (err) {
+    console.warn('Firestore updateTransactionInFirestore error:', err);
+  }
+}
+
+/**
  * Get Transactions for user from Firestore
  */
 export async function getTransactionsFromFirestore(userId?: string): Promise<Transaction[]> {
