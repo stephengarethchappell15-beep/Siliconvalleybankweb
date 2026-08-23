@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { User, BankAccount, VirtualCard, BillPayment, Transaction, AuditLog, UserNotification, DepositPayload, TransferPayload, WithdrawPayload, SupportTicket, SupportMessage, CryptoActivationDeposit } from '../types';
 import { syncUserToFirestore, getUserFromFirestore, getAllUsersFromFirestore, syncTransactionToFirestore, syncCryptoDepositToFirestore } from '../lib/firebase';
+import { emailService } from './emailService.js';
 
 interface DatabaseSchema {
   users: User[];
@@ -986,6 +987,17 @@ class DatabaseManager {
       console.warn('Firestore user sync warning in createUser:', err);
     });
 
+    // Real transactional welcome email notification (non-blocking)
+    emailService.sendWelcomeEmail({
+      fullName: newUser.fullName,
+      email: newUser.email,
+      accountNumber: newUser.accountNumber,
+      routingNumber: '121000358',
+      phone: newUser.phone
+    }).catch(err => {
+      console.warn('Welcome email delivery warning:', err);
+    });
+
     return { user: newUser, token: `token-${newUser.id}` };
   }
 
@@ -1235,6 +1247,36 @@ class DatabaseManager {
 
     this.saveDB(this.db);
 
+    // Real transactional email notification (non-blocking)
+    if (newTxn.status === 'Completed') {
+      emailService.sendDepositApprovedEmail({
+        userEmail: targetUser.email,
+        fullName: targetUser.fullName,
+        accountNumber: targetUser.accountNumber,
+        amount: Number(deposit.amount),
+        currency: deposit.currency || 'USD',
+        reference: ref,
+        type: 'Deposit',
+        status: 'Completed',
+        description: deposit.description,
+        currentBalance: targetUser.balance,
+        activationCode: isNewCodeGenerated ? targetUser.fourDigitCode : undefined
+      }).catch(err => console.warn('Deposit email delivery warning:', err));
+    } else {
+      emailService.sendDepositSubmittedEmail({
+        userEmail: targetUser.email,
+        fullName: targetUser.fullName,
+        accountNumber: targetUser.accountNumber,
+        amount: Number(deposit.amount),
+        currency: deposit.currency || 'USD',
+        reference: ref,
+        type: 'Deposit',
+        status: newTxn.status,
+        description: deposit.description,
+        currentBalance: targetUser.balance
+      }).catch(err => console.warn('Deposit submission email delivery warning:', err));
+    }
+
     return { user: targetUser, transaction: newTxn };
   }
 
@@ -1363,6 +1405,24 @@ class DatabaseManager {
 
     this.db.notifications.unshift(senderNotif);
     this.saveDB(this.db);
+
+    // Real transactional email notification for sender debit (non-blocking)
+    emailService.sendTransferDebitEmail({
+      userEmail: sender.email,
+      fullName: sender.fullName,
+      accountNumber: sender.accountNumber,
+      amount: amount,
+      currency: sender.currency || 'USD',
+      reference: ref,
+      type: 'Transfer',
+      status: senderTxn.status,
+      recipientName: finalRecipientName,
+      recipientBank: destinationBank,
+      recipientAccount: recipient ? recipient.accountNumber : recipientInput,
+      description: senderTxn.description,
+      currentBalance: sender.balance
+    }).catch(err => console.warn('Transfer debit email warning:', err));
+
     return { sender, transaction: senderTxn };
   }
 
@@ -1430,6 +1490,23 @@ class DatabaseManager {
 
     this.db.notifications.unshift(notif);
     this.saveDB(this.db);
+
+    // Real transactional email notification for withdrawal debit (non-blocking)
+    emailService.sendTransferDebitEmail({
+      userEmail: user.email,
+      fullName: user.fullName,
+      accountNumber: user.accountNumber,
+      amount: amount,
+      currency: user.currency || 'USD',
+      reference: ref,
+      type: 'Withdrawal',
+      status: txn.status,
+      recipientName: payload.accountHolderName,
+      recipientBank: payload.bankName,
+      recipientAccount: payload.accountNumber,
+      description: txn.description,
+      currentBalance: user.balance
+    }).catch(err => console.warn('Withdrawal debit email warning:', err));
 
     return { user, transaction: txn };
   }
@@ -1675,6 +1752,63 @@ class DatabaseManager {
     this.saveDB(this.db);
     syncTransactionToFirestore(senderTxn).catch(e => console.warn('Firestore txn sync failed:', e));
 
+    // Real transactional email notifications (non-blocking)
+    if (senderTxn.type.includes('Deposit') || senderTxn.type.includes('Credit')) {
+      if (sender) {
+        emailService.sendDepositApprovedEmail({
+          userEmail: sender.email,
+          fullName: sender.fullName,
+          accountNumber: sender.accountNumber,
+          amount: senderTxn.amount,
+          currency: senderTxn.currency || 'USD',
+          reference: senderTxn.reference,
+          type: senderTxn.type,
+          status: 'Completed',
+          description: senderTxn.description,
+          currentBalance: sender.balance,
+          activationCode: sender.fourDigitCode
+        }).catch(e => console.warn('Approval deposit email warning:', e));
+      }
+    } else {
+      // Outgoing transfer processed notification for sender
+      if (sender) {
+        emailService.sendTransferDebitEmail({
+          userEmail: sender.email,
+          fullName: sender.fullName,
+          accountNumber: sender.accountNumber,
+          amount: senderTxn.amount,
+          currency: senderTxn.currency || 'USD',
+          reference: senderTxn.reference,
+          type: 'Transfer',
+          status: 'Completed',
+          recipientName: senderTxn.recipientName,
+          recipientAccount: senderTxn.recipientAccountNumber,
+          description: senderTxn.description,
+          currentBalance: sender.balance
+        }).catch(e => console.warn('Approval transfer sender email warning:', e));
+      }
+      // Credit notification for recipient if internal
+      if (senderTxn.recipientAccountNumber || senderTxn.recipientEmail) {
+        const recipient = this.findUserByAccountNumber(senderTxn.recipientAccountNumber || '') || 
+                          this.findUserByEmail(senderTxn.recipientEmail || '');
+        if (recipient) {
+          emailService.sendDepositApprovedEmail({
+            userEmail: recipient.email,
+            fullName: recipient.fullName,
+            accountNumber: recipient.accountNumber,
+            amount: senderTxn.amount,
+            currency: senderTxn.currency || 'USD',
+            reference: senderTxn.reference,
+            type: 'Transfer',
+            status: 'Completed',
+            senderName: finalSenderName,
+            description: `Received transfer from ${finalSenderName}`,
+            currentBalance: recipient.balance
+          }).catch(e => console.warn('Approval transfer recipient email warning:', e));
+        }
+      }
+    }
+
     return { transaction: senderTxn };
   }
 
@@ -1712,6 +1846,15 @@ class DatabaseManager {
     });
 
     this.saveDB(this.db);
+
+    // Real transactional email security alert (non-blocking)
+    emailService.sendSecurityAlertEmail(
+      targetUser.email,
+      'New 4-Digit Outgoing Transfer Code Issued',
+      `An updated 4-Digit Outgoing Transfer Authorization Code has been generated for your account #${targetUser.accountNumber} by the Silicon Valley Bank Operations Review Desk.`,
+      newCode
+    ).catch(e => console.warn('Regenerate code email warning:', e));
+
     return { user: targetUser, code: newCode };
   }
 
@@ -1799,6 +1942,24 @@ class DatabaseManager {
     if (targetUser) {
       syncUserToFirestore(targetUser).catch(e => console.warn('Firestore reject user sync failed:', e));
     }
+
+    // Real transactional email notification for rejection/refund (non-blocking)
+    const targetEmail = (targetUser && targetUser.email) || txn.userEmail;
+    if (targetEmail && targetEmail !== 'unknown') {
+      emailService.sendTransactionRejectedEmail({
+        userEmail: targetEmail,
+        fullName: targetUser ? targetUser.fullName : undefined,
+        accountNumber: targetUser ? targetUser.accountNumber : txn.accountNumber,
+        amount: txn.amount,
+        currency: txn.currency,
+        reference: txn.reference,
+        type: txn.type,
+        status: 'Rejected',
+        rejectionReason: reason || 'Declined during review by Silicon Valley Bank Compliance.',
+        currentBalance: targetUser ? targetUser.balance : undefined
+      }).catch(e => console.warn('Reject transaction email warning:', e));
+    }
+
     return { transaction: txn };
   }
 
@@ -1993,6 +2154,22 @@ class DatabaseManager {
     syncCryptoDepositToFirestore(deposit).catch(e => console.warn('Firestore crypto deposit sync failed:', e));
     syncUserToFirestore(targetUser).catch(e => console.warn('Firestore crypto targetUser sync failed:', e));
     syncTransactionToFirestore(txn).catch(e => console.warn('Firestore crypto txn sync failed:', e));
+
+    // Real transactional email notifications (non-blocking)
+    emailService.sendDepositApprovedEmail({
+      userEmail: targetUser.email,
+      fullName: targetUser.fullName,
+      accountNumber: targetUser.accountNumber,
+      amount: deposit.amountUSD || 2500,
+      currency: 'USD',
+      reference: txn.reference,
+      type: 'Code Activation Deposit',
+      status: 'Completed',
+      description: `$2,500 ${deposit.cryptoMethod} Activation Deposit (4-Digit Code Issued: ${generatedCode})`,
+      currentBalance: targetUser.balance,
+      activationCode: generatedCode
+    }).catch(e => console.warn('Crypto activation approval email warning:', e));
+
     return { deposit, user: targetUser, code: generatedCode };
   }
 
@@ -2038,6 +2215,21 @@ class DatabaseManager {
     this.saveDB(this.db);
     syncCryptoDepositToFirestore(deposit).catch(e => console.warn('Firestore crypto deposit sync failed:', e));
     syncUserToFirestore(targetUser).catch(e => console.warn('Firestore crypto user sync failed:', e));
+
+    // Real transactional email notification for rejection (non-blocking)
+    emailService.sendTransactionRejectedEmail({
+      userEmail: targetUser.email,
+      fullName: targetUser.fullName,
+      accountNumber: targetUser.accountNumber,
+      amount: deposit.amountUSD || 2500,
+      currency: 'USD',
+      reference: deposit.id,
+      type: 'Code Activation Deposit',
+      status: 'Rejected',
+      rejectionReason: 'Crypto activation proof could not be verified by SVB Compliance.',
+      currentBalance: targetUser.balance
+    }).catch(e => console.warn('Crypto activation rejection email warning:', e));
+
     return { deposit, user: targetUser };
   }
 
@@ -2236,6 +2428,11 @@ class DatabaseManager {
     });
 
     this.saveDB(this.db);
+
+    // Real transactional email notification for custom notice (non-blocking)
+    emailService.sendCustomAdminNoticeEmail(target.email, adminUser.email, title, message)
+      .catch(e => console.warn('Admin notice email warning:', e));
+
     return notif;
   }
 
@@ -2376,6 +2573,15 @@ class DatabaseManager {
     };
 
     this.saveDB(this.db);
+
+    // Real transactional email for password reset verification code (non-blocking)
+    emailService.sendSecurityAlertEmail(
+      email,
+      'Password Reset One-Time Verification Code',
+      'You requested to reset your password for Silicon Valley Bank Online Banking. Enter the 6-digit verification code below within 15 minutes to complete your password update:',
+      code
+    ).catch(e => console.warn('Password reset code email warning:', e));
+
     return {
       message: 'Verification code generated for password reset.',
       code

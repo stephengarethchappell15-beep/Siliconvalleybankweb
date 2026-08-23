@@ -1,5 +1,6 @@
 import express from 'express';
 import { dbManager } from './db.js';
+import { emailService } from './emailService.js';
 
 const app = express();
 
@@ -725,6 +726,101 @@ app.post('/api/admin/users/:userId/notify', async (req, res) => {
     res.json({ notification });
   } catch (err: any) {
     res.status(400).json({ error: err.message || 'Failed to send notification.' });
+  }
+});
+
+// Admin: Check Email Service Provider Status
+app.get('/api/admin/email-status', async (req, res) => {
+  const user = await getAuthUser(req);
+  if (!user || user.role !== 'admin') {
+    return res.status(403).json({ error: 'Access denied.' });
+  }
+
+  const sender = process.env.EMAIL_SENDER_ADDRESS || 'siliconvalleybank51@gmail.com';
+  const hasResend = !!process.env.RESEND_API_KEY;
+  const hasBrevo = !!process.env.BREVO_API_KEY;
+  const hasSendGrid = !!process.env.SENDGRID_API_KEY;
+  const hasSmtp = !!(process.env.SMTP_HOST && process.env.SMTP_USER);
+
+  let activeProvider = 'Simulated Log (Fail-safe Console Log)';
+  if (hasResend) activeProvider = 'Resend API';
+  else if (hasBrevo) activeProvider = 'Brevo API (Sendinblue)';
+  else if (hasSendGrid) activeProvider = 'SendGrid API';
+  else if (hasSmtp) activeProvider = 'Direct SMTP Mailer';
+
+  res.json({
+    activeProvider,
+    senderEmail: sender,
+    providersConfigured: {
+      resend: hasResend,
+      brevo: hasBrevo,
+      sendgrid: hasSendGrid,
+      smtp: hasSmtp
+    }
+  });
+});
+
+// Admin: Send Test Transactional Email
+app.post('/api/admin/test-email', async (req, res) => {
+  const user = await getAuthUser(req);
+  if (!user || user.role !== 'admin') {
+    return res.status(403).json({ error: 'Access denied.' });
+  }
+
+  try {
+    const { toEmail, subject, type } = req.body;
+    const recipient = toEmail || user.email;
+
+    let result;
+    if (type === 'welcome') {
+      result = await emailService.sendWelcomeEmail({
+        fullName: 'Valued Client',
+        email: recipient,
+        accountNumber: '1099887766',
+        routingNumber: '121000358'
+      });
+    } else if (type === 'deposit') {
+      result = await emailService.sendDepositApprovedEmail({
+        userEmail: recipient,
+        fullName: 'Valued Client',
+        accountNumber: '1099887766',
+        amount: 2500.00,
+        currency: 'USD',
+        reference: 'TXN-TEST-DEP-001',
+        type: 'Deposit',
+        status: 'Completed',
+        currentBalance: 250000.00,
+        activationCode: '5892'
+      });
+    } else if (type === 'rejected') {
+      result = await emailService.sendTransactionRejectedEmail({
+        userEmail: recipient,
+        fullName: 'Valued Client',
+        accountNumber: '1099887766',
+        amount: 500.00,
+        currency: 'USD',
+        reference: 'TXN-TEST-REJ-001',
+        type: 'Transfer',
+        status: 'Rejected',
+        rejectionReason: 'Test transaction security decline by SVB Operations Review.',
+        currentBalance: 250000.00
+      });
+    } else {
+      result = await emailService.sendSecurityAlertEmail(
+        recipient,
+        subject || 'Security Notification - Test Alert',
+        'This is a verified test email alert dispatched from the Silicon Valley Bank core platform.',
+        '9412'
+      );
+    }
+
+    res.json({
+      success: true,
+      message: `Test email dispatched to ${recipient}`,
+      deliveryResult: result
+    });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || 'Failed to dispatch test email.' });
   }
 });
 

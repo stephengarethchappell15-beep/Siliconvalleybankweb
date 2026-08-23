@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Transaction } from '../types';
 import { maskAccountNumber } from '../utils/masking';
 import { 
@@ -15,7 +15,9 @@ import {
   FileCheck2, 
   Lock,
   Eye,
-  EyeOff
+  EyeOff,
+  ArrowLeft,
+  LayoutGrid
 } from 'lucide-react';
 
 interface ReceiptModalProps {
@@ -25,11 +27,23 @@ interface ReceiptModalProps {
 
 export const ReceiptModal: React.FC<ReceiptModalProps> = ({ transaction, onClose }) => {
   const [showFullAccount, setShowFullAccount] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
   if (!transaction) return null;
 
   const handlePrint = () => {
     window.print();
   };
+
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -64,7 +78,12 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ transaction, onClose
   const transferTypeDisplay = transaction.transferType || (transaction.destinationCountry && transaction.destinationCountry !== 'United States' ? 'International' : 'Domestic');
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4 overflow-y-auto">
+    <div 
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4 overflow-y-auto"
+    >
       <style>{`
         @media print {
           body * {
@@ -98,23 +117,30 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ transaction, onClose
 
       <div className="bg-slate-900 border border-slate-800 w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden my-8 animate-fadeIn relative">
         
-        {/* Top Control Bar */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-950/60 no-print">
-          <div className="flex items-center gap-2">
-            <FileCheck2 className="w-4 h-4 text-emerald-400" />
-            <span className="text-xs font-bold text-white uppercase tracking-wider">SVB Official Receipt</span>
-          </div>
+        {/* Top Control Bar with Prominent Back Button */}
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-800 bg-slate-950/80 no-print">
+          <button
+            onClick={onClose}
+            className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white transition-all border border-slate-700/80 flex items-center gap-2 text-xs font-bold shadow-sm group"
+            title="Return to Dashboard / Previous Screen"
+          >
+            <ArrowLeft className="w-4 h-4 text-emerald-400 group-hover:-translate-x-0.5 transition-transform" />
+            <span>Back to Dashboard</span>
+          </button>
+
           <div className="flex items-center gap-2">
             <button
               onClick={handlePrint}
               className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-md shadow-emerald-500/10"
             >
               <Printer className="w-3.5 h-3.5" />
-              <span>Print / Save PDF</span>
+              <span className="hidden sm:inline">Print / Save PDF</span>
+              <span className="sm:hidden">Print</span>
             </button>
             <button
               onClick={onClose}
               className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-xl transition-colors"
+              title="Close"
             >
               <X className="w-4 h-4" />
             </button>
@@ -294,7 +320,27 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ transaction, onClose
 
         </div>
 
+        {/* Bottom Interactive Action Footer (No Print) */}
+        <div className="p-4 sm:p-5 bg-slate-950/90 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 no-print">
+          <button
+            onClick={onClose}
+            className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all border border-slate-700 shadow-sm order-2 sm:order-1"
+          >
+            <ArrowLeft className="w-4 h-4 text-emerald-400" />
+            <span>Return to Dashboard</span>
+          </button>
+
+          <button
+            onClick={handlePrint}
+            className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-md shadow-emerald-500/10 order-1 sm:order-2"
+          >
+            <Printer className="w-4 h-4" />
+            <span>Print / Save Receipt PDF</span>
+          </button>
+        </div>
+
       </div>
     </div>
   );
 };
+

