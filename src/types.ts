@@ -179,7 +179,7 @@ export interface AuditLog {
   id: string;
   adminId: string;
   adminEmail: string;
-  action: 'USER_REGISTERED' | 'DEPOSIT_CREATED' | 'WITHDRAWAL_EXECUTED' | 'TRANSFER_EXECUTED' | 'ROLE_UPDATED' | 'USER_SEARCHED' | 'PROFILE_UPDATED' | 'SUPPORT_TICKET_UPDATED' | 'VIRTUAL_CARD_CREATED' | 'BILL_PAID' | 'SYSTEM_SEED';
+  action: 'USER_REGISTERED' | 'DEPOSIT_CREATED' | 'WITHDRAWAL_EXECUTED' | 'TRANSFER_EXECUTED' | 'ROLE_UPDATED' | 'USER_SEARCHED' | 'PROFILE_UPDATED' | 'SUPPORT_TICKET_UPDATED' | 'VIRTUAL_CARD_CREATED' | 'BILL_PAID' | 'SYSTEM_SEED' | 'EMAIL_CONFIG_UPDATED' | 'SYSTEM_SETTINGS_UPDATED';
   targetEmail: string;
   targetAccountNumber: string;
   description: string;
@@ -233,5 +233,32 @@ export interface AuthResponse {
   user: User;
   token: string;
   requires2FA?: boolean;
+}
+
+export interface EmailConfig {
+  provider: 'auto' | 'brevo' | 'resend' | 'sendgrid' | 'gmail_smtp' | 'custom_smtp';
+  senderEmail: string;
+  senderName: string;
+  resendApiKey?: string;
+  brevoApiKey?: string;
+  sendgridApiKey?: string;
+  smtpHost?: string;
+  smtpPort?: number;
+  smtpUser?: string;
+  smtpPass?: string;
+  gmailAppPassword?: string;
+  updatedAt?: string;
+}
+
+export interface EmailDeliveryLog {
+  id: string;
+  timestamp: string;
+  recipient: string;
+  subject: string;
+  type: string;
+  provider: string;
+  status: 'delivered' | 'failed';
+  messageId?: string;
+  error?: string;
 }
 

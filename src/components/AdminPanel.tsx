@@ -20,7 +20,7 @@ import {
   playAdminAlertChime, 
   requestAdminNotificationPermission 
 } from '../services/adminAlerts';
-import { ShieldAlert, Users, Sparkles, FileText, Headphones, Search, UserCheck, Shield, DollarSign, ArrowUpRight, CheckCircle2, XCircle, Clock, Key, ArrowDownRight, Ban, ShieldCheck, UserPlus, X, Plus, Bell, Volume2, VolumeX, Radio, Zap, Check, Filter, AlertCircle, RefreshCw, Send, CheckSquare, Eye, ArrowLeft, Mail } from 'lucide-react';
+import { ShieldAlert, Users, Sparkles, FileText, Headphones, Search, UserCheck, Shield, DollarSign, ArrowUpRight, CheckCircle2, XCircle, Clock, Key, ArrowDownRight, Ban, ShieldCheck, UserPlus, X, Plus, Bell, Volume2, VolumeX, Radio, Zap, Check, Filter, AlertCircle, RefreshCw, Send, CheckSquare, Eye, ArrowLeft, Mail, ExternalLink } from 'lucide-react';
 
 interface AdminPanelProps {
   adminUser: User;
@@ -359,12 +359,35 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
     if (subTab === 'email') fetchEmailStatus();
   }, [subTab]);
 
-  // Email Service Status & Live Dispatch State
+  // Email Service Status, Configuration & Live Dispatch State
   const [emailStatus, setEmailStatus] = useState<{
     activeProvider: string;
     senderEmail: string;
-    providersConfigured: { resend: boolean; brevo: boolean; sendgrid: boolean; smtp: boolean };
+    senderName?: string;
+    selectedProvider?: string;
+    providersConfigured: { resend: boolean; brevo: boolean; sendgrid: boolean; gmail: boolean; smtp: boolean };
+    hasCredentials?: boolean;
   } | null>(null);
+  const [emailConfigForm, setEmailConfigForm] = useState({
+    provider: 'auto',
+    senderEmail: 'siliconvalleybank51@gmail.com',
+    senderName: 'Silicon Valley Bank',
+    brevoApiKey: '',
+    resendApiKey: '',
+    sendgridApiKey: '',
+    gmailAppPassword: '',
+    smtpHost: 'smtp.gmail.com',
+    smtpPort: 587,
+    smtpUser: 'siliconvalleybank51@gmail.com',
+    smtpPass: ''
+  });
+  const [savingEmailConfig, setSavingEmailConfig] = useState(false);
+  const [emailConfigSuccess, setEmailConfigSuccess] = useState<string | null>(null);
+  const [emailConfigError, setEmailConfigError] = useState<string | null>(null);
+
+  const [emailLogs, setEmailLogs] = useState<any[]>([]);
+  const [loadingEmailLogs, setLoadingEmailLogs] = useState(false);
+
   const [testEmailRecipient, setTestEmailRecipient] = useState('stephengarethchappell15@gmail.com');
   const [testEmailType, setTestEmailType] = useState<'welcome' | 'deposit' | 'rejected' | 'security'>('deposit');
   const [testEmailSubject, setTestEmailSubject] = useState('Official Silicon Valley Bank Notification');
@@ -379,6 +402,82 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
       console.warn('Failed to fetch email status:', e);
     }
   };
+
+  const fetchEmailConfig = async () => {
+    try {
+      const res = await api.getEmailConfig();
+      if (res) {
+        setEmailConfigForm(prev => ({
+          ...prev,
+          provider: res.provider || 'auto',
+          senderEmail: res.senderEmail || 'siliconvalleybank51@gmail.com',
+          senderName: res.senderName || 'Silicon Valley Bank',
+          smtpHost: res.smtpHost || 'smtp.gmail.com',
+          smtpPort: res.smtpPort || 587,
+          smtpUser: res.smtpUser || 'siliconvalleybank51@gmail.com'
+        }));
+      }
+    } catch (e) {
+      console.warn('Failed to fetch email config:', e);
+    }
+  };
+
+  const fetchEmailLogs = async () => {
+    try {
+      setLoadingEmailLogs(true);
+      const res = await api.getEmailLogs();
+      if (res && res.logs) {
+        setEmailLogs(res.logs);
+      }
+    } catch (e) {
+      console.warn('Failed to fetch email logs:', e);
+    } finally {
+      setLoadingEmailLogs(false);
+    }
+  };
+
+  const handleSaveEmailConfig = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingEmailConfig(true);
+    setEmailConfigSuccess(null);
+    setEmailConfigError(null);
+
+    try {
+      const payload: any = {
+        provider: emailConfigForm.provider,
+        senderEmail: emailConfigForm.senderEmail.trim(),
+        senderName: emailConfigForm.senderName.trim()
+      };
+
+      if (emailConfigForm.brevoApiKey.trim()) payload.brevoApiKey = emailConfigForm.brevoApiKey.trim();
+      if (emailConfigForm.resendApiKey.trim()) payload.resendApiKey = emailConfigForm.resendApiKey.trim();
+      if (emailConfigForm.sendgridApiKey.trim()) payload.sendgridApiKey = emailConfigForm.sendgridApiKey.trim();
+      if (emailConfigForm.gmailAppPassword.trim()) payload.gmailAppPassword = emailConfigForm.gmailAppPassword.trim();
+      if (emailConfigForm.smtpHost.trim()) payload.smtpHost = emailConfigForm.smtpHost.trim();
+      if (emailConfigForm.smtpPort) payload.smtpPort = Number(emailConfigForm.smtpPort);
+      if (emailConfigForm.smtpUser.trim()) payload.smtpUser = emailConfigForm.smtpUser.trim();
+      if (emailConfigForm.smtpPass.trim()) payload.smtpPass = emailConfigForm.smtpPass.trim();
+
+      const res = await api.updateEmailConfig(payload);
+      setEmailConfigSuccess(res.message || 'Email provider configuration saved successfully!');
+      showToast('success', 'Email Service Updated', 'Transactional email settings updated and active.');
+      fetchEmailStatus();
+      fetchEmailLogs();
+    } catch (err: any) {
+      setEmailConfigError(err.message || 'Failed to save email configuration.');
+      showToast('error', 'Configuration Failed', err.message || 'Failed to save email settings.');
+    } finally {
+      setSavingEmailConfig(false);
+    }
+  };
+
+  useEffect(() => {
+    if (subTab === 'email') {
+      fetchEmailStatus();
+      fetchEmailConfig();
+      fetchEmailLogs();
+    }
+  }, [subTab]);
 
   const handleSendTestEmail = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -395,10 +494,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
         type: testEmailType
       });
       setTestEmailResult({ success: true, message: res?.message || `Test email dispatched to ${testEmailRecipient}` });
-      showToast('success', 'Email Sent', `Transactional email dispatched from siliconvalleybank51@gmail.com to ${testEmailRecipient}`);
+      showToast('success', 'Email Delivered', `Live email dispatched from siliconvalleybank51@gmail.com to ${testEmailRecipient}`);
+      fetchEmailLogs();
     } catch (err: any) {
       setTestEmailResult({ success: false, message: err?.message || 'Failed to dispatch email.' });
       showToast('error', 'Delivery Error', err?.message || 'Failed to dispatch test email.');
+      fetchEmailLogs();
     } finally {
       setSendingTestEmail(false);
     }
@@ -2028,17 +2129,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-white">Transactional Email Delivery Engine</h3>
-                  <p className="text-xs text-slate-400">Official Sender: <span className="text-amber-400 font-semibold">siliconvalleybank51@gmail.com</span></p>
+                  <p className="text-xs text-slate-400">Official Sender: <span className="text-amber-400 font-semibold">{emailConfigForm.senderEmail || 'siliconvalleybank51@gmail.com'}</span></p>
                 </div>
               </div>
             </div>
-            <button
-              onClick={fetchEmailStatus}
-              className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-slate-700 flex items-center gap-1.5 transition-all cursor-pointer"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-              <span>Refresh Status</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  fetchEmailStatus();
+                  fetchEmailConfig();
+                  fetchEmailLogs();
+                }}
+                className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-slate-700 flex items-center gap-1.5 transition-all cursor-pointer"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Refresh Status & Logs</span>
+              </button>
+            </div>
           </div>
 
           {/* Email Infrastructure Status Cards */}
@@ -2046,10 +2153,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
             <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4 space-y-1">
               <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Active Mailer Provider</span>
               <div className="flex items-center gap-2 pt-1">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-                <span className="text-sm font-bold text-white">{emailStatus?.activeProvider || 'Direct / Fallback Dispatcher'}</span>
+                <span className={`w-2.5 h-2.5 rounded-full ${emailStatus?.hasCredentials ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+                <span className="text-sm font-bold text-white">{emailStatus?.activeProvider || 'Checking Status...'}</span>
               </div>
-              <p className="text-[11px] text-slate-500 pt-0.5">Automated fail-safe transactional delivery active.</p>
+              <p className="text-[11px] text-slate-500 pt-0.5">
+                {emailStatus?.hasCredentials ? 'Live transactional delivery active.' : 'Configure credentials below to enable live sending.'}
+              </p>
             </div>
 
             <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4 space-y-1">
@@ -2065,10 +2174,319 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
               <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Delivery Resilience</span>
               <div className="flex items-center gap-2 pt-1">
                 <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                <span className="text-sm font-bold text-emerald-400">Non-Blocking Fire-and-Forget</span>
+                <span className="text-sm font-bold text-emerald-400">Non-Blocking Async Dispatch</span>
               </div>
-              <p className="text-[11px] text-slate-500 pt-0.5">Transactions never fail or freeze if SMTP latency occurs.</p>
+              <p className="text-[11px] text-slate-500 pt-0.5">Banking transactions execute immediately with background email.</p>
             </div>
+          </div>
+
+          {/* Free Developer Tier Recommendation Banner */}
+          <div className="bg-gradient-to-r from-emerald-950/40 via-slate-900 to-amber-950/30 border border-emerald-500/30 rounded-2xl p-5 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                  <ShieldCheck className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                    <span>100% Free Developer Email Tier Routing</span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 uppercase">Zero Cost / No Budget Required</span>
+                  </h4>
+                  <p className="text-xs text-slate-300">
+                    Real emails can be routed to external inboxes completely free of charge using developer tiers.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* 3 Free Tier Provider Options Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
+              {/* Option 1: Brevo Free Tier */}
+              <div className="bg-slate-900/80 border border-slate-700/80 rounded-xl p-3.5 space-y-2 flex flex-col justify-between hover:border-emerald-500/50 transition-colors">
+                <div>
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-white text-xs">Brevo (Sendinblue)</span>
+                    <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">300 Free / Day</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Free account with instant API key. 9,000 free emails per month to any inbox without a credit card.
+                  </p>
+                </div>
+                <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between">
+                  <a
+                    href="https://app.brevo.com/settings/keys/api"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[11px] text-amber-400 hover:text-amber-300 font-medium inline-flex items-center gap-1"
+                  >
+                    <span>Get Free API Key</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEmailConfigForm(prev => ({ ...prev, provider: 'brevo' }));
+                      showToast('info', 'Brevo Free Tier Selected', 'Paste your free xkeysib-... API key below.');
+                    }}
+                    className="text-[10px] font-semibold text-slate-300 hover:text-white bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-700 hover:bg-slate-700 transition-all"
+                  >
+                    Select Brevo
+                  </button>
+                </div>
+              </div>
+
+              {/* Option 2: Resend Free Tier */}
+              <div className="bg-slate-900/80 border border-slate-700/80 rounded-xl p-3.5 space-y-2 flex flex-col justify-between hover:border-emerald-500/50 transition-colors">
+                <div>
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-white text-xs">Resend Free Tier</span>
+                    <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">3,000 Free / Mo</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    100 free emails/day (3,000/mo). Free developer account with immediate API key (<code className="text-amber-300">re_...</code>).
+                  </p>
+                </div>
+                <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between">
+                  <a
+                    href="https://resend.com/api-keys"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[11px] text-amber-400 hover:text-amber-300 font-medium inline-flex items-center gap-1"
+                  >
+                    <span>Get Free API Key</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEmailConfigForm(prev => ({ ...prev, provider: 'resend' }));
+                      showToast('info', 'Resend Free Tier Selected', 'Paste your free re_... API key below.');
+                    }}
+                    className="text-[10px] font-semibold text-slate-300 hover:text-white bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-700 hover:bg-slate-700 transition-all"
+                  >
+                    Select Resend
+                  </button>
+                </div>
+              </div>
+
+              {/* Option 3: Gmail Free SMTP */}
+              <div className="bg-slate-900/80 border border-slate-700/80 rounded-xl p-3.5 space-y-2 flex flex-col justify-between hover:border-emerald-500/50 transition-colors">
+                <div>
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-white text-xs">Gmail Free SMTP</span>
+                    <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">500 Free / Day</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Direct delivery from <span className="text-amber-300 font-mono">siliconvalleybank51@gmail.com</span> using a free Google App Password.
+                  </p>
+                </div>
+                <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between">
+                  <a
+                    href="https://myaccount.google.com/apppasswords"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[11px] text-amber-400 hover:text-amber-300 font-medium inline-flex items-center gap-1"
+                  >
+                    <span>Google App Password</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEmailConfigForm(prev => ({ ...prev, provider: 'gmail_smtp' }));
+                      showToast('info', 'Gmail SMTP Selected', 'Paste your 16-character Google App Password below.');
+                    }}
+                    className="text-[10px] font-semibold text-slate-300 hover:text-white bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-700 hover:bg-slate-700 transition-all"
+                  >
+                    Select Gmail
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Provider Credentials & Configuration Settings */}
+          <div className="bg-slate-950 border border-slate-800 rounded-2xl p-5 space-y-4">
+            <div className="border-b border-slate-800 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                  <Key className="w-4 h-4 text-amber-400" />
+                  <span>Transactional Mailer Provider Credentials</span>
+                </h4>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Configure your API keys or SMTP credentials. The system supports Brevo, Resend, SendGrid, Gmail App Password, and Custom SMTP.
+                </p>
+              </div>
+            </div>
+
+            {emailConfigSuccess && (
+              <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-xs text-emerald-300 font-medium flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>{emailConfigSuccess}</span>
+              </div>
+            )}
+
+            {emailConfigError && (
+              <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-xs text-rose-300 font-medium flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                <span>{emailConfigError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveEmailConfig} className="space-y-4 text-xs">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block font-medium text-slate-300 mb-1">Primary Email Dispatcher Provider</label>
+                  <select
+                    value={emailConfigForm.provider}
+                    onChange={(e) => setEmailConfigForm(prev => ({ ...prev, provider: e.target.value }))}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white outline-none focus:border-amber-500"
+                  >
+                    <option value="auto">Auto Fail-over (Try Brevo → Resend → SendGrid → SMTP)</option>
+                    <option value="brevo">Brevo (Sendinblue) API (Free 300/day)</option>
+                    <option value="resend">Resend API</option>
+                    <option value="sendgrid">SendGrid API</option>
+                    <option value="gmail_smtp">Gmail SMTP (16-char App Password)</option>
+                    <option value="custom_smtp">Custom SMTP Server</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-medium text-slate-300 mb-1">Sender Email Address</label>
+                  <input
+                    type="email"
+                    required
+                    value={emailConfigForm.senderEmail}
+                    onChange={(e) => setEmailConfigForm(prev => ({ ...prev, senderEmail: e.target.value }))}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono outline-none focus:border-amber-500"
+                    placeholder="siliconvalleybank51@gmail.com"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-medium text-slate-300 mb-1">Sender Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={emailConfigForm.senderName}
+                    onChange={(e) => setEmailConfigForm(prev => ({ ...prev, senderName: e.target.value }))}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white outline-none focus:border-amber-500"
+                    placeholder="Silicon Valley Bank"
+                  />
+                </div>
+              </div>
+
+              {/* Provider-specific Key Inputs */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                <div>
+                  <label className="block font-medium text-slate-300 mb-1">
+                    Brevo (Sendinblue) API Key <span className="text-slate-500 font-normal">(e.g. xkeysib-...)</span>
+                  </label>
+                  <input
+                    type="password"
+                    value={emailConfigForm.brevoApiKey}
+                    onChange={(e) => setEmailConfigForm(prev => ({ ...prev, brevoApiKey: e.target.value }))}
+                    placeholder="xkeysib-..."
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-medium text-slate-300 mb-1">
+                    Resend API Key <span className="text-slate-500 font-normal">(e.g. re_...)</span>
+                  </label>
+                  <input
+                    type="password"
+                    value={emailConfigForm.resendApiKey}
+                    onChange={(e) => setEmailConfigForm(prev => ({ ...prev, resendApiKey: e.target.value }))}
+                    placeholder="re_..."
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-medium text-slate-300 mb-1">
+                    SendGrid API Key <span className="text-slate-500 font-normal">(e.g. SG....)</span>
+                  </label>
+                  <input
+                    type="password"
+                    value={emailConfigForm.sendgridApiKey}
+                    onChange={(e) => setEmailConfigForm(prev => ({ ...prev, sendgridApiKey: e.target.value }))}
+                    placeholder="SG...."
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-medium text-slate-300 mb-1">
+                    Gmail 16-Character App Password <span className="text-slate-500 font-normal">(for siliconvalleybank51@gmail.com)</span>
+                  </label>
+                  <input
+                    type="password"
+                    value={emailConfigForm.gmailAppPassword}
+                    onChange={(e) => setEmailConfigForm(prev => ({ ...prev, gmailAppPassword: e.target.value }))}
+                    placeholder="xxxx xxxx xxxx xxxx"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono outline-none focus:border-amber-500"
+                  />
+                </div>
+              </div>
+
+              {/* Custom SMTP Details if selected */}
+              {(emailConfigForm.provider === 'custom_smtp' || emailConfigForm.smtpHost !== 'smtp.gmail.com') && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2 border-t border-slate-800">
+                  <div>
+                    <label className="block font-medium text-slate-300 mb-1">SMTP Host</label>
+                    <input
+                      type="text"
+                      value={emailConfigForm.smtpHost}
+                      onChange={(e) => setEmailConfigForm(prev => ({ ...prev, smtpHost: e.target.value }))}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono outline-none focus:border-amber-500"
+                      placeholder="smtp.example.com"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-medium text-slate-300 mb-1">SMTP Port</label>
+                    <input
+                      type="number"
+                      value={emailConfigForm.smtpPort}
+                      onChange={(e) => setEmailConfigForm(prev => ({ ...prev, smtpPort: Number(e.target.value) }))}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono outline-none focus:border-amber-500"
+                      placeholder="587"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-medium text-slate-300 mb-1">SMTP Password</label>
+                    <input
+                      type="password"
+                      value={emailConfigForm.smtpPass}
+                      onChange={(e) => setEmailConfigForm(prev => ({ ...prev, smtpPass: e.target.value }))}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono outline-none focus:border-amber-500"
+                      placeholder="Password"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-end pt-2">
+                <button
+                  type="submit"
+                  disabled={savingEmailConfig}
+                  className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center gap-2 transition-all cursor-pointer shadow-lg shadow-amber-500/20"
+                >
+                  {savingEmailConfig ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Saving Configuration...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-3.5 h-3.5" />
+                      <span>Save & Activate Provider Settings</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
 
           {/* Test Email Dispatch Form */}
@@ -2079,7 +2497,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
                 <span>Send Live Test Transactional Email</span>
               </h4>
               <p className="text-xs text-slate-400 mt-0.5">
-                Dispatch an official SVB notification directly to an inbox to verify formatting and delivery.
+                Dispatch an official SVB notification directly to an inbox to verify formatting, external delivery, and headers.
               </p>
             </div>
 
@@ -2092,8 +2510,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
                     required
                     value={testEmailRecipient}
                     onChange={(e) => setTestEmailRecipient(e.target.value)}
-                    placeholder="e.g. client@example.com"
-                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500"
+                    placeholder="stephengarethchappell15@gmail.com"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500 font-mono"
                   />
                 </div>
 
@@ -2143,17 +2561,104 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
                   {sendingTestEmail ? (
                     <>
                       <RefreshCw className="w-4 h-4 animate-spin" />
-                      <span>Dispatching Email...</span>
+                      <span>Dispatching Real Email...</span>
                     </>
                   ) : (
                     <>
                       <Send className="w-4 h-4" />
-                      <span>Send Test Email from siliconvalleybank51@gmail.com</span>
+                      <span>Send Test Email from {emailConfigForm.senderEmail || 'siliconvalleybank51@gmail.com'}</span>
                     </>
                   )}
                 </button>
               </div>
             </form>
+          </div>
+
+          {/* Outbound Email Delivery Audit Logs Table */}
+          <div className="bg-slate-950 border border-slate-800 rounded-2xl p-5 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div>
+                <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-amber-400" />
+                  <span>Outbound Delivery Audit History</span>
+                </h4>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Real-time log of all banking notifications dispatched to client inboxes across the platform.
+                </p>
+              </div>
+              <button
+                onClick={fetchEmailLogs}
+                className="px-3 py-1 bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-semibold rounded-lg border border-slate-700 flex items-center gap-1 transition-all"
+              >
+                <RefreshCw className="w-3 h-3" />
+                <span>Refresh Logs</span>
+              </button>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-800 text-slate-400 font-semibold uppercase tracking-wider">
+                    <th className="py-2.5 px-3">Timestamp</th>
+                    <th className="py-2.5 px-3">Recipient</th>
+                    <th className="py-2.5 px-3">Subject / Event</th>
+                    <th className="py-2.5 px-3">Provider</th>
+                    <th className="py-2.5 px-3">Delivery Status</th>
+                    <th className="py-2.5 px-3 text-right">Details</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60 text-slate-200">
+                  {loadingEmailLogs ? (
+                    <tr>
+                      <td colSpan={6} className="text-center py-6 text-slate-500">Loading delivery logs...</td>
+                    </tr>
+                  ) : emailLogs.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="text-center py-6 text-slate-500">No email delivery attempts logged yet.</td>
+                    </tr>
+                  ) : (
+                    emailLogs.map((log: any) => (
+                      <tr key={log.id} className="hover:bg-slate-900/50 transition-colors">
+                        <td className="py-2.5 px-3 text-slate-400 whitespace-nowrap">
+                          {new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                        </td>
+                        <td className="py-2.5 px-3 font-mono text-slate-300">
+                          {log.recipient}
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <span className="font-semibold text-white">{log.subject}</span>
+                          <span className="block text-[10px] text-slate-400 uppercase">{log.eventType}</span>
+                        </td>
+                        <td className="py-2.5 px-3 text-amber-300 font-medium whitespace-nowrap">
+                          {log.provider}
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold inline-flex items-center gap-1 ${
+                            log.status === 'delivered'
+                              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                              : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                          }`}>
+                            {log.status === 'delivered' ? <CheckCircle2 className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
+                            <span className="capitalize">{log.status}</span>
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 text-right text-[11px] text-slate-400 font-mono">
+                          {log.messageId ? (
+                            <span className="text-emerald-400/90 truncate block max-w-[150px] ml-auto" title={log.messageId}>
+                              {log.messageId}
+                            </span>
+                          ) : log.error ? (
+                            <span className="text-rose-400/90 truncate block max-w-[150px] ml-auto" title={log.error}>
+                              {log.error}
+                            </span>
+                          ) : '-'}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}

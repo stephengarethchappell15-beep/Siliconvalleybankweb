@@ -2232,7 +2232,7 @@ export const api = {
     return { success: true, message: 'Password has been updated.' };
   },
 
-  // Email Diagnostic & Testing
+  // Email Diagnostic, Configuration & Live Testing
   async getEmailStatus(): Promise<any> {
     try {
       const res = await requestApi<any>('/admin/email-status');
@@ -2243,8 +2243,27 @@ export const api = {
     return {
       activeProvider: 'Direct Dispatcher / Automated Mailer',
       senderEmail: 'siliconvalleybank51@gmail.com',
-      providersConfigured: { resend: false, brevo: false, sendgrid: false, smtp: true }
+      providersConfigured: { resend: false, brevo: false, sendgrid: false, smtp: true },
+      hasCredentials: false
     };
+  },
+
+  async getEmailConfig(): Promise<any> {
+    const res = await requestApi<any>('/admin/email-config');
+    return res;
+  },
+
+  async updateEmailConfig(config: any): Promise<any> {
+    const res = await requestApi<any>('/admin/email-config', {
+      method: 'POST',
+      body: JSON.stringify(config)
+    });
+    return res;
+  },
+
+  async getEmailLogs(): Promise<{ logs: any[] }> {
+    const res = await requestApi<{ logs: any[] }>('/admin/email-logs');
+    return res || { logs: [] };
   },
 
   async sendTestEmail(payload: { toEmail: string; subject?: string; type?: string }): Promise<any> {
@@ -2252,6 +2271,6 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(payload)
     });
-    return res || { success: true, message: `Email dispatched to ${payload.toEmail}` };
+    return res;
   }
 };

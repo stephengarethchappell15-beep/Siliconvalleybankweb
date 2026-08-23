@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { User, BankAccount, VirtualCard, BillPayment, Transaction, AuditLog, UserNotification, DepositPayload, TransferPayload, WithdrawPayload, SupportTicket, SupportMessage, CryptoActivationDeposit } from '../types';
+import { User, BankAccount, VirtualCard, BillPayment, Transaction, AuditLog, UserNotification, DepositPayload, TransferPayload, WithdrawPayload, SupportTicket, SupportMessage, CryptoActivationDeposit, EmailConfig, EmailDeliveryLog } from '../types.js';
 import { syncUserToFirestore, getUserFromFirestore, getAllUsersFromFirestore, syncTransactionToFirestore, syncCryptoDepositToFirestore } from '../lib/firebase';
 import { emailService } from './emailService.js';
 
@@ -15,6 +15,8 @@ interface DatabaseSchema {
   notifications: UserNotification[];
   supportTickets: SupportTicket[];
   cryptoActivationDeposits?: CryptoActivationDeposit[];
+  emailConfig?: EmailConfig;
+  emailDeliveryLogs?: EmailDeliveryLog[];
   cryptoWalletAddresses?: {
     BTC: string;
     USDT: string;
@@ -526,6 +528,9 @@ class DatabaseManager {
         if (!parsed.virtualCards) parsed.virtualCards = seedVirtualCards;
         if (!parsed.billPayments) parsed.billPayments = seedBillPayments;
         if (!parsed.resetTokens) parsed.resetTokens = {};
+        if (parsed.emailConfig) {
+          emailService.configure(parsed.emailConfig);
+        }
         
         // Ensure admin user exists with admin@svb.com
         const adminUser = parsed.users.find((u: User) => u.email === 'admin@svb.com');
@@ -2604,6 +2609,39 @@ class DatabaseManager {
     this.saveDB(this.db);
 
     return { success: true, message: 'Password reset successfully. You can now log in.' };
+  }
+
+  public getEmailConfig(): EmailConfig {
+    if (this.db.emailConfig) {
+      return this.db.emailConfig;
+    }
+    return emailService.getConfig();
+  }
+
+  public saveEmailConfig(adminUser: User, config: Partial<EmailConfig>): EmailConfig {
+    if (adminUser.role !== 'admin') {
+      throw new Error('Access denied: Only administrators can modify email service configurations.');
+    }
+
+    const updated = emailService.configure(config);
+    this.db.emailConfig = updated;
+    this.saveDB(this.db);
+
+    this.addAuditLog({
+      adminId: adminUser.id,
+      adminEmail: adminUser.email,
+      action: 'SYSTEM_SETTINGS_UPDATED',
+      targetEmail: updated.senderEmail || 'siliconvalleybank51@gmail.com',
+      targetAccountNumber: 'SYSTEM',
+      description: `Admin updated transactional email service configuration. Provider: ${updated.provider}, Sender: ${updated.senderEmail}`,
+      details: { provider: updated.provider, senderEmail: updated.senderEmail }
+    });
+
+    return updated;
+  }
+
+  public getEmailDeliveryLogs(): EmailDeliveryLog[] {
+    return emailService.getDeliveryLogs();
   }
 }
 

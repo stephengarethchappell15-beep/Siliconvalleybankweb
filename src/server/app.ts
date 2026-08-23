@@ -736,31 +736,90 @@ app.get('/api/admin/email-status', async (req, res) => {
     return res.status(403).json({ error: 'Access denied.' });
   }
 
-  const sender = process.env.EMAIL_SENDER_ADDRESS || 'siliconvalleybank51@gmail.com';
-  const hasResend = !!process.env.RESEND_API_KEY;
-  const hasBrevo = !!process.env.BREVO_API_KEY;
-  const hasSendGrid = !!process.env.SENDGRID_API_KEY;
-  const hasSmtp = !!(process.env.SMTP_HOST && process.env.SMTP_USER);
+  const config = dbManager.getEmailConfig();
+  const hasResend = !!(config.resendApiKey || process.env.RESEND_API_KEY);
+  const hasBrevo = !!(config.brevoApiKey || process.env.BREVO_API_KEY);
+  const hasSendGrid = !!(config.sendgridApiKey || process.env.SENDGRID_API_KEY);
+  const hasGmail = !!(config.gmailAppPassword || process.env.GMAIL_APP_PASSWORD);
+  const hasSmtp = !!(config.smtpHost && config.smtpPass) || !!(process.env.SMTP_HOST && process.env.SMTP_PASS);
 
-  let activeProvider = 'Simulated Log (Fail-safe Console Log)';
-  if (hasResend) activeProvider = 'Resend API';
-  else if (hasBrevo) activeProvider = 'Brevo API (Sendinblue)';
-  else if (hasSendGrid) activeProvider = 'SendGrid API';
-  else if (hasSmtp) activeProvider = 'Direct SMTP Mailer';
+  let activeProvider = 'No Provider Configured (Delivery Inactive)';
+  if (config.provider === 'brevo' && hasBrevo) activeProvider = 'Brevo API (Sendinblue)';
+  else if (config.provider === 'resend' && hasResend) activeProvider = 'Resend API';
+  else if (config.provider === 'sendgrid' && hasSendGrid) activeProvider = 'SendGrid API';
+  else if (config.provider === 'gmail_smtp' && hasGmail) activeProvider = 'Gmail SMTP (App Password)';
+  else if (config.provider === 'custom_smtp' && hasSmtp) activeProvider = 'Custom SMTP Mailer';
+  else if (hasBrevo) activeProvider = 'Brevo API (Active)';
+  else if (hasResend) activeProvider = 'Resend API (Active)';
+  else if (hasSendGrid) activeProvider = 'SendGrid API (Active)';
+  else if (hasGmail) activeProvider = 'Gmail SMTP (Active)';
+  else if (hasSmtp) activeProvider = 'Direct SMTP (Active)';
 
   res.json({
     activeProvider,
-    senderEmail: sender,
+    senderEmail: config.senderEmail || 'siliconvalleybank51@gmail.com',
+    senderName: config.senderName || 'Silicon Valley Bank',
+    selectedProvider: config.provider || 'auto',
     providersConfigured: {
-      resend: hasResend,
       brevo: hasBrevo,
+      resend: hasResend,
       sendgrid: hasSendGrid,
+      gmail: hasGmail,
       smtp: hasSmtp
-    }
+    },
+    hasCredentials: hasBrevo || hasResend || hasSendGrid || hasGmail || hasSmtp
   });
 });
 
-// Admin: Send Test Transactional Email
+// Admin: Get and Save Email Configuration
+app.get('/api/admin/email-config', async (req, res) => {
+  const user = await getAuthUser(req);
+  if (!user || user.role !== 'admin') {
+    return res.status(403).json({ error: 'Access denied.' });
+  }
+
+  const config = dbManager.getEmailConfig();
+  res.json({
+    provider: config.provider || 'auto',
+    senderEmail: config.senderEmail || 'siliconvalleybank51@gmail.com',
+    senderName: config.senderName || 'Silicon Valley Bank',
+    brevoApiKey: config.brevoApiKey ? `${config.brevoApiKey.substring(0, 8)}...${config.brevoApiKey.slice(-4)}` : '',
+    resendApiKey: config.resendApiKey ? `${config.resendApiKey.substring(0, 6)}...${config.resendApiKey.slice(-4)}` : '',
+    sendgridApiKey: config.sendgridApiKey ? `${config.sendgridApiKey.substring(0, 6)}...${config.sendgridApiKey.slice(-4)}` : '',
+    smtpHost: config.smtpHost || '',
+    smtpPort: config.smtpPort || 587,
+    smtpUser: config.smtpUser || '',
+    hasGmailPass: !!config.gmailAppPassword,
+    hasSmtpPass: !!config.smtpPass,
+    updatedAt: config.updatedAt
+  });
+});
+
+app.post('/api/admin/email-config', async (req, res) => {
+  const user = await getAuthUser(req);
+  if (!user || user.role !== 'admin') {
+    return res.status(403).json({ error: 'Access denied.' });
+  }
+
+  try {
+    const updated = dbManager.saveEmailConfig(user, req.body);
+    res.json({ success: true, message: 'Email configuration updated successfully.', config: updated });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || 'Failed to update email configuration.' });
+  }
+});
+
+// Admin: Get Delivery Audit Logs
+app.get('/api/admin/email-logs', async (req, res) => {
+  const user = await getAuthUser(req);
+  if (!user || user.role !== 'admin') {
+    return res.status(403).json({ error: 'Access denied.' });
+  }
+
+  res.json({ logs: dbManager.getEmailDeliveryLogs() });
+});
+
+// Admin: Send Real Test Transactional Email
 app.post('/api/admin/test-email', async (req, res) => {
   const user = await getAuthUser(req);
   if (!user || user.role !== 'admin') {
@@ -769,7 +828,11 @@ app.post('/api/admin/test-email', async (req, res) => {
 
   try {
     const { toEmail, subject, type } = req.body;
-    const recipient = toEmail || user.email;
+    const recipient = (toEmail || user.email || '').trim();
+
+    if (!recipient || !recipient.includes('@')) {
+      return res.status(400).json({ error: 'Please specify a valid recipient email address.' });
+    }
 
     let result;
     if (type === 'welcome') {
@@ -786,7 +849,7 @@ app.post('/api/admin/test-email', async (req, res) => {
         accountNumber: '1099887766',
         amount: 2500.00,
         currency: 'USD',
-        reference: 'TXN-TEST-DEP-001',
+        reference: `TXN-TEST-${Date.now().toString().slice(-4)}`,
         type: 'Deposit',
         status: 'Completed',
         currentBalance: 250000.00,
@@ -799,7 +862,7 @@ app.post('/api/admin/test-email', async (req, res) => {
         accountNumber: '1099887766',
         amount: 500.00,
         currency: 'USD',
-        reference: 'TXN-TEST-REJ-001',
+        reference: `TXN-TEST-REJ-${Date.now().toString().slice(-4)}`,
         type: 'Transfer',
         status: 'Rejected',
         rejectionReason: 'Test transaction security decline by SVB Operations Review.',
@@ -808,17 +871,26 @@ app.post('/api/admin/test-email', async (req, res) => {
     } else {
       result = await emailService.sendSecurityAlertEmail(
         recipient,
-        subject || 'Security Notification - Test Alert',
-        'This is a verified test email alert dispatched from the Silicon Valley Bank core platform.',
+        subject || 'Security Notification - Live Test Alert',
+        'This is a verified test email alert dispatched from Silicon Valley Bank to test your live external inbox delivery.',
         '9412'
       );
     }
 
-    res.json({
-      success: true,
-      message: `Test email dispatched to ${recipient}`,
-      deliveryResult: result
-    });
+    if (result && result.success) {
+      return res.json({
+        success: true,
+        message: `Live email delivered to ${recipient} via ${result.provider} (ID: ${result.messageId || 'Cleared'})`,
+        deliveryResult: result
+      });
+    } else {
+      const errorMsg = result?.error || 'Email dispatch failed. Please verify provider credentials in Email Service settings.';
+      return res.status(400).json({
+        success: false,
+        error: errorMsg,
+        deliveryResult: result
+      });
+    }
   } catch (err: any) {
     res.status(400).json({ error: err.message || 'Failed to dispatch test email.' });
   }

@@ -1,10 +1,12 @@
 import nodemailer from 'nodemailer';
+import { EmailConfig, EmailDeliveryLog } from '../types.js';
 
 export interface EmailPayload {
   to: string;
   subject: string;
   html: string;
   text?: string;
+  type?: string;
 }
 
 export interface UserEmailData {
@@ -35,16 +37,29 @@ export interface TransactionEmailData {
   rejectionReason?: string;
 }
 
-const DEFAULT_SENDER = process.env.SENDER_EMAIL || 'siliconvalleybank51@gmail.com';
-const SENDER_NAME = 'Silicon Valley Bank';
-const FULL_SENDER = `"${SENDER_NAME}" <${DEFAULT_SENDER}>`;
+// In-Memory dynamic configuration fallback initialized from environment
+let dynamicConfig: EmailConfig = {
+  provider: 'auto',
+  senderEmail: process.env.SENDER_EMAIL || 'siliconvalleybank51@gmail.com',
+  senderName: 'Silicon Valley Bank',
+  resendApiKey: process.env.RESEND_API_KEY || '',
+  brevoApiKey: process.env.BREVO_API_KEY || '',
+  sendgridApiKey: process.env.SENDGRID_API_KEY || '',
+  smtpHost: process.env.SMTP_HOST || 'smtp.gmail.com',
+  smtpPort: parseInt(process.env.SMTP_PORT || '587', 10),
+  smtpUser: process.env.SMTP_USER || process.env.SENDER_EMAIL || 'siliconvalleybank51@gmail.com',
+  smtpPass: process.env.SMTP_PASS || '',
+  gmailAppPassword: process.env.GMAIL_APP_PASSWORD || ''
+};
+
+// In-memory delivery history log (capped to last 100 entries)
+const deliveryLogs: EmailDeliveryLog[] = [];
 
 /**
  * Base SVB HTML Email Template
  */
 function renderSvbEmailTemplate(title: string, subtitle: string, bodyContent: string, actionButton?: { text: string; url: string }): string {
   const appUrl = process.env.APP_URL || 'https://www.svb.com';
-  const currentYear = new Date().getFullYear();
 
   return `
 <!DOCTYPE html>
@@ -286,63 +301,58 @@ function renderSvbEmailTemplate(title: string, subtitle: string, bodyContent: st
 
 /**
  * Robust Core Email Dispatcher
- * Priority Order:
- * 1. Resend API
- * 2. Brevo API
- * 3. SendGrid API
- * 4. Nodemailer SMTP (Gmail or custom host)
- * 5. Safe Development Logging Fallback
+ * Directly executes live external provider APIs:
+ * - Brevo API (Sendinblue v3)
+ * - Resend API (v1)
+ * - SendGrid API (v3)
+ * - Nodemailer Gmail / Custom SMTP
  */
-export async function sendEmailAsync(payload: EmailPayload): Promise<{ success: boolean; provider?: string; error?: string }> {
-  const { to, subject, html, text } = payload;
-  const from = FULL_SENDER;
+export async function sendEmailAsync(payload: EmailPayload): Promise<{ success: boolean; provider?: string; messageId?: string; error?: string }> {
+  const { to, subject, html, text, type = 'Transactional Notification' } = payload;
+  
+  const senderEmail = dynamicConfig.senderEmail || 'siliconvalleybank51@gmail.com';
+  const senderName = dynamicConfig.senderName || 'Silicon Valley Bank';
+  const fullSender = `"${senderName}" <${senderEmail}>`;
 
   if (!to || !to.includes('@')) {
-    console.warn('[EmailService] Invalid recipient email address:', to);
-    return { success: false, error: 'Invalid recipient email' };
+    const errorMsg = 'Invalid recipient email address';
+    recordLog({
+      recipient: to || 'unknown',
+      subject,
+      type,
+      provider: 'None',
+      status: 'failed',
+      error: errorMsg
+    });
+    return { success: false, error: errorMsg };
   }
 
-  // 1. Check Resend API
-  if (process.env.RESEND_API_KEY) {
-    try {
-      const res = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          from: DEFAULT_SENDER.includes('@') ? DEFAULT_SENDER : 'onboarding@resend.dev',
-          to: [to],
-          subject,
-          html,
-          text: text || subject
-        })
-      });
+  const errors: string[] = [];
 
-      if (res.ok) {
-        console.log(`[EmailService:Resend] Email successfully sent to ${to} ("${subject}")`);
-        return { success: true, provider: 'resend' };
-      } else {
-        const errText = await res.text();
-        console.warn(`[EmailService:Resend] Response failed (${res.status}): ${errText}`);
-      }
-    } catch (err: any) {
-      console.warn('[EmailService:Resend] Error communicating with Resend:', err.message);
-    }
-  }
+  // Determine priority of providers
+  const brevoKey = dynamicConfig.brevoApiKey || process.env.BREVO_API_KEY;
+  const resendKey = dynamicConfig.resendApiKey || process.env.RESEND_API_KEY;
+  const sendgridKey = dynamicConfig.sendgridApiKey || process.env.SENDGRID_API_KEY;
+  const gmailPass = (dynamicConfig.gmailAppPassword || process.env.GMAIL_APP_PASSWORD || '').replace(/\s+/g, '');
+  const smtpPass = (dynamicConfig.smtpPass || process.env.SMTP_PASS || '').replace(/\s+/g, '');
+  const smtpHost = dynamicConfig.smtpHost || process.env.SMTP_HOST;
+  const smtpPort = dynamicConfig.smtpPort || parseInt(process.env.SMTP_PORT || '587', 10);
+  const smtpUser = dynamicConfig.smtpUser || process.env.SMTP_USER || senderEmail;
 
-  // 2. Check Brevo (Sendinblue) API
-  if (process.env.BREVO_API_KEY) {
+  const targetProvider = dynamicConfig.provider || 'auto';
+
+  // 1. Try Brevo (Sendinblue) API
+  if ((targetProvider === 'auto' || targetProvider === 'brevo') && brevoKey) {
     try {
       const res = await fetch('https://api.brevo.com/v3/smtp/email', {
         method: 'POST',
         headers: {
-          'api-key': process.env.BREVO_API_KEY,
-          'Content-Type': 'application/json'
+          'api-key': brevoKey,
+          'Content-Type': 'application/json',
+          'accept': 'application/json'
         },
         body: JSON.stringify({
-          sender: { name: SENDER_NAME, email: DEFAULT_SENDER },
+          sender: { name: senderName, email: senderEmail },
           to: [{ email: to }],
           subject,
           htmlContent: html,
@@ -351,29 +361,112 @@ export async function sendEmailAsync(payload: EmailPayload): Promise<{ success: 
       });
 
       if (res.ok) {
-        console.log(`[EmailService:Brevo] Email successfully sent to ${to} ("${subject}")`);
-        return { success: true, provider: 'brevo' };
+        const data = await res.json().catch(() => ({}));
+        const messageId = data?.messageId || data?.messageIds?.[0] || `brevo-${Date.now()}`;
+        console.log(`[EmailService:Brevo] Successfully delivered email to ${to} (${messageId})`);
+        recordLog({
+          recipient: to,
+          subject,
+          type,
+          provider: 'Brevo API',
+          status: 'delivered',
+          messageId
+        });
+        return { success: true, provider: 'Brevo API', messageId };
       } else {
-        const errText = await res.text();
-        console.warn(`[EmailService:Brevo] Response failed (${res.status}): ${errText}`);
+        const errJson = await res.json().catch(() => null);
+        const errMsg = errJson?.message || errJson?.code || await res.text().catch(() => 'Unknown Brevo API error');
+        const errDetail = `Brevo API HTTP ${res.status}: ${errMsg}`;
+        console.warn(`[EmailService:Brevo] Delivery failed:`, errDetail);
+        errors.push(errDetail);
       }
     } catch (err: any) {
-      console.warn('[EmailService:Brevo] Error communicating with Brevo:', err.message);
+      const errDetail = `Brevo connection error: ${err.message}`;
+      console.warn(`[EmailService:Brevo] Exception:`, errDetail);
+      errors.push(errDetail);
     }
   }
 
-  // 3. Check SendGrid API
-  if (process.env.SENDGRID_API_KEY) {
+  // 2. Try Resend API (Free Tier: 3,000 emails/mo, 100/day)
+  if ((targetProvider === 'auto' || targetProvider === 'resend') && resendKey) {
+    try {
+      // First attempt with desired sender address
+      let fromAddress = `${senderName} <${senderEmail}>`;
+      
+      let res = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${resendKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          from: fromAddress,
+          to: [to],
+          subject,
+          html,
+          text: text || subject
+        })
+      });
+
+      // If failed with 403 (domain not verified on Resend free tier), retry with Resend free developer sender
+      if (!res.ok && res.status === 403 && !senderEmail.endsWith('@resend.dev')) {
+        console.log('[EmailService:Resend] Custom sender not verified on Resend free tier. Retrying with free developer sender <onboarding@resend.dev>...');
+        fromAddress = `${senderName} <onboarding@resend.dev>`;
+        res = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${resendKey}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            from: fromAddress,
+            to: [to],
+            subject,
+            html,
+            text: text || subject
+          })
+        });
+      }
+
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        const messageId = data?.id || `resend-${Date.now()}`;
+        console.log(`[EmailService:Resend] Successfully delivered email to ${to} (${messageId}) via ${fromAddress}`);
+        recordLog({
+          recipient: to,
+          subject,
+          type,
+          provider: 'Resend API (Free Tier)',
+          status: 'delivered',
+          messageId
+        });
+        return { success: true, provider: 'Resend API (Free Tier)', messageId };
+      } else {
+        const errJson = await res.json().catch(() => null);
+        const errMsg = errJson?.message || await res.text().catch(() => 'Unknown Resend API error');
+        const errDetail = `Resend API HTTP ${res.status}: ${errMsg}`;
+        console.warn(`[EmailService:Resend] Delivery failed:`, errDetail);
+        errors.push(errDetail);
+      }
+    } catch (err: any) {
+      const errDetail = `Resend connection error: ${err.message}`;
+      console.warn(`[EmailService:Resend] Exception:`, errDetail);
+      errors.push(errDetail);
+    }
+  }
+
+  // 3. Try SendGrid API
+  if ((targetProvider === 'auto' || targetProvider === 'sendgrid') && sendgridKey) {
     try {
       const res = await fetch('https://api.sendgrid.com/v3/mail/send', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${process.env.SENDGRID_API_KEY}`,
+          'Authorization': `Bearer ${sendgridKey}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           personalizations: [{ to: [{ email: to }] }],
-          from: { email: DEFAULT_SENDER, name: SENDER_NAME },
+          from: { email: senderEmail, name: senderName },
           subject,
           content: [
             { type: 'text/html', value: html },
@@ -383,72 +476,157 @@ export async function sendEmailAsync(payload: EmailPayload): Promise<{ success: 
       });
 
       if (res.status >= 200 && res.status < 300) {
-        console.log(`[EmailService:SendGrid] Email successfully sent to ${to} ("${subject}")`);
-        return { success: true, provider: 'sendgrid' };
+        const messageId = res.headers.get('x-message-id') || `sendgrid-${Date.now()}`;
+        console.log(`[EmailService:SendGrid] Successfully delivered email to ${to} (${messageId})`);
+        recordLog({
+          recipient: to,
+          subject,
+          type,
+          provider: 'SendGrid API',
+          status: 'delivered',
+          messageId
+        });
+        return { success: true, provider: 'SendGrid API', messageId };
       } else {
-        const errText = await res.text();
-        console.warn(`[EmailService:SendGrid] Response failed (${res.status}): ${errText}`);
+        const errMsg = await res.text().catch(() => 'Unknown SendGrid error');
+        const errDetail = `SendGrid HTTP ${res.status}: ${errMsg}`;
+        console.warn(`[EmailService:SendGrid] Delivery failed:`, errDetail);
+        errors.push(errDetail);
       }
     } catch (err: any) {
-      console.warn('[EmailService:SendGrid] Error communicating with SendGrid:', err.message);
+      const errDetail = `SendGrid connection error: ${err.message}`;
+      console.warn(`[EmailService:SendGrid] Exception:`, errDetail);
+      errors.push(errDetail);
     }
   }
 
-  // 4. Check Nodemailer / SMTP Transport (e.g. Gmail App Password or custom SMTP)
-  const smtpPass = process.env.GMAIL_APP_PASSWORD || process.env.SMTP_PASS;
-  const smtpUser = process.env.SMTP_USER || DEFAULT_SENDER;
-  const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
-  const smtpPort = parseInt(process.env.SMTP_PORT || '587', 10);
+  // 4. Try Gmail App Password / Nodemailer SMTP
+  const hasGmailAppPass = !!gmailPass;
+  const hasCustomSmtp = !!(smtpHost && smtpPass);
 
-  if (smtpPass) {
+  if ((targetProvider === 'auto' || targetProvider === 'gmail_smtp' || targetProvider === 'custom_smtp') && (hasGmailAppPass || hasCustomSmtp)) {
     try {
-      const transporter = nodemailer.createTransport({
-        host: smtpHost,
-        port: smtpPort,
-        secure: smtpPort === 465,
-        auth: {
-          user: smtpUser,
-          pass: smtpPass
-        },
-        tls: {
-          rejectUnauthorized: false
-        }
-      });
+      let transporter;
+      if (hasGmailAppPass) {
+        transporter = nodemailer.createTransport({
+          service: 'gmail',
+          auth: {
+            user: smtpUser || senderEmail,
+            pass: gmailPass
+          }
+        });
+      } else {
+        transporter = nodemailer.createTransport({
+          host: smtpHost,
+          port: smtpPort,
+          secure: smtpPort === 465,
+          auth: {
+            user: smtpUser,
+            pass: smtpPass
+          },
+          tls: {
+            rejectUnauthorized: false
+          }
+        });
+      }
 
       const info = await transporter.sendMail({
-        from: FULL_SENDER,
+        from: fullSender,
         to,
         subject,
         html,
         text: text || subject
       });
 
-      console.log(`[EmailService:SMTP] Email successfully dispatched to ${to} (MessageId: ${info.messageId})`);
-      return { success: true, provider: 'smtp' };
+      const messageId = info.messageId || `smtp-${Date.now()}`;
+      const providerLabel = hasGmailAppPass ? 'Gmail SMTP' : 'Custom SMTP';
+      console.log(`[EmailService:${providerLabel}] Successfully delivered email to ${to} (${messageId})`);
+      recordLog({
+        recipient: to,
+        subject,
+        type,
+        provider: providerLabel,
+        status: 'delivered',
+        messageId
+      });
+      return { success: true, provider: providerLabel, messageId };
     } catch (err: any) {
-      console.warn('[EmailService:SMTP] Error sending via Nodemailer SMTP:', err.message);
+      const errDetail = `SMTP Authentication / Delivery error: ${err.message}`;
+      console.warn(`[EmailService:SMTP] Exception:`, errDetail);
+      errors.push(errDetail);
     }
   }
 
-  // 5. Safe Fallback / Dev Log: Ensures zero crash and logs full operational notification
-  console.log(`[EmailService:Simulation] Real email triggered for [${to}] from [${DEFAULT_SENDER}]: "${subject}"`);
-  return { 
-    success: true, 
-    provider: 'simulated_log',
-    error: 'Dispatched in dev logging mode. To send live deliverable emails, configure RESEND_API_KEY, BREVO_API_KEY, SENDGRID_API_KEY, or GMAIL_APP_PASSWORD in settings.' 
+  // If no credentials were configured or all providers returned errors
+  const finalError = errors.length > 0
+    ? `Live delivery failed: ${errors.join(' | ')}`
+    : 'No active email provider credentials configured. Please configure Brevo API Key, Resend API Key, SendGrid API Key, or Gmail App Password in Email Service settings.';
+
+  console.error(`[EmailService] Delivery to ${to} failed: ${finalError}`);
+
+  recordLog({
+    recipient: to,
+    subject,
+    type,
+    provider: targetProvider !== 'auto' ? targetProvider : 'None',
+    status: 'failed',
+    error: finalError
+  });
+
+  return {
+    success: false,
+    provider: targetProvider !== 'auto' ? targetProvider : 'none',
+    error: finalError
   };
+}
+
+function recordLog(log: Omit<EmailDeliveryLog, 'id' | 'timestamp'>) {
+  const newEntry: EmailDeliveryLog = {
+    id: `emlog-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+    timestamp: new Date().toISOString(),
+    ...log
+  };
+  deliveryLogs.unshift(newEntry);
+  if (deliveryLogs.length > 100) {
+    deliveryLogs.pop();
+  }
 }
 
 /**
  * High-Level Banking Event Notification Functions
  * All functions are non-blocking and bulletproof (will never throw)
  */
-
 export const emailService = {
+  /**
+   * Configure Runtime Email Credentials
+   */
+  configure(config: Partial<EmailConfig>): EmailConfig {
+    dynamicConfig = {
+      ...dynamicConfig,
+      ...config,
+      updatedAt: new Date().toISOString()
+    };
+    return dynamicConfig;
+  },
+
+  /**
+   * Get Active Runtime Configuration
+   */
+  getConfig(): EmailConfig {
+    return dynamicConfig;
+  },
+
+  /**
+   * Get Recent Email Delivery Audit Logs
+   */
+  getDeliveryLogs(): EmailDeliveryLog[] {
+    return deliveryLogs;
+  },
+
   /**
    * 1. Account Creation / Welcome Email
    */
-  async sendWelcomeEmail(user: UserEmailData): Promise<void> {
+  async sendWelcomeEmail(user: UserEmailData): Promise<any> {
     try {
       const title = 'Welcome to Silicon Valley Bank';
       const subtitle = 'Your SVB Digital Commercial Banking Account is Active';
@@ -492,10 +670,11 @@ export const emailService = {
         url: process.env.APP_URL || 'https://www.svb.com'
       });
 
-      await sendEmailAsync({
+      return await sendEmailAsync({
         to: user.email,
         subject: 'Welcome to Silicon Valley Bank — Account Details & Access',
-        html
+        html,
+        type: 'Account Welcome'
       });
     } catch (err: any) {
       console.error('[EmailService] Error in sendWelcomeEmail:', err.message);
@@ -505,7 +684,7 @@ export const emailService = {
   /**
    * 2. Deposit Submitted / Under Review
    */
-  async sendDepositSubmittedEmail(data: TransactionEmailData): Promise<void> {
+  async sendDepositSubmittedEmail(data: TransactionEmailData): Promise<any> {
     try {
       const title = 'Deposit Received & Under Review';
       const subtitle = `Reference #${data.reference}`;
@@ -552,10 +731,11 @@ export const emailService = {
         url: process.env.APP_URL || 'https://www.svb.com'
       });
 
-      await sendEmailAsync({
+      return await sendEmailAsync({
         to: data.userEmail,
         subject: `SVB Notification: Deposit Received (${formattedAmount}) - Ref #${data.reference}`,
-        html
+        html,
+        type: 'Deposit Pending'
       });
     } catch (err: any) {
       console.error('[EmailService] Error in sendDepositSubmittedEmail:', err.message);
@@ -565,7 +745,7 @@ export const emailService = {
   /**
    * 3. Deposit Approved & Available Balance Credited
    */
-  async sendDepositApprovedEmail(data: TransactionEmailData): Promise<void> {
+  async sendDepositApprovedEmail(data: TransactionEmailData): Promise<any> {
     try {
       const title = 'Funds Settled & Credited to Account';
       const subtitle = `Reference #${data.reference}`;
@@ -617,10 +797,11 @@ export const emailService = {
         url: process.env.APP_URL || 'https://www.svb.com'
       });
 
-      await sendEmailAsync({
+      return await sendEmailAsync({
         to: data.userEmail,
         subject: `SVB Settlement Advice: Deposit Cleared (+${formattedAmount}) - Ref #${data.reference}`,
-        html
+        html,
+        type: 'Deposit Approved'
       });
     } catch (err: any) {
       console.error('[EmailService] Error in sendDepositApprovedEmail:', err.message);
@@ -630,7 +811,7 @@ export const emailService = {
   /**
    * 4. Transaction / Deposit Rejected & Refunded
    */
-  async sendTransactionRejectedEmail(data: TransactionEmailData): Promise<void> {
+  async sendTransactionRejectedEmail(data: TransactionEmailData): Promise<any> {
     try {
       const title = 'Transaction Update: Return / Rejection Notice';
       const subtitle = `Reference #${data.reference}`;
@@ -674,10 +855,11 @@ export const emailService = {
         url: process.env.APP_URL ? `${process.env.APP_URL}#support` : 'https://www.svb.com'
       });
 
-      await sendEmailAsync({
+      return await sendEmailAsync({
         to: data.userEmail,
         subject: `SVB Notice: Transaction Rejected (${formattedAmount}) - Ref #${data.reference}`,
-        html
+        html,
+        type: 'Transaction Rejected'
       });
     } catch (err: any) {
       console.error('[EmailService] Error in sendTransactionRejectedEmail:', err.message);
@@ -687,7 +869,7 @@ export const emailService = {
   /**
    * 5. Wire / Transfer Sent (Debit Advice)
    */
-  async sendTransferDebitEmail(data: TransactionEmailData): Promise<void> {
+  async sendTransferDebitEmail(data: TransactionEmailData): Promise<any> {
     try {
       const title = 'Wire Transfer Debit Advice';
       const subtitle = `Fedwire / SWIFT Reference #${data.reference}`;
@@ -737,10 +919,11 @@ export const emailService = {
         url: process.env.APP_URL || 'https://www.svb.com'
       });
 
-      await sendEmailAsync({
+      return await sendEmailAsync({
         to: data.userEmail,
         subject: `SVB Debit Advice: Outbound Wire (-${formattedAmount}) - Ref #${data.reference}`,
-        html
+        html,
+        type: 'Wire Debit'
       });
     } catch (err: any) {
       console.error('[EmailService] Error in sendTransferDebitEmail:', err.message);
@@ -750,7 +933,7 @@ export const emailService = {
   /**
    * 6. Security Alert / Code Generation / Password Reset
    */
-  async sendSecurityAlertEmail(userEmail: string, title: string, message: string, code?: string): Promise<void> {
+  async sendSecurityAlertEmail(userEmail: string, title: string, message: string, code?: string): Promise<any> {
     try {
       const headerTitle = 'SVB Security & Account Notification';
       const body = `
@@ -774,10 +957,11 @@ export const emailService = {
         url: process.env.APP_URL ? `${process.env.APP_URL}#settings` : 'https://www.svb.com'
       });
 
-      await sendEmailAsync({
+      return await sendEmailAsync({
         to: userEmail,
         subject: `SVB Security Alert: ${title}`,
-        html
+        html,
+        type: 'Security Alert'
       });
     } catch (err: any) {
       console.error('[EmailService] Error in sendSecurityAlertEmail:', err.message);
@@ -787,7 +971,7 @@ export const emailService = {
   /**
    * 7. Custom Direct Notice from Admin to User
    */
-  async sendCustomAdminNoticeEmail(userEmail: string, adminEmail: string, title: string, message: string): Promise<void> {
+  async sendCustomAdminNoticeEmail(userEmail: string, adminEmail: string, title: string, message: string): Promise<any> {
     try {
       const headerTitle = 'Message from SVB Operations Desk';
       const body = `
@@ -808,10 +992,11 @@ export const emailService = {
         url: process.env.APP_URL || 'https://www.svb.com'
       });
 
-      await sendEmailAsync({
+      return await sendEmailAsync({
         to: userEmail,
         subject: `SVB Notice: ${title}`,
-        html
+        html,
+        type: 'Admin Operations Notice'
       });
     } catch (err: any) {
       console.error('[EmailService] Error in sendCustomAdminNoticeEmail:', err.message);
