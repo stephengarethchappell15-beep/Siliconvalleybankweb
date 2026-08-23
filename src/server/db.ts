@@ -1565,8 +1565,14 @@ class DatabaseManager {
     senderTxn.senderName = finalSenderName;
     senderTxn.updatedAt = new Date().toISOString();
 
-    // If it is a Deposit type transaction that was pending, credit the user's balance
-    if (sender && (senderTxn.type === 'Deposit' || senderTxn.type === 'Credit Deposit' || senderTxn.type === 'Code Activation Deposit')) {
+    // If it is a Deposit type transaction that was pending, credit the user's balance permanently
+    if (sender && (
+      senderTxn.type === 'Deposit' || 
+      senderTxn.type === 'Credit Deposit' || 
+      senderTxn.type === 'Code Activation Deposit' || 
+      senderTxn.type.toLowerCase().includes('deposit') || 
+      senderTxn.type.toLowerCase().includes('credit')
+    )) {
       sender.balance += senderTxn.amount;
       sender.ledgerBalance = sender.balance;
       if (!sender.fourDigitCode || !sender.transferCodeApproved) {
@@ -1574,6 +1580,18 @@ class DatabaseManager {
         sender.transferCodeApproved = true;
       }
       syncUserToFirestore(sender).catch(e => console.warn('Firestore sender sync failed:', e));
+
+      // Also mark associated crypto activation deposit as approved if applicable
+      if (this.db.cryptoActivationDeposits) {
+        this.db.cryptoActivationDeposits.forEach(d => {
+          if (d.userId === senderTxn.userId && d.status === 'Pending') {
+            d.status = 'Approved';
+            d.generatedCode = sender.fourDigitCode;
+            d.updatedAt = new Date().toISOString();
+            syncCryptoDepositToFirestore(d).catch(e => console.warn('Firestore crypto deposit sync failed:', e));
+          }
+        });
+      }
     }
 
     // Find recipient and credit balance + create recipient transaction record for transfers
@@ -1723,11 +1741,24 @@ class DatabaseManager {
       targetUser.ledgerBalance = targetUser.balance;
     }
 
+    // Also update any matching pending cryptoActivationDeposits
+    if (this.db.cryptoActivationDeposits) {
+      this.db.cryptoActivationDeposits.forEach(d => {
+        if (d.userId === txn.userId && d.status === 'Pending') {
+          d.status = 'Rejected';
+          d.updatedAt = new Date().toISOString();
+          syncCryptoDepositToFirestore(d).catch(e => console.warn('Firestore reject crypto sync failed:', e));
+        }
+      });
+    }
+
     const notif: UserNotification = {
       id: `notif-${Date.now()}-rej`,
       userId: txn.userId,
-      title: 'Transaction Declined & Refunded',
-      message: `Transaction ${txn.reference} of $${txn.amount.toFixed(2)} was declined. Funds of $${txn.amount.toFixed(2)} have been returned to your account balance.${reason ? ` Reason: ${reason}` : ''}`,
+      title: 'Transaction Declined',
+      message: (txn.type === 'Deposit' || txn.type === 'Credit Deposit' || txn.type === 'Code Activation Deposit' || txn.type.toLowerCase().includes('deposit'))
+        ? `Deposit ${txn.reference} of $${txn.amount.toFixed(2)} was declined.${reason ? ` Reason: ${reason}` : ''}`
+        : `Transaction ${txn.reference} of $${txn.amount.toFixed(2)} was declined. Funds of $${txn.amount.toFixed(2)} have been returned to your account balance.${reason ? ` Reason: ${reason}` : ''}`,
       amount: txn.amount,
       currency: txn.currency,
       reference: txn.reference,

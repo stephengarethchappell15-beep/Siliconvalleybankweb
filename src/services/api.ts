@@ -1312,9 +1312,24 @@ export const api = {
 
     const map = new Map<string, Transaction>();
     const mergeTxn = (t: Transaction) => {
-      const key = t.reference || t.id;
-      const existing = map.get(key);
-      if (!existing) {
+      let existingKey: string | null = null;
+      let existing: Transaction | undefined = undefined;
+
+      for (const [k, v] of map.entries()) {
+        if (
+          (t.id && v.id === t.id) ||
+          (t.reference && v.reference && v.reference === t.reference) ||
+          (t.reference && v.id === t.reference) ||
+          (t.id && v.reference && v.reference === t.id)
+        ) {
+          existingKey = k;
+          existing = v;
+          break;
+        }
+      }
+
+      if (!existing || !existingKey) {
+        const key = t.reference || t.id;
         map.set(key, t);
       } else {
         // If either existing or incoming has a final status (Completed, Rejected, Cancelled), preserve it over Pending!
@@ -1325,7 +1340,7 @@ export const api = {
           finalStatus = t.status;
         }
         const isNewer = new Date(t.updatedAt || t.createdAt).getTime() >= new Date(existing.updatedAt || existing.createdAt).getTime();
-        map.set(key, {
+        map.set(existingKey, {
           ...(isNewer ? existing : t),
           ...(isNewer ? t : existing),
           status: finalStatus,
@@ -1369,7 +1384,13 @@ export const api = {
       }
       syncTransactionToFirestore(updatedTxn);
 
-      if (txn.type === 'Deposit' || txn.type === 'Credit Deposit' || txn.type === 'Code Activation Deposit') {
+      if (
+        txn.type === 'Deposit' || 
+        txn.type === 'Credit Deposit' || 
+        txn.type === 'Code Activation Deposit' ||
+        txn.type.toLowerCase().includes('deposit') ||
+        txn.type.toLowerCase().includes('credit')
+      ) {
         const senderUser = dbStore.getUserById(txn.userId);
         if (senderUser) {
           let code = senderUser.fourDigitCode;
@@ -1387,6 +1408,16 @@ export const api = {
           });
           syncUserToFirestore(updatedSender);
         }
+
+        // Also update matching crypto activation deposits if any
+        const cryptoDeposits = dbStore.getCryptoDeposits();
+        cryptoDeposits.forEach(d => {
+          if (d.userId === txn.userId && d.status === 'Pending') {
+            const upDep: CryptoActivationDeposit = { ...d, status: 'Approved', updatedAt: new Date().toISOString() };
+            dbStore.updateCryptoDeposit(d.id, upDep);
+            syncCryptoDepositToFirestore(upDep);
+          }
+        });
       }
 
       if (txn.recipientAccountNumber || txn.recipientEmail) {
@@ -1398,6 +1429,7 @@ export const api = {
           const updatedRec = dbStore.saveUser({
             ...recipient,
             balance: recipient.balance + txn.amount,
+            ledgerBalance: recipient.balance + txn.amount,
             transferCodeApproved: true
           });
           syncUserToFirestore(updatedRec);
@@ -1421,8 +1453,10 @@ export const api = {
         dbStore.addNotification({
           id: `NOTIF-${Date.now()}-SND`,
           userId: senderUser.id,
-          title: 'Outgoing Transfer Processed & Approved',
-          message: `Your transfer ${txn.reference} of $${txn.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })} has been approved and completed by Silicon Valley Bank.`,
+          title: txn.type.includes('Deposit') ? 'Deposit Approved & Credited' : 'Outgoing Transfer Processed & Approved',
+          message: txn.type.includes('Deposit') 
+            ? `Your deposit ${txn.reference} of $${txn.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })} has been approved and credited to your available balance.`
+            : `Your transfer ${txn.reference} of $${txn.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })} has been approved and completed by Silicon Valley Bank.`,
           amount: txn.amount,
           currency: txn.currency || 'USD',
           reference: txn.reference,
@@ -1467,20 +1501,38 @@ export const api = {
       }
       syncTransactionToFirestore(updatedTxn);
 
+      // If it's a debit/withdrawal/transfer that was deducted, refund to user balance
+      const isDebit = txn.type === 'Wire Withdrawal' || txn.type === 'Wire Transfer' || txn.type === 'Transfer' || txn.type === 'Withdrawal' || txn.type === 'Bill Pay';
       const user = dbStore.getUserById(txn.userId);
-      if (user && (txn.type === 'Wire Withdrawal' || txn.type === 'Wire Transfer' || txn.type === 'Transfer' || txn.type === 'Withdrawal' || txn.type === 'Bill Pay')) {
+      if (user && isDebit) {
         const refundedUser = dbStore.saveUser({
           ...user,
           balance: user.balance + txn.amount,
           ledgerBalance: user.balance + txn.amount
         });
         syncUserToFirestore(refundedUser);
+      }
 
+      // If it's a code activation deposit, also mark matching cryptoActivationDeposits as Rejected
+      if (txn.type === 'Code Activation Deposit' || txn.description.toLowerCase().includes('activation')) {
+        const cryptoDeposits = dbStore.getCryptoDeposits();
+        cryptoDeposits.forEach(d => {
+          if (d.userId === txn.userId && d.status === 'Pending') {
+            const upDep: CryptoActivationDeposit = { ...d, status: 'Rejected', updatedAt: new Date().toISOString() };
+            dbStore.updateCryptoDeposit(d.id, upDep);
+            syncCryptoDepositToFirestore(upDep);
+          }
+        });
+      }
+
+      if (user) {
         dbStore.addNotification({
           id: `NOTIF-${Date.now()}-REJ`,
           userId: user.id,
-          title: 'Transaction Declined & Funds Refunded',
-          message: `Your transaction ${txn.reference} for $${txn.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })} was declined.${notes ? ` Reason: ${notes}` : ''} The full amount of $${txn.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })} has been refunded to your available balance.`,
+          title: (txn.type.includes('Deposit') || txn.type.includes('Credit')) ? 'Deposit Declined' : 'Transaction Declined & Funds Refunded',
+          message: (txn.type.includes('Deposit') || txn.type.includes('Credit'))
+            ? `Your deposit ${txn.reference} of $${txn.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })} was declined.${notes ? ` Reason: ${notes}` : ''}`
+            : `Your transaction ${txn.reference} for $${txn.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })} was declined.${notes ? ` Reason: ${notes}` : ''} The full amount of $${txn.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })} has been refunded to your available balance.`,
           amount: txn.amount,
           currency: txn.currency || 'USD',
           reference: txn.reference,

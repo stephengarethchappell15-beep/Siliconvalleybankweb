@@ -274,9 +274,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
       const local = dbStore.getTransactions();
       const map = new Map<string, Transaction>();
       const mergeTxn = (t: Transaction) => {
-        const key = t.reference || t.id;
-        const existing = map.get(key);
-        if (!existing) {
+        let existingKey: string | null = null;
+        let existing: Transaction | undefined = undefined;
+
+        for (const [k, v] of map.entries()) {
+          if (
+            (t.id && v.id === t.id) ||
+            (t.reference && v.reference && v.reference === t.reference) ||
+            (t.reference && v.id === t.reference) ||
+            (t.id && v.reference && v.reference === t.id)
+          ) {
+            existingKey = k;
+            existing = v;
+            break;
+          }
+        }
+
+        if (!existing || !existingKey) {
+          const key = t.reference || t.id;
           map.set(key, t);
         } else {
           // If either existing or incoming has a final status (Completed, Rejected, Cancelled), preserve it over Pending!
@@ -287,7 +302,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
             finalStatus = t.status;
           }
           const isNewer = new Date(t.updatedAt || t.createdAt).getTime() >= new Date(existing.updatedAt || existing.createdAt).getTime();
-          map.set(key, {
+          map.set(existingKey, {
             ...(isNewer ? existing : t),
             ...(isNewer ? t : existing),
             status: finalStatus,
@@ -495,17 +510,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
     const txn = approveModalTxn;
     const finalSenderName = approveSenderName.trim() || 'Federal Wire Transfer / SVB Treasury';
 
-    // 1. Instant Optimistic UI Update in Queue & State
+    // 1. Instant Synchronous dbStore Update (prevents Firestore onSnapshot race condition)
+    dbStore.updateTransaction(txn.id, { status: 'Completed', senderName: finalSenderName, updatedAt: new Date().toISOString() });
+    if (txn.reference) {
+      dbStore.updateTransaction(txn.reference, { status: 'Completed', senderName: finalSenderName, updatedAt: new Date().toISOString() });
+    }
+
+    // 2. Instant Optimistic UI Update in Queue & State
     setSysTxns(prev => prev.map(t => 
-      (t.id === txn.id || t.reference === txn.reference)
+      (t.id === txn.id || (txn.reference && t.reference === txn.reference) || (t.reference && t.reference === txn.id) || (txn.id && t.id === txn.reference))
         ? { ...t, status: 'Completed', senderName: finalSenderName, updatedAt: new Date().toISOString() }
         : t
     ));
 
     // Optimistically update user balance if relevant
     setUsers(prev => prev.map(u => {
-      if (u.accountNumber === txn.recipientAccountNumber || u.email === txn.userEmail) {
-        return { ...u, balance: (u.balance || 0) + (txn.amount || 0) };
+      if (u.accountNumber === txn.recipientAccountNumber || u.email === txn.recipientEmail || u.email === txn.userEmail || u.accountNumber === txn.accountNumber) {
+        const newBal = (u.balance || 0) + (txn.amount || 0);
+        return { ...u, balance: newBal, ledgerBalance: newBal };
       }
       return u;
     }));
@@ -513,11 +535,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
     showToast('success', 'Transaction Approved', `Ref #${txn.reference} ($${txn.amount.toLocaleString()}) approved and funds credited.`);
     setApproveModalTxn(null);
 
-    // 2. Async Non-blocking Backend & Firestore Dispatch
+    // 3. Async Non-blocking Backend & Firestore Dispatch
     try {
       setIsApproving(true);
       await api.approveTransaction(txn.id, finalSenderName);
-      fetchSysTxns();
+      await fetchSysTxns();
       fetchUsers(searchQuery);
     } catch (err: any) {
       showToast('error', 'Approval Error', err.message || 'Failed to approve transaction.');
@@ -538,29 +560,39 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
     const txn = rejectModalTxn;
     const reason = rejectReason.trim() || 'Declined by Administrator';
 
-    // 1. Instant Optimistic UI Update
+    // 1. Instant Synchronous dbStore Update (prevents Firestore onSnapshot race condition)
+    dbStore.updateTransaction(txn.id, { status: 'Rejected', updatedAt: new Date().toISOString() });
+    if (txn.reference) {
+      dbStore.updateTransaction(txn.reference, { status: 'Rejected', updatedAt: new Date().toISOString() });
+    }
+
+    // 2. Instant Optimistic UI Update in Queue & State
     setSysTxns(prev => prev.map(t => 
-      (t.id === txn.id || t.reference === txn.reference)
+      (t.id === txn.id || (txn.reference && t.reference === txn.reference) || (t.reference && t.reference === txn.id) || (txn.id && t.id === txn.reference))
         ? { ...t, status: 'Rejected', updatedAt: new Date().toISOString() }
         : t
     ));
 
-    // Optimistically refund sender's balance if it was a debit/transfer
-    setUsers(prev => prev.map(u => {
-      if (u.accountNumber === txn.accountNumber || u.email === txn.userEmail) {
-        return { ...u, balance: (u.balance || 0) + (txn.amount || 0) };
-      }
-      return u;
-    }));
+    // Optimistically refund sender's balance ONLY if it was a debit/transfer (NOT deposit)
+    const isDebit = txn.type === 'Withdrawal' || txn.type === 'Wire Withdrawal' || txn.type === 'Transfer' || txn.type === 'Wire Transfer' || txn.type === 'Bill Pay';
+    if (isDebit) {
+      setUsers(prev => prev.map(u => {
+        if (u.accountNumber === txn.accountNumber || u.email === txn.userEmail) {
+          const newBal = (u.balance || 0) + (txn.amount || 0);
+          return { ...u, balance: newBal, ledgerBalance: newBal };
+        }
+        return u;
+      }));
+    }
 
-    showToast('info', 'Transaction Rejected', `Ref #${txn.reference} rejected. Funds refunded to client.`);
+    showToast('info', 'Transaction Rejected', `Ref #${txn.reference} rejected. ${isDebit ? 'Funds refunded to client.' : ''}`);
     setRejectModalTxn(null);
 
-    // 2. Async Non-blocking Backend & Firestore Dispatch
+    // 3. Async Non-blocking Backend & Firestore Dispatch
     try {
       setIsRejecting(true);
       await api.rejectTransaction(txn.id, reason);
-      fetchSysTxns();
+      await fetchSysTxns();
       fetchUsers(searchQuery);
     } catch (err: any) {
       showToast('error', 'Rejection Error', err.message || 'Failed to reject transaction.');
@@ -572,13 +604,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
 
   const handleCancelTxn = async (txnId: string) => {
     const target = sysTxns.find(t => t.id === txnId || t.reference === txnId);
-    // Instant Optimistic Update
-    setSysTxns(prev => prev.map(t => (t.id === txnId || t.reference === txnId) ? { ...t, status: 'Cancelled', updatedAt: new Date().toISOString() } : t));
+    
+    // 1. Instant Synchronous dbStore Update
+    dbStore.updateTransaction(txnId, { status: 'Cancelled', updatedAt: new Date().toISOString() });
+    if (target?.reference) {
+      dbStore.updateTransaction(target.reference, { status: 'Cancelled', updatedAt: new Date().toISOString() });
+    }
+
+    // 2. Instant Optimistic UI Update
+    setSysTxns(prev => prev.map(t => 
+      (t.id === txnId || (target?.reference && t.reference === target.reference) || (t.reference && t.reference === txnId))
+        ? { ...t, status: 'Cancelled', updatedAt: new Date().toISOString() } 
+        : t
+    ));
     showToast('info', 'Transaction Cancelled', `Transfer ${target?.reference || txnId} has been cancelled.`);
 
     try {
       await api.adminCancelTransaction(txnId);
-      fetchSysTxns();
+      await fetchSysTxns();
       fetchUsers(searchQuery);
     } catch (err: any) {
       showToast('error', 'Cancellation Error', err.message || 'Cancellation failed.');
