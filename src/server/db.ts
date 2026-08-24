@@ -4,13 +4,32 @@ import { User, BankAccount, VirtualCard, CryptoActivationDeposit, BillPayment, S
 import { syncToFirestore, getUserFromFirestore, saveUserToFirestore, getCollectionFromFirestore, saveCollectionToFirestore } from './firebaseDb.js';
 import { emailService } from './emailService.js';
 
+interface EmailConfig {
+  host: string;
+  port: number;
+  user: string;
+  pass: string;
+  fromEmail: string;
+  fromName: string;
+  secure: boolean;
+}
+
+interface EmailDeliveryLog {
+  id?: string;
+  timestamp: string;
+  to: string;
+  subject: string;
+  status: 'success' | 'failed';
+  error?: string;
+}
+
 interface DatabaseSchema {
   users: User[];
-  passwords: record<string, string>;
+  passwords: Record<string, string>;
   virtualCards: VirtualCard[];
   billPayments: BillPayment[];
-  resetTokens: record<string, { code: string; expires: number }>;
-  transactions: Transaction[];
+  resetTokens: Record<string, { code: string; expires: number }>;
+  transactions: any[];
   auditLogs: AuditLog[];
   notifications: UserNotification[];
   supportTickets: SupportTicket[];
@@ -62,11 +81,9 @@ export async function dbGetUserByEmail(email: string): Promise<User | null> {
   if (!email) return null;
   const cleanEmail = email.trim().toLowerCase();
   
-  // Try Firestore first
   const firestoreUser = await getUserFromFirestore(cleanEmail);
   if (firestoreUser) return firestoreUser;
 
-  // Fallback to local
   const db = readDb();
   return db.users.find(u => u.email.trim().toLowerCase() === cleanEmail) || null;
 }
@@ -75,10 +92,8 @@ export async function dbSaveUser(user: User): Promise<void> {
   if (!user || !user.email) return;
   const cleanEmail = user.email.trim().toLowerCase();
 
-  // Save to Firestore
   await saveUserToFirestore(user);
 
-  // Save to local
   const db = readDb();
   const index = db.users.findIndex(u => u.id === user.id || u.email.trim().toLowerCase() === cleanEmail);
   if (index >= 0) {
