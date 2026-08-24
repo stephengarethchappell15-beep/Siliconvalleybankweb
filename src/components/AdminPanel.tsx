@@ -2631,7 +2631,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
                         </td>
                         <td className="py-2.5 px-3">
                           <span className="font-semibold text-white">{log.subject}</span>
-                          <span className="block text-[10px] text-slate-400 uppercase">{log.eventType}</span>
+                          <span className="block text-[10px] text-slate-400 uppercase">{log.type || log.eventType || 'Transactional'}</span>
                         </td>
                         <td className="py-2.5 px-3 text-amber-300 font-medium whitespace-nowrap">
                           {log.provider}

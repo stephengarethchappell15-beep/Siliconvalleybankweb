@@ -501,59 +501,99 @@ export async function sendEmailAsync(payload: EmailPayload): Promise<{ success: 
   }
 
   // 4. Try Gmail App Password / Nodemailer SMTP
-  const activeSmtpPass = gmailPass || smtpPass;
+  const activeSmtpPass = (gmailPass || smtpPass || '').replace(/\s+/g, '');
   const hasGmailAppPass = !!activeSmtpPass;
   const hasCustomSmtp = !!(smtpHost && activeSmtpPass);
 
   if ((targetProvider === 'auto' || targetProvider === 'gmail_smtp' || targetProvider === 'custom_smtp') && (hasGmailAppPass || hasCustomSmtp)) {
-    try {
-      let transporter;
-      if (targetProvider === 'gmail_smtp' || (hasGmailAppPass && (smtpUser.includes('@gmail.com') || senderEmail.includes('@gmail.com')))) {
-        transporter = nodemailer.createTransport({
-          service: 'gmail',
-          auth: {
-            user: smtpUser || senderEmail,
-            pass: activeSmtpPass
-          }
+    const providerLabel = (targetProvider === 'gmail_smtp' || hasGmailAppPass) ? 'Gmail SMTP' : 'Custom SMTP';
+    const authUser = (smtpUser || senderEmail).trim();
+    
+    // Attempt 1: Connect via Gmail service or SSL Port 465 / 587
+    let smtpSuccess = false;
+    let lastSmtpError = '';
+
+    const transporterConfigs = [];
+
+    if (targetProvider === 'gmail_smtp' || authUser.includes('@gmail.com') || senderEmail.includes('@gmail.com')) {
+      // Direct Gmail configurations (Port 465 SSL, Port 587 STARTTLS, and service 'gmail')
+      transporterConfigs.push({
+        name: 'Gmail Port 465 (SSL)',
+        host: 'smtp.gmail.com',
+        port: 465,
+        secure: true,
+        auth: { user: authUser, pass: activeSmtpPass },
+        connectionTimeout: 10000,
+        greetingTimeout: 10000,
+        socketTimeout: 15000,
+        tls: { rejectUnauthorized: false }
+      });
+      transporterConfigs.push({
+        name: 'Gmail Port 587 (STARTTLS)',
+        host: 'smtp.gmail.com',
+        port: 587,
+        secure: false,
+        requireTLS: true,
+        auth: { user: authUser, pass: activeSmtpPass },
+        connectionTimeout: 10000,
+        greetingTimeout: 10000,
+        socketTimeout: 15000,
+        tls: { rejectUnauthorized: false }
+      });
+      transporterConfigs.push({
+        name: 'Gmail Default Service',
+        service: 'gmail',
+        auth: { user: authUser, pass: activeSmtpPass },
+        connectionTimeout: 10000,
+        greetingTimeout: 10000,
+        socketTimeout: 15000
+      });
+    } else {
+      // Custom SMTP configuration
+      transporterConfigs.push({
+        name: `Custom SMTP (${smtpHost}:${smtpPort})`,
+        host: smtpHost || 'smtp.gmail.com',
+        port: smtpPort || 587,
+        secure: smtpPort === 465,
+        auth: { user: authUser, pass: activeSmtpPass },
+        connectionTimeout: 10000,
+        greetingTimeout: 10000,
+        socketTimeout: 15000,
+        tls: { rejectUnauthorized: false }
+      });
+    }
+
+    for (const tConfig of transporterConfigs) {
+      try {
+        const transporter = nodemailer.createTransport(tConfig);
+        const info = await transporter.sendMail({
+          from: fullSender,
+          to,
+          subject,
+          html,
+          text: text || subject
         });
-      } else {
-        transporter = nodemailer.createTransport({
-          host: smtpHost || 'smtp.gmail.com',
-          port: smtpPort || 587,
-          secure: (smtpPort === 465),
-          auth: {
-            user: smtpUser || senderEmail,
-            pass: activeSmtpPass
-          },
-          tls: {
-            rejectUnauthorized: false
-          }
+
+        const messageId = info.messageId || `smtp-${Date.now()}`;
+        console.log(`[EmailService:${providerLabel}] Successfully dispatched email to ${to} (${messageId}) using ${tConfig.name}`);
+        recordLog({
+          recipient: to,
+          subject,
+          type,
+          provider: providerLabel,
+          status: 'delivered',
+          messageId
         });
+        smtpSuccess = true;
+        return { success: true, provider: providerLabel, messageId };
+      } catch (err: any) {
+        lastSmtpError = err.message || 'Unknown SMTP error';
+        console.warn(`[EmailService:SMTP] Attempt with ${tConfig.name} failed:`, lastSmtpError);
       }
+    }
 
-      const info = await transporter.sendMail({
-        from: fullSender,
-        to,
-        subject,
-        html,
-        text: text || subject
-      });
-
-      const messageId = info.messageId || `smtp-${Date.now()}`;
-      const providerLabel = hasGmailAppPass ? 'Gmail SMTP' : 'Custom SMTP';
-      console.log(`[EmailService:${providerLabel}] Successfully delivered email to ${to} (${messageId})`);
-      recordLog({
-        recipient: to,
-        subject,
-        type,
-        provider: providerLabel,
-        status: 'delivered',
-        messageId
-      });
-      return { success: true, provider: providerLabel, messageId };
-    } catch (err: any) {
-      const errDetail = `SMTP Authentication / Delivery error: ${err.message}`;
-      console.warn(`[EmailService:SMTP] Exception:`, errDetail);
+    if (!smtpSuccess) {
+      const errDetail = `SMTP Authentication / Delivery error: ${lastSmtpError}`;
       errors.push(errDetail);
     }
   }
