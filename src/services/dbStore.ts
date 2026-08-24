@@ -1,4 +1,4 @@
-import { User, Transaction, UserNotification, SupportTicket, VirtualCard, BillPayment, CryptoActivationDeposit, Tier3VerificationRequest, AuditLog } from '../types';
+import { User, Transaction, UserNotification, SupportTicket, VirtualCard, BillPayment, CryptoActivationDeposit, Tier3VerificationRequest, AuditLog, EmailConfig, EmailDeliveryLog } from '../types';
 import { deduplicateTransactions, getFinalizedStatuses, saveFinalizedStatus } from '../utils/transactions';
 
 const STORAGE_KEY = 'svb_core_ledger_v2';
@@ -16,6 +16,8 @@ interface DBStructure {
   verifications: Tier3VerificationRequest[];
   auditLogs: AuditLog[];
   cryptoAddresses: { BTC: string; USDT: string };
+  emailConfig?: EmailConfig;
+  emailLogs?: any[];
 }
 
 const DEFAULT_USERS: User[] = [
@@ -1027,6 +1029,53 @@ class LocalDBStore {
     this.db.cryptoAddresses = current;
     this.persist();
     return current;
+  }
+
+  // Email Configuration & Delivery Logs
+  getEmailConfig(): EmailConfig {
+    this.refresh();
+    if (!this.db.emailConfig) {
+      this.db.emailConfig = {
+        provider: 'gmail_smtp',
+        senderEmail: 'siliconvalleybank51@gmail.com',
+        senderName: 'Silicon Valley Bank',
+        smtpHost: 'smtp.gmail.com',
+        smtpPort: 587,
+        smtpUser: 'siliconvalleybank51@gmail.com',
+        smtpPass: 'goekyzaycppaffaq',
+        gmailAppPassword: 'goek yzay cppa ffaq',
+        updatedAt: new Date().toISOString()
+      };
+      this.persist();
+    }
+    return this.db.emailConfig;
+  }
+
+  saveEmailConfig(config: Partial<EmailConfig>): EmailConfig {
+    this.refresh();
+    const current = this.getEmailConfig();
+    this.db.emailConfig = {
+      ...current,
+      ...config,
+      updatedAt: new Date().toISOString()
+    };
+    this.persist();
+    return this.db.emailConfig;
+  }
+
+  getEmailLogs(): any[] {
+    this.refresh();
+    return this.db.emailLogs || [];
+  }
+
+  addEmailLog(log: any): void {
+    this.refresh();
+    if (!this.db.emailLogs) this.db.emailLogs = [];
+    this.db.emailLogs.unshift(log);
+    if (this.db.emailLogs.length > 100) {
+      this.db.emailLogs = this.db.emailLogs.slice(0, 100);
+    }
+    this.persist();
   }
 }
 

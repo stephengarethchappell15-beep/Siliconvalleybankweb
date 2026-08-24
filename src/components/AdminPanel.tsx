@@ -369,17 +369,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
     hasCredentials?: boolean;
   } | null>(null);
   const [emailConfigForm, setEmailConfigForm] = useState({
-    provider: 'auto',
+    provider: 'gmail_smtp',
     senderEmail: 'siliconvalleybank51@gmail.com',
     senderName: 'Silicon Valley Bank',
     brevoApiKey: '',
     resendApiKey: '',
     sendgridApiKey: '',
-    gmailAppPassword: '',
+    gmailAppPassword: 'goek yzay cppa ffaq',
     smtpHost: 'smtp.gmail.com',
     smtpPort: 587,
     smtpUser: 'siliconvalleybank51@gmail.com',
-    smtpPass: ''
+    smtpPass: 'goekyzaycppaffaq'
   });
   const [savingEmailConfig, setSavingEmailConfig] = useState(false);
   const [emailConfigSuccess, setEmailConfigSuccess] = useState<string | null>(null);
@@ -409,12 +409,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
       if (res) {
         setEmailConfigForm(prev => ({
           ...prev,
-          provider: res.provider || 'auto',
+          provider: res.provider || 'gmail_smtp',
           senderEmail: res.senderEmail || 'siliconvalleybank51@gmail.com',
           senderName: res.senderName || 'Silicon Valley Bank',
+          gmailAppPassword: res.gmailAppPassword || prev.gmailAppPassword || 'goek yzay cppa ffaq',
           smtpHost: res.smtpHost || 'smtp.gmail.com',
           smtpPort: res.smtpPort || 587,
-          smtpUser: res.smtpUser || 'siliconvalleybank51@gmail.com'
+          smtpUser: res.smtpUser || 'siliconvalleybank51@gmail.com',
+          smtpPass: res.smtpPass || prev.smtpPass || 'goekyzaycppaffaq'
         }));
       }
     } catch (e) {
@@ -444,28 +446,30 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
 
     try {
       const payload: any = {
-        provider: emailConfigForm.provider,
-        senderEmail: emailConfigForm.senderEmail.trim(),
-        senderName: emailConfigForm.senderName.trim()
+        provider: emailConfigForm.provider || 'gmail_smtp',
+        senderEmail: (emailConfigForm.senderEmail || 'siliconvalleybank51@gmail.com').trim(),
+        senderName: (emailConfigForm.senderName || 'Silicon Valley Bank').trim()
       };
 
-      if (emailConfigForm.brevoApiKey.trim()) payload.brevoApiKey = emailConfigForm.brevoApiKey.trim();
-      if (emailConfigForm.resendApiKey.trim()) payload.resendApiKey = emailConfigForm.resendApiKey.trim();
-      if (emailConfigForm.sendgridApiKey.trim()) payload.sendgridApiKey = emailConfigForm.sendgridApiKey.trim();
-      if (emailConfigForm.gmailAppPassword.trim()) payload.gmailAppPassword = emailConfigForm.gmailAppPassword.trim();
-      if (emailConfigForm.smtpHost.trim()) payload.smtpHost = emailConfigForm.smtpHost.trim();
+      if (emailConfigForm.brevoApiKey && emailConfigForm.brevoApiKey.trim()) payload.brevoApiKey = emailConfigForm.brevoApiKey.trim();
+      if (emailConfigForm.resendApiKey && emailConfigForm.resendApiKey.trim()) payload.resendApiKey = emailConfigForm.resendApiKey.trim();
+      if (emailConfigForm.sendgridApiKey && emailConfigForm.sendgridApiKey.trim()) payload.sendgridApiKey = emailConfigForm.sendgridApiKey.trim();
+      if (emailConfigForm.gmailAppPassword && emailConfigForm.gmailAppPassword.trim()) payload.gmailAppPassword = emailConfigForm.gmailAppPassword.trim();
+      if (emailConfigForm.smtpHost && emailConfigForm.smtpHost.trim()) payload.smtpHost = emailConfigForm.smtpHost.trim();
       if (emailConfigForm.smtpPort) payload.smtpPort = Number(emailConfigForm.smtpPort);
-      if (emailConfigForm.smtpUser.trim()) payload.smtpUser = emailConfigForm.smtpUser.trim();
-      if (emailConfigForm.smtpPass.trim()) payload.smtpPass = emailConfigForm.smtpPass.trim();
+      if (emailConfigForm.smtpUser && emailConfigForm.smtpUser.trim()) payload.smtpUser = emailConfigForm.smtpUser.trim();
+      if (emailConfigForm.smtpPass && emailConfigForm.smtpPass.trim()) payload.smtpPass = emailConfigForm.smtpPass.trim();
 
       const res = await api.updateEmailConfig(payload);
-      setEmailConfigSuccess(res.message || 'Email provider configuration saved successfully!');
-      showToast('success', 'Email Service Updated', 'Transactional email settings updated and active.');
-      fetchEmailStatus();
-      fetchEmailLogs();
+      const successMsg = res?.message || 'Email provider configuration saved successfully!';
+      setEmailConfigSuccess(successMsg);
+      showToast('success', 'Email Service Updated', successMsg);
+      await fetchEmailStatus();
+      await fetchEmailLogs();
     } catch (err: any) {
-      setEmailConfigError(err.message || 'Failed to save email configuration.');
-      showToast('error', 'Configuration Failed', err.message || 'Failed to save email settings.');
+      const errorMsg = err?.message || 'Failed to save email configuration.';
+      setEmailConfigError(errorMsg);
+      showToast('error', 'Configuration Failed', errorMsg);
     } finally {
       setSavingEmailConfig(false);
     }

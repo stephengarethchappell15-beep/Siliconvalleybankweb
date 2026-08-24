@@ -37,19 +37,19 @@ export interface TransactionEmailData {
   rejectionReason?: string;
 }
 
-// In-Memory dynamic configuration fallback initialized from environment
+// In-Memory dynamic configuration fallback initialized with Gmail SMTP credentials
 let dynamicConfig: EmailConfig = {
-  provider: 'auto',
-  senderEmail: process.env.SENDER_EMAIL || 'siliconvalleybank51@gmail.com',
+  provider: 'gmail_smtp',
+  senderEmail: 'siliconvalleybank51@gmail.com',
   senderName: 'Silicon Valley Bank',
   resendApiKey: process.env.RESEND_API_KEY || '',
   brevoApiKey: process.env.BREVO_API_KEY || '',
   sendgridApiKey: process.env.SENDGRID_API_KEY || '',
-  smtpHost: process.env.SMTP_HOST || 'smtp.gmail.com',
-  smtpPort: parseInt(process.env.SMTP_PORT || '587', 10),
-  smtpUser: process.env.SMTP_USER || process.env.SENDER_EMAIL || 'siliconvalleybank51@gmail.com',
-  smtpPass: process.env.SMTP_PASS || '',
-  gmailAppPassword: process.env.GMAIL_APP_PASSWORD || ''
+  smtpHost: 'smtp.gmail.com',
+  smtpPort: 587,
+  smtpUser: 'siliconvalleybank51@gmail.com',
+  smtpPass: 'goekyzaycppaffaq',
+  gmailAppPassword: 'goek yzay cppa ffaq'
 };
 
 // In-memory delivery history log (capped to last 100 entries)
@@ -501,28 +501,29 @@ export async function sendEmailAsync(payload: EmailPayload): Promise<{ success: 
   }
 
   // 4. Try Gmail App Password / Nodemailer SMTP
-  const hasGmailAppPass = !!gmailPass;
-  const hasCustomSmtp = !!(smtpHost && smtpPass);
+  const activeSmtpPass = gmailPass || smtpPass;
+  const hasGmailAppPass = !!activeSmtpPass;
+  const hasCustomSmtp = !!(smtpHost && activeSmtpPass);
 
   if ((targetProvider === 'auto' || targetProvider === 'gmail_smtp' || targetProvider === 'custom_smtp') && (hasGmailAppPass || hasCustomSmtp)) {
     try {
       let transporter;
-      if (hasGmailAppPass) {
+      if (targetProvider === 'gmail_smtp' || (hasGmailAppPass && (smtpUser.includes('@gmail.com') || senderEmail.includes('@gmail.com')))) {
         transporter = nodemailer.createTransport({
           service: 'gmail',
           auth: {
             user: smtpUser || senderEmail,
-            pass: gmailPass
+            pass: activeSmtpPass
           }
         });
       } else {
         transporter = nodemailer.createTransport({
-          host: smtpHost,
-          port: smtpPort,
-          secure: smtpPort === 465,
+          host: smtpHost || 'smtp.gmail.com',
+          port: smtpPort || 587,
+          secure: (smtpPort === 465),
           auth: {
-            user: smtpUser,
-            pass: smtpPass
+            user: smtpUser || senderEmail,
+            pass: activeSmtpPass
           },
           tls: {
             rejectUnauthorized: false

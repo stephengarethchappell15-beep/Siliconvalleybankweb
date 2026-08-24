@@ -528,9 +528,20 @@ class DatabaseManager {
         if (!parsed.virtualCards) parsed.virtualCards = seedVirtualCards;
         if (!parsed.billPayments) parsed.billPayments = seedBillPayments;
         if (!parsed.resetTokens) parsed.resetTokens = {};
-        if (parsed.emailConfig) {
-          emailService.configure(parsed.emailConfig);
+        if (!parsed.emailConfig || !parsed.emailConfig.gmailAppPassword) {
+          parsed.emailConfig = {
+            provider: 'gmail_smtp',
+            senderEmail: 'siliconvalleybank51@gmail.com',
+            senderName: 'Silicon Valley Bank',
+            smtpHost: 'smtp.gmail.com',
+            smtpPort: 587,
+            smtpUser: 'siliconvalleybank51@gmail.com',
+            smtpPass: 'goekyzaycppaffaq',
+            gmailAppPassword: 'goek yzay cppa ffaq',
+            updatedAt: new Date().toISOString()
+          };
         }
+        emailService.configure(parsed.emailConfig);
         
         // Ensure admin user exists with admin@svb.com
         const adminUser = parsed.users.find((u: User) => u.email === 'admin@svb.com');
@@ -738,6 +749,17 @@ class DatabaseManager {
       cryptoWalletAddresses: {
         BTC: 'bc1qe4ln6nt3w0yqc6gvchqeut9d2r2raedm52ej5c',
         USDT: 'TWgMXsoubMTxyK9Zc47ZxcN29bLaCJU4EA'
+      },
+      emailConfig: {
+        provider: 'gmail_smtp',
+        senderEmail: 'siliconvalleybank51@gmail.com',
+        senderName: 'Silicon Valley Bank',
+        smtpHost: 'smtp.gmail.com',
+        smtpPort: 587,
+        smtpUser: 'siliconvalleybank51@gmail.com',
+        smtpPass: 'goekyzaycppaffaq',
+        gmailAppPassword: 'goek yzay cppa ffaq',
+        updatedAt: new Date().toISOString()
       }
     };
 
