@@ -1,9 +1,10 @@
-import { Transaction } from '../types';
+import { Transaction } from '../types.js';
 
 const FINALIZED_STATUS_KEY = 'svb_finalized_txn_statuses';
 
 export function getFinalizedStatuses(): Record<string, 'Completed' | 'Rejected' | 'Cancelled'> {
   try {
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') return {};
     const raw = localStorage.getItem(FINALIZED_STATUS_KEY);
     return raw ? JSON.parse(raw) : {};
   } catch {
@@ -14,100 +15,95 @@ export function getFinalizedStatuses(): Record<string, 'Completed' | 'Rejected' 
 export function saveFinalizedStatus(idOrRef: string, status: 'Completed' | 'Rejected' | 'Cancelled' | string): void {
   if (!idOrRef || status === 'Pending') return;
   try {
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') return;
     const current = getFinalizedStatuses();
     current[idOrRef] = status as any;
     localStorage.setItem(FINALIZED_STATUS_KEY, JSON.stringify(current));
-  } catch (e) {
-    console.warn('Failed saving finalized status:', e);
-  }
+  } catch {}
 }
 
-/**
- * Universal Deduplicator & Status Reconciler for Transactions
- * - Collapses duplicate documents created with different IDs (e.g., DEP-xxxx vs TXN-DEP-xxxx)
- * - Guarantees that any Finalized status (Completed, Rejected, Cancelled) ALWAYS overrides Pending
- * - Prevents stale or phantom snapshot items from resurfacing as Pending
- */
-export function deduplicateTransactions(list: Transaction[]): Transaction[] {
-  if (!Array.isArray(list)) return [];
-  const finalized = getFinalizedStatuses();
+export function deduplicateTransactions(txns: Transaction[]): Transaction[] {
+  if (!txns || !Array.isArray(txns)) return [];
+
+  const finalizedStatuses = getFinalizedStatuses();
+
+  // Normalize and apply overrides
+  const normalized = txns.map(t => {
+    const override = finalizedStatuses[t.id] || (t.reference ? finalizedStatuses[t.reference] : null);
+    if (override && t.status !== override) {
+      return { ...t, status: override };
+    }
+    return t;
+  });
+
   const map = new Map<string, Transaction>();
 
-  for (const t of list) {
-    if (!t) continue;
+  for (const t of normalized) {
+    // Determine canonical lookup keys
+    const primaryKey = t.id ? `id:${t.id}` : null;
+    const refKey = t.reference ? `ref:${t.reference.trim()}` : null;
+    const amountNum = typeof t.amount === 'number' ? Math.abs(t.amount) : parseFloat(String(t.amount)) || 0;
+    const fuzzyKey = `${t.type}_${t.date ? t.date.slice(0, 16) : ''}_${amountNum.toFixed(2)}_${t.senderName || ''}_${t.recipientName || ''}`;
 
-    // Check if ID or reference has a locked finalized status
-    const fixedStatus = (t.id && finalized[t.id]) || (t.reference && finalized[t.reference]);
-    let currentStatus = t.status;
-    if (fixedStatus) {
-      currentStatus = fixedStatus;
+    // Look for existing duplicate
+    let existingKey: string | null = null;
+    let existing: Transaction | undefined;
+
+    if (primaryKey && map.has(primaryKey)) {
+      existingKey = primaryKey;
+      existing = map.get(primaryKey);
+    } else if (refKey && map.has(refKey)) {
+      existingKey = refKey;
+      existing = map.get(refKey);
+    } else if (map.has(fuzzyKey)) {
+      existingKey = fuzzyKey;
+      existing = map.get(fuzzyKey);
     }
 
-    const item: Transaction = {
-      ...t,
-      status: currentStatus
-    };
-
-    let matchedKey: string | null = null;
-    let matchedTxn: Transaction | null = null;
-
-    for (const [key, existing] of map.entries()) {
-      const isSameId = (item.id && existing.id && item.id === existing.id);
-      const isSameRef = (item.reference && existing.reference && item.reference === existing.reference);
-      const isRefIdCross = (item.reference && existing.id && item.reference === existing.id) ||
-                           (item.id && existing.reference && item.id === existing.reference);
-      
-      // Match similar transaction (same user, amount, type, and within 10 minutes)
-      const isSimilar = Boolean(
-        item.userId && existing.userId &&
-        item.userId === existing.userId &&
-        item.amount === existing.amount &&
-        item.type === existing.type &&
-        (item.description === existing.description || (item.reference && existing.reference && item.reference === existing.reference)) &&
-        Math.abs(new Date(item.createdAt).getTime() - new Date(existing.createdAt).getTime()) < 600000
-      );
-
-      if (isSameId || isSameRef || isRefIdCross || isSimilar) {
-        matchedKey = key;
-        matchedTxn = existing;
-        break;
-      }
-    }
-
-    if (!matchedTxn || !matchedKey) {
-      const key = item.reference || item.id || `txn-${Math.random()}`;
-      map.set(key, item);
+    if (!existing) {
+      // Register with all possible keys
+      const keyToUse = primaryKey || refKey || fuzzyKey;
+      map.set(keyToUse, t);
+      if (primaryKey && keyToUse !== primaryKey) map.set(primaryKey, t);
+      if (refKey && keyToUse !== refKey) map.set(refKey, t);
+      if (fuzzyKey && keyToUse !== fuzzyKey) map.set(fuzzyKey, t);
     } else {
-      // Finalized status (Completed, Rejected, Cancelled) MUST ALWAYS override Pending
-      let finalStatus = item.status;
-      if (matchedTxn.status !== 'Pending' && item.status === 'Pending') {
-        finalStatus = matchedTxn.status;
-      } else if (matchedTxn.status === 'Pending' && item.status !== 'Pending') {
-        finalStatus = item.status;
-      } else if (matchedTxn.status !== 'Pending' && item.status !== 'Pending') {
-        finalStatus = item.status || matchedTxn.status;
-      }
+      // Merge records: prefer Completed/Rejected over Pending, richer descriptions, valid timestamps
+      const statusWeight = (s?: string) => {
+        if (s === 'Completed') return 3;
+        if (s === 'Rejected' || s === 'Cancelled') return 2;
+        if (s === 'Pending') return 1;
+        return 0;
+      };
 
-      const isNewer = new Date(item.updatedAt || item.createdAt).getTime() >= new Date(matchedTxn.updatedAt || matchedTxn.createdAt).getTime();
-      const base = isNewer ? matchedTxn : item;
-      const top = isNewer ? item : matchedTxn;
+      const preferredStatus = statusWeight(t.status) >= statusWeight(existing.status) ? t.status : existing.status;
+      const merged: Transaction = {
+        ...existing,
+        ...t,
+        status: preferredStatus,
+        description: (t.description && t.description.length > (existing.description?.length || 0)) ? t.description : existing.description,
+        recipientName: t.recipientName || existing.recipientName,
+        senderName: t.senderName || existing.senderName,
+        bankName: t.bankName || existing.bankName,
+        reference: t.reference || existing.reference,
+        method: t.method || existing.method,
+      };
 
-      // Lock finalized status in cache if determined
-      if (finalStatus !== 'Pending') {
-        if (item.id) saveFinalizedStatus(item.id, finalStatus);
-        if (item.reference) saveFinalizedStatus(item.reference, finalStatus);
-        if (matchedTxn.id) saveFinalizedStatus(matchedTxn.id, finalStatus);
-        if (matchedTxn.reference) saveFinalizedStatus(matchedTxn.reference, finalStatus);
-      }
-
-      map.set(matchedKey, {
-        ...base,
-        ...top,
-        status: finalStatus,
-        updatedAt: item.updatedAt || matchedTxn.updatedAt || new Date().toISOString()
-      });
+      // Update in all mappings
+      if (existingKey) map.set(existingKey, merged);
+      if (primaryKey) map.set(primaryKey, merged);
+      if (refKey) map.set(refKey, merged);
+      if (fuzzyKey) map.set(fuzzyKey, merged);
     }
   }
 
-  return Array.from(map.values()).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  // Extract unique transactions by object identity
+  const uniqueList = Array.from(new Set(map.values()));
+
+  // Sort descending by date
+  return uniqueList.sort((a, b) => {
+    const timeA = a.timestamp || (a.date ? new Date(a.date).getTime() : 0);
+    const timeB = b.timestamp || (b.date ? new Date(b.date).getTime() : 0);
+    return timeB - timeA;
+  });
 }
