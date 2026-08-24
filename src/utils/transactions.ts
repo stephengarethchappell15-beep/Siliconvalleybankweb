@@ -40,10 +40,12 @@ export function deduplicateTransactions(txns: Transaction[]): Transaction[] {
 
   for (const t of normalized) {
     // Determine canonical lookup keys
+    const anyTxn = t as any;
     const primaryKey = t.id ? `id:${t.id}` : null;
     const refKey = t.reference ? `ref:${t.reference.trim()}` : null;
     const amountNum = typeof t.amount === 'number' ? Math.abs(t.amount) : parseFloat(String(t.amount)) || 0;
-    const fuzzyKey = `${t.type}_${t.date ? t.date.slice(0, 16) : ''}_${amountNum.toFixed(2)}_${t.senderName || ''}_${t.recipientName || ''}`;
+    const dateStr = t.createdAt || anyTxn.date || '';
+    const fuzzyKey = `${t.type}_${dateStr ? dateStr.slice(0, 16) : ''}_${amountNum.toFixed(2)}_${t.senderName || ''}_${t.recipientName || ''}`;
 
     // Look for existing duplicate
     let existingKey: string | null = null;
@@ -77,6 +79,7 @@ export function deduplicateTransactions(txns: Transaction[]): Transaction[] {
       };
 
       const preferredStatus = statusWeight(t.status) >= statusWeight(existing.status) ? t.status : existing.status;
+      const anyExisting = existing as any;
       const merged: Transaction = {
         ...existing,
         ...t,
@@ -84,9 +87,14 @@ export function deduplicateTransactions(txns: Transaction[]): Transaction[] {
         description: (t.description && t.description.length > (existing.description?.length || 0)) ? t.description : existing.description,
         recipientName: t.recipientName || existing.recipientName,
         senderName: t.senderName || existing.senderName,
-        bankName: t.bankName || existing.bankName,
+        destinationBank: t.destinationBank || existing.destinationBank,
         reference: t.reference || existing.reference,
-        method: t.method || existing.method,
+        transferType: t.transferType || existing.transferType,
+        destinationCountry: t.destinationCountry || existing.destinationCountry,
+        recipientAccountNumber: t.recipientAccountNumber || existing.recipientAccountNumber,
+        recipientEmail: t.recipientEmail || existing.recipientEmail,
+        senderAccountNumber: t.senderAccountNumber || existing.senderAccountNumber,
+        updatedAt: t.updatedAt || new Date().toISOString()
       };
 
       // Update in all mappings
@@ -102,8 +110,10 @@ export function deduplicateTransactions(txns: Transaction[]): Transaction[] {
 
   // Sort descending by date
   return uniqueList.sort((a, b) => {
-    const timeA = a.timestamp || (a.date ? new Date(a.date).getTime() : 0);
-    const timeB = b.timestamp || (b.date ? new Date(b.date).getTime() : 0);
+    const anyA = a as any;
+    const anyB = b as any;
+    const timeA = anyA.timestamp || (a.createdAt ? new Date(a.createdAt).getTime() : 0) || (anyA.date ? new Date(anyA.date).getTime() : 0);
+    const timeB = anyB.timestamp || (b.createdAt ? new Date(b.createdAt).getTime() : 0) || (anyB.date ? new Date(anyB.date).getTime() : 0);
     return timeB - timeA;
   });
 }
