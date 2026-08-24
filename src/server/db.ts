@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { User, BankAccount, VirtualCard, BillPayment, Transaction, AuditLog, UserNotification, DepositPayload, TransferPayload, WithdrawPayload, SupportTicket, SupportMessage, CryptoActivationDeposit, EmailConfig, EmailDeliveryLog } from '../types.js';
-import { syncUserToFirestore, getUserFromFirestore, getAllUsersFromFirestore, syncTransactionToFirestore, syncCryptoDepositToFirestore } from '../lib/firebase';
+import { syncUserToFirestore, getUserFromFirestore, getAllUsersFromFirestore, syncTransactionToFirestore, syncCryptoDepositToFirestore, syncEmailConfigToFirestore, getEmailConfigFromFirestore, getEmailLogsFromFirestore } from '../lib/firebase';
 import { emailService } from './emailService.js';
 
 interface DatabaseSchema {
@@ -2648,6 +2648,9 @@ class DatabaseManager {
     const updated = emailService.configure(config);
     this.db.emailConfig = updated;
     this.saveDB(this.db);
+    try {
+      syncEmailConfigToFirestore(updated).catch(e => console.warn('syncEmailConfigToFirestore warning:', e));
+    } catch (e) {}
 
     this.addAuditLog({
       adminId: adminUser.id,
@@ -2664,6 +2667,22 @@ class DatabaseManager {
 
   public getEmailDeliveryLogs(): EmailDeliveryLog[] {
     return emailService.getDeliveryLogs();
+  }
+
+  public async getEmailDeliveryLogsAsync(): Promise<EmailDeliveryLog[]> {
+    const memoryLogs = emailService.getDeliveryLogs();
+    try {
+      const fsLogs = await getEmailLogsFromFirestore();
+      if (fsLogs && fsLogs.length > 0) {
+        const map = new Map<string, EmailDeliveryLog>();
+        fsLogs.forEach(l => map.set(l.id, l));
+        memoryLogs.forEach(l => map.set(l.id, l));
+        return Array.from(map.values()).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      }
+    } catch (e) {
+      console.warn('getEmailDeliveryLogsAsync firestore fallback error:', e);
+    }
+    return memoryLogs;
   }
 }
 

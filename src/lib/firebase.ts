@@ -1639,5 +1639,91 @@ export function subscribeVerificationsFromFirestore(callback: (verifs: Tier3Veri
   }
 }
 
+/**
+ * Persist Email Delivery Audit Log to Firestore
+ */
+export async function syncEmailLogToFirestore(log: any): Promise<void> {
+  if (!log || !log.id) return;
+  try {
+    const cleanLog = cleanUndefined({
+      ...log,
+      createdAt: log.timestamp || new Date().toISOString()
+    });
+    await setDoc(doc(db, 'email_delivery_logs', log.id), cleanLog, { merge: true });
+  } catch (err) {
+    console.warn('syncEmailLogToFirestore error:', err);
+  }
+}
+
+/**
+ * Retrieve all Email Delivery Logs from Firestore
+ */
+export async function getEmailLogsFromFirestore(): Promise<any[]> {
+  try {
+    const snap = await getDocs(collection(db, 'email_delivery_logs'));
+    const logs: any[] = [];
+    snap.forEach((d) => {
+      if (d.exists()) logs.push(d.data());
+    });
+    return logs.sort((a, b) => new Date(b.timestamp || b.createdAt).getTime() - new Date(a.timestamp || a.createdAt).getTime());
+  } catch (err) {
+    console.warn('getEmailLogsFromFirestore error:', err);
+    return [];
+  }
+}
+
+/**
+ * Subscribe to real-time Email Delivery Audit Logs from Firestore
+ */
+export function subscribeEmailLogsFromFirestore(callback: (logs: any[]) => void): () => void {
+  try {
+    const unsub = onSnapshot(collection(db, 'email_delivery_logs'), (snap) => {
+      const list: any[] = [];
+      snap.forEach((d) => {
+        if (d.exists()) list.push(d.data());
+      });
+      list.sort((a, b) => new Date(b.timestamp || b.createdAt).getTime() - new Date(a.timestamp || a.createdAt).getTime());
+      callback(list);
+    }, (err) => console.warn('Email logs snapshot error:', err));
+    return unsub;
+  } catch (err) {
+    console.warn('subscribeEmailLogsFromFirestore error:', err);
+    return () => {};
+  }
+}
+
+/**
+ * Persist Email Provider Configuration in Firestore
+ */
+export async function syncEmailConfigToFirestore(config: any): Promise<void> {
+  if (!config) return;
+  try {
+    const cleanConfig = cleanUndefined({
+      ...config,
+      updatedAt: new Date().toISOString()
+    });
+    await setDoc(doc(db, 'system_settings', 'email_config'), cleanConfig, { merge: true });
+  } catch (err) {
+    console.warn('syncEmailConfigToFirestore error:', err);
+  }
+}
+
+/**
+ * Retrieve Email Provider Configuration from Firestore
+ */
+export async function getEmailConfigFromFirestore(): Promise<any | null> {
+  try {
+    const snap = await getDoc(doc(db, 'system_settings', 'email_config'));
+    if (snap.exists()) {
+      return snap.data();
+    }
+    return null;
+  } catch (err) {
+    console.warn('getEmailConfigFromFirestore error:', err);
+    return null;
+  }
+}
+
+
 
 

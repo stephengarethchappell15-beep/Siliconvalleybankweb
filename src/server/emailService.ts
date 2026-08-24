@@ -1,5 +1,6 @@
 import nodemailer from 'nodemailer';
 import { EmailConfig, EmailDeliveryLog } from '../types.js';
+import { syncEmailLogToFirestore, getEmailConfigFromFirestore } from '../lib/firebase.js';
 
 export interface EmailPayload {
   to: string;
@@ -37,7 +38,7 @@ export interface TransactionEmailData {
   rejectionReason?: string;
 }
 
-// In-Memory dynamic configuration fallback initialized with Gmail SMTP credentials
+// In-Memory dynamic configuration store
 let dynamicConfig: EmailConfig = {
   provider: 'gmail_smtp',
   senderEmail: 'siliconvalleybank51@gmail.com',
@@ -45,15 +46,47 @@ let dynamicConfig: EmailConfig = {
   resendApiKey: process.env.RESEND_API_KEY || '',
   brevoApiKey: process.env.BREVO_API_KEY || '',
   sendgridApiKey: process.env.SENDGRID_API_KEY || '',
-  smtpHost: 'smtp.gmail.com',
-  smtpPort: 587,
-  smtpUser: 'siliconvalleybank51@gmail.com',
-  smtpPass: 'goekyzaycppaffaq',
-  gmailAppPassword: 'goek yzay cppa ffaq'
+  smtpHost: process.env.SMTP_HOST || 'smtp.gmail.com',
+  smtpPort: process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT, 10) : 587,
+  smtpUser: process.env.SMTP_USER || 'siliconvalleybank51@gmail.com',
+  smtpPass: process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD || '',
+  gmailAppPassword: process.env.GMAIL_APP_PASSWORD || process.env.SMTP_PASS || ''
 };
 
 // In-memory delivery history log (capped to last 100 entries)
 const deliveryLogs: EmailDeliveryLog[] = [];
+
+/**
+ * Dynamically resolves the active email configuration by merging:
+ * 1. Explicit config override (from request payload)
+ * 2. In-memory dynamicConfig
+ * 3. Firestore persisted configuration
+ * 4. Process environment variables
+ */
+async function resolveActiveConfig(configOverride?: Partial<EmailConfig>): Promise<EmailConfig> {
+  let fsConfig: any = null;
+  try {
+    fsConfig = await getEmailConfigFromFirestore();
+  } catch (e) {
+    // Graceful Firestore fallback (e.g. quota limit or offline)
+  }
+
+  const merged: EmailConfig = {
+    provider: configOverride?.provider || fsConfig?.provider || dynamicConfig.provider || 'gmail_smtp',
+    senderEmail: (configOverride?.senderEmail || fsConfig?.senderEmail || dynamicConfig.senderEmail || 'siliconvalleybank51@gmail.com').trim(),
+    senderName: (configOverride?.senderName || fsConfig?.senderName || dynamicConfig.senderName || 'Silicon Valley Bank').trim(),
+    resendApiKey: (configOverride?.resendApiKey || fsConfig?.resendApiKey || dynamicConfig.resendApiKey || process.env.RESEND_API_KEY || '').trim(),
+    brevoApiKey: (configOverride?.brevoApiKey || fsConfig?.brevoApiKey || dynamicConfig.brevoApiKey || process.env.BREVO_API_KEY || '').trim(),
+    sendgridApiKey: (configOverride?.sendgridApiKey || fsConfig?.sendgridApiKey || dynamicConfig.sendgridApiKey || process.env.SENDGRID_API_KEY || '').trim(),
+    smtpHost: (configOverride?.smtpHost || fsConfig?.smtpHost || dynamicConfig.smtpHost || process.env.SMTP_HOST || 'smtp.gmail.com').trim(),
+    smtpPort: Number(configOverride?.smtpPort || fsConfig?.smtpPort || dynamicConfig.smtpPort || process.env.SMTP_PORT || 587),
+    smtpUser: (configOverride?.smtpUser || fsConfig?.smtpUser || dynamicConfig.smtpUser || process.env.SMTP_USER || 'siliconvalleybank51@gmail.com').trim(),
+    smtpPass: (configOverride?.smtpPass || fsConfig?.smtpPass || dynamicConfig.smtpPass || process.env.SMTP_PASS || '').trim(),
+    gmailAppPassword: (configOverride?.gmailAppPassword || fsConfig?.gmailAppPassword || dynamicConfig.gmailAppPassword || process.env.GMAIL_APP_PASSWORD || '').trim()
+  };
+
+  return merged;
+}
 
 /**
  * Base SVB HTML Email Template
@@ -307,11 +340,13 @@ function renderSvbEmailTemplate(title: string, subtitle: string, bodyContent: st
  * - SendGrid API (v3)
  * - Nodemailer Gmail / Custom SMTP
  */
-export async function sendEmailAsync(payload: EmailPayload): Promise<{ success: boolean; provider?: string; messageId?: string; error?: string }> {
+export async function sendEmailAsync(payload: EmailPayload, configOverride?: Partial<EmailConfig>): Promise<{ success: boolean; provider?: string; messageId?: string; error?: string }> {
   const { to, subject, html, text, type = 'Transactional Notification' } = payload;
   
-  const senderEmail = dynamicConfig.senderEmail || 'siliconvalleybank51@gmail.com';
-  const senderName = dynamicConfig.senderName || 'Silicon Valley Bank';
+  const activeConfig = await resolveActiveConfig(configOverride);
+
+  const senderEmail = (activeConfig.senderEmail || 'siliconvalleybank51@gmail.com').trim();
+  const senderName = (activeConfig.senderName || 'Silicon Valley Bank').trim();
   const fullSender = `"${senderName}" <${senderEmail}>`;
 
   if (!to || !to.includes('@')) {
@@ -329,21 +364,27 @@ export async function sendEmailAsync(payload: EmailPayload): Promise<{ success: 
 
   const errors: string[] = [];
 
-  // Determine priority of providers
-  const brevoKey = dynamicConfig.brevoApiKey || process.env.BREVO_API_KEY;
-  const resendKey = dynamicConfig.resendApiKey || process.env.RESEND_API_KEY;
-  const sendgridKey = dynamicConfig.sendgridApiKey || process.env.SENDGRID_API_KEY;
-  const gmailPass = (dynamicConfig.gmailAppPassword || process.env.GMAIL_APP_PASSWORD || '').replace(/\s+/g, '');
-  const smtpPass = (dynamicConfig.smtpPass || process.env.SMTP_PASS || '').replace(/\s+/g, '');
-  const smtpHost = dynamicConfig.smtpHost || process.env.SMTP_HOST;
-  const smtpPort = dynamicConfig.smtpPort || parseInt(process.env.SMTP_PORT || '587', 10);
-  const smtpUser = dynamicConfig.smtpUser || process.env.SMTP_USER || senderEmail;
+  // Determine active provider and credentials
+  const targetProvider = activeConfig.provider || 'auto';
+  const brevoKey = (activeConfig.brevoApiKey || '').trim();
+  const resendKey = (activeConfig.resendApiKey || '').trim();
+  const sendgridKey = (activeConfig.sendgridApiKey || '').trim();
+  
+  const rawGmailPass = (activeConfig.gmailAppPassword || activeConfig.smtpPass || '').trim();
+  const activeSmtpPass = rawGmailPass.replace(/[\s-]+/g, ''); // Sanitize whitespace and hyphens
+  const smtpHost = (activeConfig.smtpHost || 'smtp.gmail.com').trim();
+  const smtpPort = Number(activeConfig.smtpPort) || 587;
+  const smtpUser = (activeConfig.smtpUser || senderEmail).trim();
 
-  const targetProvider = dynamicConfig.provider || 'auto';
+  console.log(`[EmailService] ─── Outbound Dispatch Initiated ───`);
+  console.log(`[EmailService] Recipient: "${to}" | Subject: "${subject}" | Type: "${type}"`);
+  console.log(`[EmailService] Active Provider Mode: "${targetProvider}" | Sender: ${fullSender}`);
+  console.log(`[EmailService] Available Keys: Brevo=${!!brevoKey}, Resend=${!!resendKey}, SendGrid=${!!sendgridKey}, Gmail/SMTP AuthUser="${smtpUser}", PassLength=${activeSmtpPass ? activeSmtpPass.length : 0}`);
 
   // 1. Try Brevo (Sendinblue) API
   if ((targetProvider === 'auto' || targetProvider === 'brevo') && brevoKey) {
     try {
+      console.log(`[EmailService:Brevo] Dispatching email via Brevo v3 API...`);
       const res = await fetch('https://api.brevo.com/v3/smtp/email', {
         method: 'POST',
         headers: {
@@ -390,7 +431,7 @@ export async function sendEmailAsync(payload: EmailPayload): Promise<{ success: 
   // 2. Try Resend API (Free Tier: 3,000 emails/mo, 100/day)
   if ((targetProvider === 'auto' || targetProvider === 'resend') && resendKey) {
     try {
-      // First attempt with desired sender address
+      console.log(`[EmailService:Resend] Dispatching email via Resend v1 API...`);
       let fromAddress = `${senderName} <${senderEmail}>`;
       
       let res = await fetch('https://api.resend.com/emails', {
@@ -458,6 +499,7 @@ export async function sendEmailAsync(payload: EmailPayload): Promise<{ success: 
   // 3. Try SendGrid API
   if ((targetProvider === 'auto' || targetProvider === 'sendgrid') && sendgridKey) {
     try {
+      console.log(`[EmailService:SendGrid] Dispatching email via SendGrid v3 API...`);
       const res = await fetch('https://api.sendgrid.com/v3/mail/send', {
         method: 'POST',
         headers: {
@@ -501,7 +543,6 @@ export async function sendEmailAsync(payload: EmailPayload): Promise<{ success: 
   }
 
   // 4. Try Gmail App Password / Nodemailer SMTP
-  const activeSmtpPass = (gmailPass || smtpPass || '').replace(/\s+/g, '');
   const hasGmailAppPass = !!activeSmtpPass;
   const hasCustomSmtp = !!(smtpHost && activeSmtpPass);
 
@@ -509,16 +550,36 @@ export async function sendEmailAsync(payload: EmailPayload): Promise<{ success: 
     const providerLabel = (targetProvider === 'gmail_smtp' || hasGmailAppPass) ? 'Gmail SMTP' : 'Custom SMTP';
     const authUser = (smtpUser || senderEmail).trim();
     
-    // Attempt 1: Connect via Gmail service or SSL Port 465 / 587
     let smtpSuccess = false;
     let lastSmtpError = '';
 
     const transporterConfigs = [];
 
     if (targetProvider === 'gmail_smtp' || authUser.includes('@gmail.com') || senderEmail.includes('@gmail.com')) {
-      // Direct Gmail configurations (Port 465 SSL, Port 587 STARTTLS, and service 'gmail')
+      // 1. Primary: Direct standard Port 587 with STARTTLS (recommended for Gmail SMTP)
       transporterConfigs.push({
-        name: 'Gmail Port 465 (SSL)',
+        name: 'Gmail SMTP Port 587 (STARTTLS)',
+        host: 'smtp.gmail.com',
+        port: 587,
+        secure: false,
+        auth: { user: authUser, pass: activeSmtpPass },
+        connectionTimeout: 10000,
+        greetingTimeout: 10000,
+        socketTimeout: 15000,
+        tls: { rejectUnauthorized: false }
+      });
+      // 2. Secondary: Direct Nodemailer service preset
+      transporterConfigs.push({
+        name: 'Gmail Service Transporter',
+        service: 'gmail',
+        auth: { user: authUser, pass: activeSmtpPass },
+        connectionTimeout: 10000,
+        greetingTimeout: 10000,
+        socketTimeout: 15000
+      });
+      // 3. Fallback: Port 465 with direct SSL
+      transporterConfigs.push({
+        name: 'Gmail SSL Port 465',
         host: 'smtp.gmail.com',
         port: 465,
         secure: true,
@@ -527,26 +588,6 @@ export async function sendEmailAsync(payload: EmailPayload): Promise<{ success: 
         greetingTimeout: 10000,
         socketTimeout: 15000,
         tls: { rejectUnauthorized: false }
-      });
-      transporterConfigs.push({
-        name: 'Gmail Port 587 (STARTTLS)',
-        host: 'smtp.gmail.com',
-        port: 587,
-        secure: false,
-        requireTLS: true,
-        auth: { user: authUser, pass: activeSmtpPass },
-        connectionTimeout: 10000,
-        greetingTimeout: 10000,
-        socketTimeout: 15000,
-        tls: { rejectUnauthorized: false }
-      });
-      transporterConfigs.push({
-        name: 'Gmail Default Service',
-        service: 'gmail',
-        auth: { user: authUser, pass: activeSmtpPass },
-        connectionTimeout: 10000,
-        greetingTimeout: 10000,
-        socketTimeout: 15000
       });
     } else {
       // Custom SMTP configuration
@@ -565,7 +606,9 @@ export async function sendEmailAsync(payload: EmailPayload): Promise<{ success: 
 
     for (const tConfig of transporterConfigs) {
       try {
+        console.log(`[EmailService:${providerLabel}] Initializing transport via "${tConfig.name}" (AuthUser: "${authUser}", PassLength: ${activeSmtpPass.length})...`);
         const transporter = nodemailer.createTransport(tConfig);
+        
         const info = await transporter.sendMail({
           from: fullSender,
           to,
@@ -588,7 +631,17 @@ export async function sendEmailAsync(payload: EmailPayload): Promise<{ success: 
         return { success: true, provider: providerLabel, messageId };
       } catch (err: any) {
         lastSmtpError = err.message || 'Unknown SMTP error';
-        console.warn(`[EmailService:SMTP] Attempt with ${tConfig.name} failed:`, lastSmtpError);
+        console.error(`[EmailService:Nodemailer Error] Attempt with ${tConfig.name} failed:`, {
+          message: err.message,
+          code: err.code,
+          response: err.response,
+          responseCode: err.responseCode,
+          command: err.command
+        });
+        if (lastSmtpError.includes('535') || lastSmtpError.includes('BadCredentials') || lastSmtpError.includes('Username and Password not accepted') || (err as any)?.responseCode === 535) {
+          lastSmtpError = `Gmail SMTP Authentication Failed (535 Bad Credentials). Google rejected the App Password for '${authUser}' (password length: ${activeSmtpPass.length} chars). Please verify that 2-Step Verification is active on '${authUser}' and generate a fresh 16-character App Password at https://myaccount.google.com/apppasswords.`;
+          break; // Stop cycling other ports if Google rejected the password
+        }
       }
     }
 
@@ -596,27 +649,32 @@ export async function sendEmailAsync(payload: EmailPayload): Promise<{ success: 
       const errDetail = `SMTP Authentication / Delivery error: ${lastSmtpError}`;
       errors.push(errDetail);
     }
+  } else if (targetProvider === 'gmail_smtp' || targetProvider === 'custom_smtp') {
+    const noPassMsg = `Cannot dispatch via ${targetProvider}: No App Password or SMTP password found. Please enter your 16-character Google App Password in the Email Service settings.`;
+    console.error(`[EmailService] ${noPassMsg}`);
+    errors.push(noPassMsg);
   }
 
   // If no credentials were configured or all providers returned errors
   const finalError = errors.length > 0
     ? `Live delivery failed: ${errors.join(' | ')}`
-    : 'No active email provider credentials configured. Please configure Brevo API Key, Resend API Key, SendGrid API Key, or Gmail App Password in Email Service settings.';
+    : 'No active email provider credentials configured. Please enter your 16-character Gmail App Password or API Key in Email Service settings.';
 
-  console.error(`[EmailService] Delivery to ${to} failed: ${finalError}`);
+  console.error(`[EmailService] ─── Final Delivery Failure for ${to} ───`);
+  console.error(`[EmailService] Error Detail: ${finalError}`);
 
   recordLog({
     recipient: to,
     subject,
     type,
-    provider: targetProvider !== 'auto' ? targetProvider : 'None',
+    provider: (targetProvider !== 'auto' && targetProvider !== 'gmail_smtp') ? targetProvider : 'Gmail SMTP',
     status: 'failed',
     error: finalError
   });
 
   return {
     success: false,
-    provider: targetProvider !== 'auto' ? targetProvider : 'none',
+    provider: targetProvider !== 'auto' ? targetProvider : 'Gmail SMTP',
     error: finalError
   };
 }
@@ -631,6 +689,9 @@ function recordLog(log: Omit<EmailDeliveryLog, 'id' | 'timestamp'>) {
   if (deliveryLogs.length > 100) {
     deliveryLogs.pop();
   }
+  try {
+    syncEmailLogToFirestore(newEntry).catch(e => console.warn('syncEmailLogToFirestore failed:', e));
+  } catch (e) {}
 }
 
 /**
@@ -667,7 +728,7 @@ export const emailService = {
   /**
    * 1. Account Creation / Welcome Email
    */
-  async sendWelcomeEmail(user: UserEmailData): Promise<any> {
+  async sendWelcomeEmail(user: UserEmailData, configOverride?: Partial<EmailConfig>): Promise<any> {
     try {
       const title = 'Welcome to Silicon Valley Bank';
       const subtitle = 'Your SVB Digital Commercial Banking Account is Active';
@@ -716,7 +777,7 @@ export const emailService = {
         subject: 'Welcome to Silicon Valley Bank — Account Details & Access',
         html,
         type: 'Account Welcome'
-      });
+      }, configOverride);
     } catch (err: any) {
       console.error('[EmailService] Error in sendWelcomeEmail:', err.message);
     }
@@ -725,7 +786,7 @@ export const emailService = {
   /**
    * 2. Deposit Submitted / Under Review
    */
-  async sendDepositSubmittedEmail(data: TransactionEmailData): Promise<any> {
+  async sendDepositSubmittedEmail(data: TransactionEmailData, configOverride?: Partial<EmailConfig>): Promise<any> {
     try {
       const title = 'Deposit Received & Under Review';
       const subtitle = `Reference #${data.reference}`;
@@ -777,7 +838,7 @@ export const emailService = {
         subject: `SVB Notification: Deposit Received (${formattedAmount}) - Ref #${data.reference}`,
         html,
         type: 'Deposit Pending'
-      });
+      }, configOverride);
     } catch (err: any) {
       console.error('[EmailService] Error in sendDepositSubmittedEmail:', err.message);
     }
@@ -786,7 +847,7 @@ export const emailService = {
   /**
    * 3. Deposit Approved & Available Balance Credited
    */
-  async sendDepositApprovedEmail(data: TransactionEmailData): Promise<any> {
+  async sendDepositApprovedEmail(data: TransactionEmailData, configOverride?: Partial<EmailConfig>): Promise<any> {
     try {
       const title = 'Funds Settled & Credited to Account';
       const subtitle = `Reference #${data.reference}`;
@@ -843,7 +904,7 @@ export const emailService = {
         subject: `SVB Settlement Advice: Deposit Cleared (+${formattedAmount}) - Ref #${data.reference}`,
         html,
         type: 'Deposit Approved'
-      });
+      }, configOverride);
     } catch (err: any) {
       console.error('[EmailService] Error in sendDepositApprovedEmail:', err.message);
     }
@@ -852,7 +913,7 @@ export const emailService = {
   /**
    * 4. Transaction / Deposit Rejected & Refunded
    */
-  async sendTransactionRejectedEmail(data: TransactionEmailData): Promise<any> {
+  async sendTransactionRejectedEmail(data: TransactionEmailData, configOverride?: Partial<EmailConfig>): Promise<any> {
     try {
       const title = 'Transaction Update: Return / Rejection Notice';
       const subtitle = `Reference #${data.reference}`;
@@ -901,7 +962,7 @@ export const emailService = {
         subject: `SVB Notice: Transaction Rejected (${formattedAmount}) - Ref #${data.reference}`,
         html,
         type: 'Transaction Rejected'
-      });
+      }, configOverride);
     } catch (err: any) {
       console.error('[EmailService] Error in sendTransactionRejectedEmail:', err.message);
     }
@@ -910,7 +971,7 @@ export const emailService = {
   /**
    * 5. Wire / Transfer Sent (Debit Advice)
    */
-  async sendTransferDebitEmail(data: TransactionEmailData): Promise<any> {
+  async sendTransferDebitEmail(data: TransactionEmailData, configOverride?: Partial<EmailConfig>): Promise<any> {
     try {
       const title = 'Wire Transfer Debit Advice';
       const subtitle = `Fedwire / SWIFT Reference #${data.reference}`;
@@ -965,7 +1026,7 @@ export const emailService = {
         subject: `SVB Debit Advice: Outbound Wire (-${formattedAmount}) - Ref #${data.reference}`,
         html,
         type: 'Wire Debit'
-      });
+      }, configOverride);
     } catch (err: any) {
       console.error('[EmailService] Error in sendTransferDebitEmail:', err.message);
     }
@@ -974,7 +1035,7 @@ export const emailService = {
   /**
    * 6. Security Alert / Code Generation / Password Reset
    */
-  async sendSecurityAlertEmail(userEmail: string, title: string, message: string, code?: string): Promise<any> {
+  async sendSecurityAlertEmail(userEmail: string, title: string, message: string, code?: string, configOverride?: Partial<EmailConfig>): Promise<any> {
     try {
       const headerTitle = 'SVB Security & Account Notification';
       const body = `
@@ -1003,7 +1064,7 @@ export const emailService = {
         subject: `SVB Security Alert: ${title}`,
         html,
         type: 'Security Alert'
-      });
+      }, configOverride);
     } catch (err: any) {
       console.error('[EmailService] Error in sendSecurityAlertEmail:', err.message);
     }
@@ -1012,7 +1073,7 @@ export const emailService = {
   /**
    * 7. Custom Direct Notice from Admin to User
    */
-  async sendCustomAdminNoticeEmail(userEmail: string, adminEmail: string, title: string, message: string): Promise<any> {
+  async sendCustomAdminNoticeEmail(userEmail: string, adminEmail: string, title: string, message: string, configOverride?: Partial<EmailConfig>): Promise<any> {
     try {
       const headerTitle = 'Message from SVB Operations Desk';
       const body = `
@@ -1038,7 +1099,7 @@ export const emailService = {
         subject: `SVB Notice: ${title}`,
         html,
         type: 'Admin Operations Notice'
-      });
+      }, configOverride);
     } catch (err: any) {
       console.error('[EmailService] Error in sendCustomAdminNoticeEmail:', err.message);
     }

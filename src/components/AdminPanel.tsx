@@ -10,7 +10,8 @@ import {
   subscribeCryptoDepositsFromFirestore,
   subscribeVerificationsFromFirestore,
   subscribeTransactionsFromFirestore,
-  subscribeSupportTicketsFromFirestore
+  subscribeSupportTicketsFromFirestore,
+  subscribeEmailLogsFromFirestore
 } from '../lib/firebase';
 import { dbStore } from '../services/dbStore';
 import { subscribeRealtimeUpdates } from '../services/realtimeBus';
@@ -480,6 +481,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
       fetchEmailStatus();
       fetchEmailConfig();
       fetchEmailLogs();
+
+      const unsub = subscribeEmailLogsFromFirestore((logs) => {
+        if (logs && logs.length > 0) {
+          setEmailLogs(logs);
+        }
+      });
+      return () => unsub();
     }
   }, [subTab]);
 
@@ -492,18 +500,42 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminUser, onDepositSucc
     setSendingTestEmail(true);
     setTestEmailResult(null);
     try {
+      const configOverride: any = {
+        provider: emailConfigForm.provider,
+        senderEmail: emailConfigForm.senderEmail,
+        senderName: emailConfigForm.senderName,
+        resendApiKey: emailConfigForm.resendApiKey,
+        brevoApiKey: emailConfigForm.brevoApiKey,
+        sendgridApiKey: emailConfigForm.sendgridApiKey,
+        smtpHost: emailConfigForm.smtpHost,
+        smtpPort: emailConfigForm.smtpPort,
+        smtpUser: emailConfigForm.smtpUser
+      };
+      if (emailConfigForm.gmailAppPassword && emailConfigForm.gmailAppPassword.trim()) {
+        configOverride.gmailAppPassword = emailConfigForm.gmailAppPassword.trim();
+        configOverride.smtpPass = emailConfigForm.gmailAppPassword.trim();
+      }
+      if (emailConfigForm.smtpPass && emailConfigForm.smtpPass.trim()) {
+        configOverride.smtpPass = emailConfigForm.smtpPass.trim();
+      }
+
       const res = await api.sendTestEmail({
         toEmail: testEmailRecipient.trim(),
         subject: testEmailSubject.trim(),
-        type: testEmailType
+        type: testEmailType,
+        configOverride
       });
+      if (res?.success === false) {
+        throw new Error(res.error || 'Email delivery rejected by mail server.');
+      }
       setTestEmailResult({ success: true, message: res?.message || `Test email dispatched to ${testEmailRecipient}` });
-      showToast('success', 'Email Delivered', `Live email dispatched from siliconvalleybank51@gmail.com to ${testEmailRecipient}`);
-      fetchEmailLogs();
+      showToast('success', 'Email Delivered', `Live email dispatched to ${testEmailRecipient}`);
+      await fetchEmailLogs();
     } catch (err: any) {
-      setTestEmailResult({ success: false, message: err?.message || 'Failed to dispatch email.' });
-      showToast('error', 'Delivery Error', err?.message || 'Failed to dispatch test email.');
-      fetchEmailLogs();
+      const errorMsg = err?.message || 'Failed to dispatch test email.';
+      setTestEmailResult({ success: false, message: errorMsg });
+      showToast('error', 'Delivery Error', errorMsg);
+      await fetchEmailLogs();
     } finally {
       setSendingTestEmail(false);
     }

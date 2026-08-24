@@ -36,7 +36,11 @@ import {
   sendSupportMessageToFirestore,
   deleteSupportMessageFromFirestore,
   isSameTicketId,
-  getCanonicalTicketId
+  getCanonicalTicketId,
+  syncEmailLogToFirestore,
+  getEmailLogsFromFirestore,
+  syncEmailConfigToFirestore,
+  getEmailConfigFromFirestore
 } from '../lib/firebase';
 import { calculateUserBalance } from '../utils/balance';
 import { deduplicateTransactions } from '../utils/transactions';
@@ -2271,11 +2275,19 @@ export const api = {
     } catch (e) {
       console.warn('Email config API fallback:', e);
     }
+    try {
+      const fsConfig = await getEmailConfigFromFirestore();
+      if (fsConfig) return fsConfig;
+    } catch (e) {}
     return dbStore.getEmailConfig();
   },
 
   async updateEmailConfig(config: any): Promise<any> {
     const savedConfig = dbStore.saveEmailConfig(config);
+    try {
+      syncEmailConfigToFirestore(savedConfig).catch(e => console.warn('syncEmailConfigToFirestore warning:', e));
+    } catch (e) {}
+
     try {
       const res = await requestApi<any>('/admin/email-config', {
         method: 'POST',
@@ -2285,7 +2297,7 @@ export const api = {
         return res;
       }
     } catch (e) {
-      console.warn('Backend email-config update API unreachable, saved to local ledger:', e);
+      console.warn('Backend email-config update API unreachable, saved to local ledger & Firestore:', e);
     }
     return {
       success: true,
@@ -2295,55 +2307,78 @@ export const api = {
   },
 
   async getEmailLogs(): Promise<{ logs: any[] }> {
+    const combinedMap = new Map<string, any>();
+
+    // 1. Local dbStore logs
+    const localLogs = dbStore.getEmailLogs();
+    localLogs.forEach(l => combinedMap.set(l.id, l));
+
+    // 2. Firestore logs
+    try {
+      const fsLogs = await getEmailLogsFromFirestore();
+      if (fsLogs && fsLogs.length > 0) {
+        fsLogs.forEach(l => combinedMap.set(l.id, l));
+      }
+    } catch (e) {
+      console.warn('Firestore getEmailLogs error:', e);
+    }
+
+    // 3. Backend server API logs
     try {
       const res = await requestApi<{ logs: any[] }>('/admin/email-logs');
-      if (res && res.logs) return res;
+      if (res && res.logs && res.logs.length > 0) {
+        res.logs.forEach(l => combinedMap.set(l.id, l));
+      }
     } catch (e) {
-      console.warn('Email logs API fallback:', e);
+      console.warn('Email logs backend API fallback:', e);
     }
-    return { logs: dbStore.getEmailLogs() };
+
+    const sortedLogs = Array.from(combinedMap.values()).sort(
+      (a, b) => new Date(b.timestamp || b.createdAt).getTime() - new Date(a.timestamp || a.createdAt).getTime()
+    );
+
+    return { logs: sortedLogs };
   },
 
-  async sendTestEmail(payload: { toEmail: string; subject?: string; type?: string }): Promise<any> {
+  async sendTestEmail(payload: { toEmail: string; subject?: string; type?: string; configOverride?: any }): Promise<any> {
     try {
       const res = await requestApi<any>('/admin/test-email', {
         method: 'POST',
         body: JSON.stringify(payload)
       });
       if (res) {
-        dbStore.addEmailLog({
+        const logEntry = {
           id: `log-${Date.now()}`,
           recipient: payload.toEmail,
-          subject: payload.subject || 'SVB Test Email',
+          subject: payload.subject || 'SVB Operational Test Email',
           type: payload.type || 'Test Email',
-          provider: res.provider || 'Gmail SMTP',
-          status: res.success ? 'delivered' : 'failed',
+          provider: res.deliveryResult?.provider || res.provider || 'Gmail SMTP',
+          status: (res.success ? 'delivered' : 'failed') as 'delivered' | 'failed',
           timestamp: new Date().toISOString(),
-          messageId: res.messageId || `test-${Date.now()}`
-        });
+          messageId: res.deliveryResult?.messageId || res.messageId || `test-${Date.now()}`,
+          error: res.error || (res.success ? undefined : 'Delivery rejected')
+        };
+        dbStore.addEmailLog(logEntry);
+        syncEmailLogToFirestore(logEntry);
         return res;
       }
     } catch (e: any) {
-      console.warn('Backend sendTestEmail API error:', e);
-      if (e?.message) throw e;
+      console.error('Backend sendTestEmail API error:', e);
+      const failedLog = {
+        id: `log-${Date.now()}`,
+        recipient: payload.toEmail,
+        subject: payload.subject || 'SVB Operational Test Email',
+        type: payload.type || 'Test Email',
+        provider: payload.configOverride?.provider || 'Gmail SMTP',
+        status: 'failed' as const,
+        error: e.message || 'SMTP connection rejected / authentication failed',
+        timestamp: new Date().toISOString()
+      };
+      dbStore.addEmailLog(failedLog);
+      syncEmailLogToFirestore(failedLog);
+      throw e;
     }
 
-    const testLog = {
-      id: `log-${Date.now()}`,
-      recipient: payload.toEmail,
-      subject: payload.subject || 'Official Silicon Valley Bank Notification',
-      type: payload.type || 'Test Email',
-      provider: 'Gmail SMTP',
-      status: 'delivered',
-      timestamp: new Date().toISOString(),
-      messageId: `gmail-smtp-${Date.now()}`
-    };
-    dbStore.addEmailLog(testLog);
-    return {
-      success: true,
-      message: `Test email dispatched to ${payload.toEmail} via Gmail SMTP (siliconvalleybank51@gmail.com).`,
-      provider: 'Gmail SMTP',
-      messageId: testLog.messageId
-    };
+    throw new Error('No response from email dispatcher backend. Please check server connection.');
   }
 };
