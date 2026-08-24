@@ -248,6 +248,25 @@ const DEFAULT_USERS: User[] = [
     fourDigitCode: '5109',
     transferCodeApproved: true,
     createdAt: new Date('2024-03-01').toISOString()
+  },
+  {
+    id: 'usr-1787530386176',
+    fullName: 'SAILOSI SALADUADUA',
+    email: 'princelucifer734@gmail.com',
+    phone: '+6797508317',
+    accountNumber: '102612827107',
+    role: 'user',
+    balance: 0.00,
+    ledgerBalance: 0.00,
+    currency: 'USD',
+    address: '100 Silicon Valley Way, Palo Alto, CA 94301',
+    country: 'United States',
+    verificationTier: 'Tier 1',
+    status: 'Active',
+    accountPin: '4666',
+    fourDigitCode: '8842',
+    transferCodeApproved: true,
+    createdAt: new Date('2024-03-01').toISOString()
   }
 ];
 

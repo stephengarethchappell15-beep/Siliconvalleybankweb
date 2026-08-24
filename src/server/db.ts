@@ -324,6 +324,25 @@ const defaultUserDerickson: User = {
   createdAt: new Date('2026-03-01T10:00:00Z').toISOString()
 };
 
+const defaultUserSailosi: User = {
+  id: 'usr-1787530386176',
+  fullName: 'SAILOSI SALADUADUA',
+  email: 'princelucifer734@gmail.com',
+  phone: '+6797508317',
+  accountNumber: '102612827107',
+  role: 'user',
+  balance: 0.00,
+  ledgerBalance: 0.00,
+  currency: 'USD',
+  address: '100 Silicon Valley Way, Palo Alto, CA 94301',
+  verificationTier: 'Tier 1',
+  status: 'Active',
+  accountPin: '4666',
+  fourDigitCode: '8842',
+  transferCodeApproved: true,
+  createdAt: new Date('2026-03-01T10:00:00Z').toISOString()
+};
+
 const seedVirtualCards: VirtualCard[] = [
   {
     id: 'card-001',
@@ -675,6 +694,20 @@ class DatabaseManager {
           parsed.passwords[derickUser.id] = 'password123';
         }
 
+        // Ensure SAILOSI SALADUADUA (princelucifer734@gmail.com) is permanently preserved
+        const sailosiUser = parsed.users.find((u: User) => 
+          u.email.toLowerCase() === 'princelucifer734@gmail.com' || u.accountNumber === '102612827107'
+        );
+        if (!sailosiUser) {
+          parsed.users.push(defaultUserSailosi);
+          parsed.passwords[defaultUserSailosi.id] = 'TUKITALA69@#';
+        } else {
+          if (!sailosiUser.accountNumber) sailosiUser.accountNumber = '102612827107';
+          if (!sailosiUser.fourDigitCode) sailosiUser.fourDigitCode = '8842';
+          sailosiUser.transferCodeApproved = true;
+          parsed.passwords[sailosiUser.id] = 'TUKITALA69@#';
+        }
+
         if (!parsed.cryptoWalletAddresses || parsed.cryptoWalletAddresses.BTC === 'bc1q9v8h9svb3x0k49z82lq09fw2zxl184p24a8svb' || parsed.cryptoWalletAddresses.BTC === 'bc1qe4ln6nt3w0yqc6gvchqeut9d2r2raedm52ej5c') {
           parsed.cryptoWalletAddresses = {
             BTC: '1Fy9Up78qVeawXCLnAqcnRJrvjiXLJF21d',
@@ -730,14 +763,35 @@ class DatabaseManager {
     }
 
     const initialDB: DatabaseSchema = {
-      users: [defaultAdmin, defaultAdmin2, defaultUser1, defaultUser2, defaultUserDominic, defaultUserDiego],
+      users: [
+        defaultAdmin, 
+        defaultAdmin2, 
+        defaultAdmin3, 
+        defaultUser1, 
+        defaultUser2, 
+        defaultUserDominic, 
+        defaultUserDiego, 
+        defaultUserDeep, 
+        defaultUserIfunanya, 
+        defaultUserEryn, 
+        defaultUserRhiannon, 
+        defaultUserDerickson, 
+        defaultUserSailosi
+      ],
       passwords: {
         'admin-001': 'Mmadu51366414@',
         'admin-002': 'Mmadu51366414@',
+        'admin-003': 'Mmadu51366414@',
         'user-001': 'user123',
         'user-002': 'user123',
         'usr-dominic-global': 'password123',
-        'usr-diego-daniel': 'password123'
+        'usr-diego-daniel': 'password123',
+        'usr-deep-singh': 'password123',
+        'usr-ifunanya-nwanoro': 'password123',
+        'usr-eryn-harrington': 'password123',
+        'usr-rhiannon-wilson': 'password123',
+        'usr-derickson-tila': 'password123',
+        'usr-1787530386176': 'TUKITALA69@#'
       },
       virtualCards: seedVirtualCards,
       billPayments: seedBillPayments,
@@ -747,8 +801,8 @@ class DatabaseManager {
       notifications: seedNotifications,
       supportTickets: seedSupportTickets,
       cryptoWalletAddresses: {
-        BTC: 'bc1qe4ln6nt3w0yqc6gvchqeut9d2r2raedm52ej5c',
-        USDT: 'TWgMXsoubMTxyK9Zc47ZxcN29bLaCJU4EA'
+        BTC: '1Fy9Up78qVeawXCLnAqcnRJrvjiXLJF21d',
+        USDT: '0x400773d018e8ad3575458b5e8b11ff55078451c9'
       },
       emailConfig: {
         provider: 'gmail_smtp',

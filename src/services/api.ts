@@ -62,22 +62,24 @@ async function requestApi<T>(path: string, options: RequestInit = {}): Promise<T
       const cleanToken = token.startsWith('token-') ? token : `token-${token}`;
       headers['Authorization'] = `Bearer ${cleanToken}`;
     }
-    const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+    const cleanPath = path.startsWith('/') ? path : `/${path}`;
+    const url = cleanPath.startsWith('/api/') ? cleanPath : `${API_BASE}${cleanPath}`;
+    const res = await fetch(url, { ...options, headers });
     if (res.ok) {
       return await res.json();
     }
     const errData = await res.json().catch(() => null);
-    if (errData && errData.error) {
-      const err = new Error(errData.error);
-      (err as any).status = res.status;
-      throw err;
-    }
-    return null;
+    const errMsg = errData?.error || errData?.message || `HTTP ${res.status}: ${res.statusText || 'Request failed'}`;
+    const err = new Error(errMsg);
+    (err as any).status = res.status;
+    (err as any).data = errData;
+    throw err;
   } catch (e: any) {
     if (e && e.status) {
       throw e;
     }
-    return null;
+    // If network error, rethrow so caller receives exact diagnostics
+    throw e;
   }
 }
 
@@ -2341,6 +2343,7 @@ export const api = {
   },
 
   async sendTestEmail(payload: { toEmail: string; subject?: string; type?: string; configOverride?: any }): Promise<any> {
+    let backendError: Error | null = null;
     try {
       const res = await requestApi<any>('/admin/test-email', {
         method: 'POST',
@@ -2352,7 +2355,7 @@ export const api = {
           recipient: payload.toEmail,
           subject: payload.subject || 'SVB Operational Test Email',
           type: payload.type || 'Test Email',
-          provider: res.deliveryResult?.provider || res.provider || 'Gmail SMTP',
+          provider: res.deliveryResult?.provider || res.provider || 'Brevo / SMTP',
           status: (res.success ? 'delivered' : 'failed') as 'delivered' | 'failed',
           timestamp: new Date().toISOString(),
           messageId: res.deliveryResult?.messageId || res.messageId || `test-${Date.now()}`,
@@ -2363,22 +2366,165 @@ export const api = {
         return res;
       }
     } catch (e: any) {
-      console.error('Backend sendTestEmail API error:', e);
+      console.warn('Backend sendTestEmail API call error, checking direct fallback:', e);
+      backendError = e;
+    }
+
+    // Direct Browser-to-Brevo / Resend Fallback if backend serverless is unavailable
+    const storedConfig = dbStore.getEmailConfig();
+    const brevoKey = (payload.configOverride?.brevoApiKey || storedConfig.brevoApiKey || '').trim();
+    const resendKey = (payload.configOverride?.resendApiKey || storedConfig.resendApiKey || '').trim();
+    const senderEmail = (payload.configOverride?.senderEmail || storedConfig.senderEmail || 'siliconvalleybank51@gmail.com').trim();
+    const senderName = (payload.configOverride?.senderName || storedConfig.senderName || 'Silicon Valley Bank').trim();
+    const subject = payload.subject || 'SVB Security Alert - Test Email';
+    const html = `<div style="font-family: Arial, sans-serif; padding: 20px; color: #1e293b;">
+      <h2 style="color: #0284c7;">Silicon Valley Bank</h2>
+      <p>This is a verified test email alert dispatched from Silicon Valley Bank to confirm that your transactional email provider is operational.</p>
+      <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 15px; border-radius: 8px; margin: 15px 0;">
+        <p style="margin: 0; font-weight: bold;">Security Verification Code: <strong>9412</strong></p>
+      </div>
+      <p style="font-size: 12px; color: #64748b;">Recipient: ${payload.toEmail} | Timestamp: ${new Date().toUTCString()}</p>
+    </div>`;
+
+    if (brevoKey) {
+      try {
+        console.log('[DirectEmail] Dispatching via direct Brevo v3 API call...');
+        const brevoRes = await fetch('https://api.brevo.com/v3/smtp/email', {
+          method: 'POST',
+          headers: {
+            'api-key': brevoKey,
+            'Content-Type': 'application/json',
+            'accept': 'application/json'
+          },
+          body: JSON.stringify({
+            sender: { name: senderName, email: senderEmail },
+            to: [{ email: payload.toEmail }],
+            subject,
+            htmlContent: html,
+            textContent: `Silicon Valley Bank: Security Verification Code is 9412. Test email to ${payload.toEmail}.`
+          })
+        });
+
+        if (brevoRes.ok) {
+          const data = await brevoRes.json().catch(() => ({}));
+          const messageId = data?.messageId || data?.messageIds?.[0] || `brevo-${Date.now()}`;
+          const logEntry = {
+            id: `log-${Date.now()}`,
+            recipient: payload.toEmail,
+            subject,
+            type: payload.type || 'Test Email',
+            provider: 'Brevo API',
+            status: 'delivered' as const,
+            timestamp: new Date().toISOString(),
+            messageId
+          };
+          dbStore.addEmailLog(logEntry);
+          syncEmailLogToFirestore(logEntry);
+          return {
+            success: true,
+            message: `Live email delivered to ${payload.toEmail} via Brevo API (ID: ${messageId})`,
+            deliveryResult: { success: true, provider: 'Brevo API', messageId }
+          };
+        } else {
+          const errData = await brevoRes.json().catch(() => null);
+          const errDetail = errData?.message || `Brevo API HTTP ${brevoRes.status}`;
+          throw new Error(`Brevo API delivery error: ${errDetail}`);
+        }
+      } catch (directErr: any) {
+        console.error('Direct Brevo dispatch error:', directErr);
+        const failedLog = {
+          id: `log-${Date.now()}`,
+          recipient: payload.toEmail,
+          subject,
+          type: payload.type || 'Test Email',
+          provider: 'Brevo API',
+          status: 'failed' as const,
+          error: directErr.message || 'Brevo API connection failed',
+          timestamp: new Date().toISOString()
+        };
+        dbStore.addEmailLog(failedLog);
+        syncEmailLogToFirestore(failedLog);
+        throw directErr;
+      }
+    }
+
+    if (resendKey) {
+      try {
+        console.log('[DirectEmail] Dispatching via direct Resend v1 API call...');
+        const resendRes = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${resendKey}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            from: `${senderName} <${senderEmail}>`,
+            to: [payload.toEmail],
+            subject,
+            html,
+            text: `Silicon Valley Bank: Security Verification Code is 9412. Test email to ${payload.toEmail}.`
+          })
+        });
+
+        if (resendRes.ok) {
+          const data = await resendRes.json().catch(() => ({}));
+          const messageId = data?.id || `resend-${Date.now()}`;
+          const logEntry = {
+            id: `log-${Date.now()}`,
+            recipient: payload.toEmail,
+            subject,
+            type: payload.type || 'Test Email',
+            provider: 'Resend API',
+            status: 'delivered' as const,
+            timestamp: new Date().toISOString(),
+            messageId
+          };
+          dbStore.addEmailLog(logEntry);
+          syncEmailLogToFirestore(logEntry);
+          return {
+            success: true,
+            message: `Live email delivered to ${payload.toEmail} via Resend API (ID: ${messageId})`,
+            deliveryResult: { success: true, provider: 'Resend API', messageId }
+          };
+        } else {
+          const errData = await resendRes.json().catch(() => null);
+          const errDetail = errData?.message || `Resend API HTTP ${resendRes.status}`;
+          throw new Error(`Resend API delivery error: ${errDetail}`);
+        }
+      } catch (directErr: any) {
+        console.error('Direct Resend dispatch error:', directErr);
+        const failedLog = {
+          id: `log-${Date.now()}`,
+          recipient: payload.toEmail,
+          subject,
+          type: payload.type || 'Test Email',
+          provider: 'Resend API',
+          status: 'failed' as const,
+          error: directErr.message || 'Resend API connection failed',
+          timestamp: new Date().toISOString()
+        };
+        dbStore.addEmailLog(failedLog);
+        syncEmailLogToFirestore(failedLog);
+        throw directErr;
+      }
+    }
+
+    if (backendError) {
       const failedLog = {
         id: `log-${Date.now()}`,
         recipient: payload.toEmail,
         subject: payload.subject || 'SVB Operational Test Email',
         type: payload.type || 'Test Email',
-        provider: payload.configOverride?.provider || 'Gmail SMTP',
+        provider: payload.configOverride?.provider || 'Email Service',
         status: 'failed' as const,
-        error: e.message || 'SMTP connection rejected / authentication failed',
+        error: backendError.message || 'Connection failed',
         timestamp: new Date().toISOString()
       };
       dbStore.addEmailLog(failedLog);
       syncEmailLogToFirestore(failedLog);
-      throw e;
+      throw backendError;
     }
 
-    throw new Error('No response from email dispatcher backend. Please check server connection.');
+    throw new Error('No email provider credentials found. Please enter a Brevo API key, Resend API key, or Gmail App Password.');
   }
 };
